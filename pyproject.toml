@@ -18,7 +18,18 @@ dependencies = []
 dev = [
     "pytest>=8.0",
     "ruff>=0.4",
-    "mypy>=1.9",
+    "mypy>=1.14",
+    "types-PyYAML>=6.0",
+]
+# COP-0 (Common Operating Picture) program picture (cop/). Not needed by `lc`, which keeps
+# zero runtime dependencies. Install with: pip install -e ".[cop,dev]"
+cop = [
+    "Flask>=3.0,<4.0",
+    "gunicorn>=22.0",
+    "httpx>=0.27,<1.0",
+    "PyYAML>=6.0",
+    "pydantic>=2.6,<3.0",
+    "cannae-kernel @ git+https://github.com/br-collab/cannae-kernel.git@v0.1.0",
 ]
 
 [build-system]
@@ -27,7 +38,10 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["lc*"]
+include = ["lc*", "cop*"]
+
+[tool.setuptools.package-data]
+cop = ["program.yaml", "templates/*.html", "static/*.css", "static/*.js"]
 
 [tool.ruff]
 line-length = 100
@@ -36,9 +50,19 @@ target-version = "py311"
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "N", "PL", "RUF"]
 
+[tool.ruff.lint.per-file-ignores]
+# Tests compare against literal expected values (status codes, counts) by design.
+"tests/**" = ["PLR2004"]
+
 [tool.mypy]
 python_version = "3.11"
 strict = true
+
+# cannae-kernel v0.1.0 ships no py.typed marker, so mypy would treat it as untyped. Its
+# source is fully annotated; read it instead of ignoring it.
+[[tool.mypy.overrides]]
+module = ["cannae_kernel", "cannae_kernel.*"]
+follow_untyped_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

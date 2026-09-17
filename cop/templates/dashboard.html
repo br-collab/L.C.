@@ -1,0 +1,282 @@
+{% extends "base.html" %}
+{% from "_macros.html" import badge, provenance, failure, work_row_packages %}
+{% block title %}{{ product_name }}{% if selected | length == 1 %}: {{ panels[selected[0]] }}{% endif %}{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='refresh.js') }}" defer></script>{% endblock %}
+{% block body %}
+{% set b = page.banner %}
+
+{# 1 · Banner ------------------------------------------------------------------------ #}
+<header class="panel banner" id="banner" data-panel="banner">
+  <div class="banner-top">
+    <div>
+      <h1>{{ b.product_name }}</h1>
+      <p class="lede">Common Operating Picture (COP) for the Cannae Legion program: build status and live Aureon health. Read-only. Times are UTC (Coordinated Universal Time).</p>
+    </div>
+    <form method="post" action="{{ url_for('logout') }}" class="logout"><button type="submit">Sign out</button></form>
+  </div>
+
+  {% if b.demo %}
+  <p class="warning demo" role="alert"><strong>DEMO DATA.</strong> Every value on this page is invented. Demo mode is for local screenshots only.</p>
+  {% endif %}
+
+  <div class="overall">
+    <h2>Overall program state</h2>
+    <p class="overall-badge">{{ badge(b.overall) }}</p>
+    <p class="muted">Computed (POLICY_RESULT) as the worst of: continuous integration on each <code>main</code> branch, scheduled checks, the Aureon snapshot, deploy drift, the AUR-I-17 marker, blocked waves, and every source being current. Open pull requests are not included.</p>
+    {% if b.reasons %}
+    <details {% if b.reasons | length <= 4 %}open{% endif %}>
+      <summary>{{ b.reasons | length }} reason{{ 's' if b.reasons | length != 1 }}</summary>
+      <ul class="reasons">
+        {% for r in b.reasons %}<li>{{ badge(r.badge) }} {{ r.text }}</li>{% endfor %}
+      </ul>
+    </details>
+    {% endif %}
+  </div>
+
+  <dl class="facts">
+    <div><dt>Last refresh with every source answering</dt><dd>{{ b.last_clean_refresh_at }}</dd></div>
+    <div><dt>Last refresh attempt</dt><dd>{{ b.last_refresh_at }}</dd></div>
+    <div><dt>Page rendered</dt><dd>{{ b.now }}</dd></div>
+    <div><dt>Refresh interval</dt><dd>every {{ b.refresh_seconds }} s</dd></div>
+  </dl>
+
+  {% if b.stale_sources %}
+  <div class="warning stale" role="alert">
+    <p><strong>STALE DATA WARNING.</strong> These sources have no good value newer than {{ stale_minutes }} minutes. Their tiles show INDETERMINATE:</p>
+    <ul>{% for s in b.stale_sources %}<li>{{ s }}</li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+  {% if not b.github_authenticated %}
+  <p class="warning" role="alert"><strong>GITHUB RATE LIMIT WARNING.</strong> No <code>GITHUB_TOKEN</code> is set, so GitHub is read without authentication (60 requests an hour) and the refresh slows to every {{ b.refresh_seconds // 60 }} minutes. Expect RateLimited errors.</p>
+  {% endif %}
+
+  <nav class="panel-nav" aria-label="Panels">
+    <a href="{{ url_for('dashboard') }}">All panels</a>
+    {% for slug, title in panels.items() %}<a href="{{ url_for('panel', name=slug) }}">{{ title }}</a>{% endfor %}
+  </nav>
+</header>
+
+<main>
+{# 2 · Wave board -------------------------------------------------------------------- #}
+{% if 'waves' in selected %}
+{% set t = page.program %}
+<section class="panel" id="waves" data-panel="waves">
+  <h2>Wave board {{ badge(t.badge) }}</h2>
+  <p class="lede">One row per wave of the Joint Upgrade Map (CL-JUM-001). Statuses are maintained by hand in the program file.</p>
+  {{ provenance(t) }}
+  {{ failure(t) }}
+  {% set program = t.shown %}
+  {% if program is not none %}
+  <div class="{{ '' if t.current else 'stale-block' }}">
+  <p class="muted">Program file as of {{ program.as_of.strftime('%d %b %Y') }}.</p>
+  <table class="waves">
+    <thead><tr><th scope="col">Wave</th><th scope="col">Status</th><th scope="col">Work packages</th><th scope="col">Evidence</th><th scope="col">Next action (owner)</th></tr></thead>
+    <tbody>
+    {% for item in program.waves %}
+      <tr>
+        <th scope="row">{{ item.number }}: {{ item.name }}</th>
+        <td>{{ badge(work_badges[item.status]) }}</td>
+        <td>{{ work_row_packages(item) }}</td>
+        <td>{{ item.evidence | join(', ') if item.evidence else '—' }}</td>
+        <td>{% if item.next_action %}{{ item.next_action.action }} <span class="owner">({{ item.next_action.owner.value }})</span>{% else %}—{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% if program.other_work %}
+  <h3>Other approved work</h3>
+  <table class="waves">
+    <thead><tr><th scope="col">Work</th><th scope="col">Status</th><th scope="col">Work packages</th><th scope="col">Evidence</th><th scope="col">Next action (owner)</th></tr></thead>
+    <tbody>
+    {% for item in program.other_work %}
+      <tr>
+        <th scope="row">{{ item.id }}: {{ item.name }}</th>
+        <td>{{ badge(work_badges[item.status]) }}</td>
+        <td>{{ work_row_packages(item) }}</td>
+        <td>{{ item.evidence | join(', ') if item.evidence else '—' }}</td>
+        <td>{% if item.next_action %}{{ item.next_action.action }} <span class="owner">({{ item.next_action.owner.value }})</span>{% else %}—{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+
+{# 3 · Repositories ------------------------------------------------------------------ #}
+{% if 'repositories' in selected %}
+<section class="panel" id="repositories" data-panel="repositories">
+  <h2>Repositories</h2>
+  <p class="lede">For each repository: the commit at the tip of <code>main</code> (short SHA, Secure Hash Algorithm commit identifier), the latest CI (continuous integration) result on <code>main</code> from GitHub Actions, the latest tag, and open pull requests with their checks, whether they need "Update branch", and their age.</p>
+  <div class="repo-grid">
+  {% for repo in page.repos %}
+    <article class="card" data-repo="{{ repo.name }}">
+      <h3><a href="{{ repo.html_url }}" rel="noreferrer">{{ repo.name }}</a></h3>
+
+      <div class="tile">
+        <h4>Main commit</h4>
+        {{ failure(repo.main_head) }}
+        {% set v = repo.main_head.shown %}
+        <p class="value {{ '' if repo.main_head.current else 'stale-value' }}">{% if v %}<code>{{ short_sha(v) }}</code>{% else %}—{% endif %} {{ badge(repo.main_head.badge) }}</p>
+        {{ provenance(repo.main_head) }}
+      </div>
+
+      <div class="tile">
+        <h4>CI on main</h4>
+        {{ failure(repo.main_ci) }}
+        {% set ci = repo.main_ci.shown %}
+        <p class="value">{{ badge(repo.main_ci.badge) }}</p>
+        {% if ci is not none %}
+        <ul class="runs {{ '' if repo.main_ci.current else 'stale-value' }}">
+          {% if not repo.main_ci.current %}<li>Last good result: {{ ci.disposition.value }}, {{ ci.summary }}</li>{% endif %}
+          {% for run in ci.runs %}<li><a href="{{ run.html_url }}" rel="noreferrer">{{ run.workflow }}</a>: {{ run.conclusion or run.status }}</li>{% endfor %}
+        </ul>
+        {% endif %}
+        {{ provenance(repo.main_ci) }}
+      </div>
+
+      <div class="tile">
+        <h4>Latest tag</h4>
+        {{ failure(repo.latest_tag) }}
+        {% set tag = repo.latest_tag.shown %}
+        <p class="value {{ '' if repo.latest_tag.current else 'stale-value' }}">{% if tag is not none %}{{ tag.name or 'No tags' }}{% else %}—{% endif %} {{ badge(repo.latest_tag.badge) }}</p>
+        {{ provenance(repo.latest_tag) }}
+      </div>
+
+      <div class="tile">
+        <h4>Open pull requests</h4>
+        {{ failure(repo.pulls) }}
+        {% set pulls = repo.pulls.shown %}
+        {% if pulls is not none %}
+          {% if pulls %}
+          <ul class="pulls {{ '' if repo.pulls.current else 'stale-value' }}">
+            {% for pr in pulls %}
+            <li>
+              <a href="{{ pr.html_url }}" rel="noreferrer">#{{ pr.number }} {{ pr.title }}</a>{% if pr.draft %} (draft){% endif %}
+              <span class="muted">opened {{ pr.opened }}, {{ pr.age }} old</span>
+              <div class="pr-status">Checks: {{ badge(pr.checks.badge) }}</div>
+              <div class="pr-status">Branch: {{ badge(pr.merge.badge) }}</div>
+            </li>
+            {% endfor %}
+          </ul>
+          {% else %}
+          <p class="value">None open</p>
+          {% endif %}
+        {% endif %}
+        {{ provenance(repo.pulls) }}
+      </div>
+    </article>
+  {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{# 4 · Live Aureon ------------------------------------------------------------------- #}
+{% if 'aureon' in selected %}
+{% set a = page.aureon %}
+<section class="panel" id="aureon" data-panel="aureon">
+  <h2>Live Aureon</h2>
+  <p class="lede">From Aureon's public snapshot endpoint. Deploy drift compares the deployed commit with aureon <code>main</code>. The AUR-I-17 marker (Aureon inventory finding 17: pending decisions lost on redeploy) appears when the pending count fell to 0 in the same refresh interval that the deployed commit changed.</p>
+
+  <div class="tile">
+    <h3>Snapshot {{ badge(a.snapshot.badge) }}</h3>
+    {{ failure(a.snapshot) }}
+    <dl class="fields">
+      {% for f in a.fields %}
+      <div class="field"><dt>{{ f.label }}</dt><dd><span class="field-value">{{ f.text }}</span> {{ badge(f.badge) }}</dd></div>
+      {% endfor %}
+    </dl>
+    {% if not a.snapshot.current and a.snapshot.stale_value is not none %}
+    {% set s = a.snapshot.stale_value %}
+    <p class="stale-value">Last good snapshot ({{ a.snapshot.stale_at }}): deployed commit {{ s.deploy_sha or '—' }}, stack {{ s.stack or '—' }}, positions {{ s.positions if s.positions is not none else '—' }}, pending {{ s.pending if s.pending is not none else '—' }}.</p>
+    {% endif %}
+    {{ provenance(a.snapshot) }}
+  </div>
+
+  <div class="tile-row">
+    <div class="tile">
+      <h3>Deploy drift</h3>
+      <p class="value">{{ badge(a.drift.badge) }}</p>
+      {{ failure(a.drift) }}
+      {% set d = a.drift.shown %}
+      {% if d is not none %}
+      <p class="{{ '' if a.drift.current else 'stale-value' }}">Deployed <code>{{ short_sha(d.deployed_sha) }}</code> · aureon main <code>{{ short_sha(d.main_sha) }}</code></p>
+      {% endif %}
+      {{ provenance(a.drift) }}
+    </div>
+    <div class="tile">
+      <h3>Pending-drop marker (AUR-I-17)</h3>
+      <p class="value">{{ badge(a.pending_drop.badge) }}</p>
+      {{ failure(a.pending_drop) }}
+      {% set p = a.pending_drop.shown %}
+      {% if p is not none %}
+      <div class="{{ '' if a.pending_drop.current else 'stale-value' }}">
+        {% if p.last_event %}
+        <p>Detected {{ p.last_event.detected_at.strftime('%d %b %Y %H:%M UTC') }}: {{ p.last_event.pending_before }} pending → 0 while the deployed commit changed <code>{{ short_sha(p.last_event.deploy_sha_before) }}</code> → <code>{{ short_sha(p.last_event.deploy_sha_after) }}</code>.</p>
+        {% else %}
+        <p>No drop seen in {{ p.comparisons }} comparison{{ 's' if p.comparisons != 1 }} since this page's server started.</p>
+        {% endif %}
+        <p class="muted">Remembered only while this server process runs.</p>
+      </div>
+      {% endif %}
+      {{ provenance(a.pending_drop) }}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+{# 5 · Scheduled checks -------------------------------------------------------------- #}
+{% if 'scheduled' in selected %}
+<section class="panel" id="scheduled" data-panel="scheduled">
+  <h2>Nightly and scheduled checks</h2>
+  <p class="lede">The most recent run of each GitHub Actions workflow that ran on a schedule, with its run date.</p>
+  <div class="repo-grid">
+  {% for repo in page.repos %}
+    <article class="card tile" data-repo="{{ repo.name }}">
+      <h3>{{ repo.name }}</h3>
+      {{ failure(repo.scheduled) }}
+      {% set runs = repo.scheduled.shown %}
+      {% if runs is not none %}
+        {% if runs %}
+        <ul class="runs {{ '' if repo.scheduled.current else 'stale-value' }}">
+          {% for run in runs %}
+          <li><a href="{{ run.html_url }}" rel="noreferrer">{{ run.workflow }}</a>: {% if repo.scheduled.current %}{{ badge(run_badge(run)) }}{% else %}{{ run.conclusion or run.status }} (stale){% endif %} <span class="muted">run {{ run.created_at.strftime('%d %b %Y %H:%M UTC') }}</span></li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="value">No scheduled workflow runs found</p>
+        {% endif %}
+      {% endif %}
+      {{ provenance(repo.scheduled) }}
+    </article>
+  {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{# 6 · Open decisions ---------------------------------------------------------------- #}
+{% if 'decisions' in selected %}
+{% set t = page.program %}
+<section class="panel" id="decisions" data-panel="decisions">
+  <h2>Open decisions {{ badge(t.badge) }}</h2>
+  <p class="lede">Decisions still open, with the person who owns each one, from the program file. JUM-D identifiers are Joint Upgrade Map decisions.</p>
+  {{ provenance(t) }}
+  {{ failure(t) }}
+  {% if page.decisions %}
+  <table class="decisions">
+    <thead><tr><th scope="col">ID</th><th scope="col">Title</th><th scope="col">Owner</th><th scope="col">Opened</th><th scope="col">Age</th></tr></thead>
+    <tbody>
+    {% for d in page.decisions %}
+      <tr><th scope="row">{{ d.id }}</th><td>{{ d.title }}</td><td>{{ d.owner }}</td><td>{{ d.opened }}</td><td>{{ d.age }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% elif t.current %}
+  <p class="value">No open decisions</p>
+  {% endif %}
+</section>
+{% endif %}
+</main>
+{% endblock %}
