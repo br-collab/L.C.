@@ -1,0 +1,13 @@
+# Railway's Python builder (Railpack) strips the extras marker from a build
+# command: a plan printed as `pip install ".[cop]"` executes as `pip install "."`,
+# quoted or not, and the web dependencies are never installed. Two deploys on
+# 17 Sep 2026 failed that way — `gunicorn: command not found`, then
+# `No module named gunicorn` — because nothing answered the healthcheck.
+#
+# pip reads this file line by line, so the marker survives here. The build
+# command is `python -m pip install -r requirements.txt`.
+#
+# This file is a pointer, not a dependency list. The `cop` extra in
+# pyproject.toml remains the single source of truth for what Legate needs;
+# add and pin dependencies there.
+.[cop]
