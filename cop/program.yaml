@@ -53,15 +53,15 @@ waves:
     name: Contract-critical fixes
     status: IN_PROGRESS
     evidence: [W2A-report, W2B-report]
-    next_action: {action: Review and merge Project-Atreides#12 (W2A-1), owner: Bill}
+    next_action: {action: 'Review and merge the W2A pull requests in order, Project-Atreides#12 to Project-Atreides#17', owner: Bill}
     packages:
       - {id: W2A-1, name: Atreides T1 integrity, status: IN_PROGRESS, evidence: [Project-Atreides#12]}
       - {id: W2A-K, name: Kernel CHANGELOG heading for 0.1.0, status: DONE, evidence: [cannae-kernel#1]}
-      - {id: W2A-2, name: Atreides T2 pure validation, status: NOT_STARTED}
-      - {id: W2A-3, name: Atreides T4 gate binding and halt, status: NOT_STARTED}
-      - {id: W2A-4, name: Atreides T3 acceptance draft, status: NOT_STARTED}
-      - {id: W2A-5, name: Atreides T7 minimal journal, status: NOT_STARTED}
-      - {id: W2A-6, name: Atreides stress regressions, status: NOT_STARTED}
+      - {id: W2A-2, name: Atreides T2 pure validation, status: IN_PROGRESS, evidence: [Project-Atreides#13]}
+      - {id: W2A-3, name: Atreides T4 gate binding and halt, status: IN_PROGRESS, evidence: [Project-Atreides#14]}
+      - {id: W2A-4, name: Atreides T3 acceptance draft, status: IN_PROGRESS, evidence: [Project-Atreides#15]}
+      - {id: W2A-5, name: Atreides T7 minimal journal, status: IN_PROGRESS, evidence: [Project-Atreides#16]}
+      - {id: W2A-6, name: Atreides stress regressions, status: IN_PROGRESS, evidence: [Project-Atreides#17]}
       - {id: W2B-1, name: Aureon kernel pin and test truth, status: NOT_STARTED}
       - {id: W2B-2, name: Aureon A1 authority authentication, status: NOT_STARTED}
       - {id: W2B-3, name: Aureon A3 and A9 binding policy, status: NOT_STARTED}
@@ -110,8 +110,8 @@ other_work:
   - id: COP-0
     name: COP-0 program picture
     status: IN_PROGRESS
-    evidence: [L.C.@cop0/legate-program-picture]
-    next_action: {action: Review the COP-0 branch and open its pull request, owner: Bill}
+    evidence: [L.C.#1]
+    next_action: {action: 'Review and merge L.C.#1, then create the Railway service', owner: Bill}
 
 decisions:
   - {id: JUM-D-05, title: Where the shared kernel lives (built on the default), owner: Bill, opened: 2026-09-16}
