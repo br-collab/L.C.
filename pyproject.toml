@@ -29,7 +29,7 @@ cop = [
     "httpx>=0.27,<1.0",
     "PyYAML>=6.0",
     "pydantic>=2.6,<3.0",
-    "cannae-kernel @ git+https://github.com/br-collab/cannae-kernel.git@v0.1.0",
+    "cannae-kernel @ git+https://github.com/br-collab/cannae-kernel.git@v0.1.1",
 ]
 
 [build-system]
@@ -58,11 +58,8 @@ select = ["E", "F", "W", "I", "B", "UP", "N", "PL", "RUF"]
 python_version = "3.11"
 strict = true
 
-# cannae-kernel v0.1.0 ships no py.typed marker, so mypy would treat it as untyped. Its
-# source is fully annotated; read it instead of ignoring it.
-[[tool.mypy.overrides]]
-module = ["cannae_kernel", "cannae_kernel.*"]
-follow_untyped_imports = true
+# cannae-kernel v0.1.1 ships py.typed, so strict mypy reads its annotations directly.
+# The follow_untyped_imports override it needed before is deleted.
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
