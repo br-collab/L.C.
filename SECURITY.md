@@ -15,6 +15,8 @@ Include what you found, how to reproduce it, and what you believe the impact is.
 
 L.C. (Legiones Cannenses) is a research instrument. It uses synthetic data only, holds no credentials and never submits to a settlement rail. Reports are still welcome — in particular anything that would let the package import code it must not import, or let synthetic data be presented as real.
 
+The `cop/` package (Legate, the COP-0 program picture) is a web application. It reads its operator key, session secret and a read-only GitHub token from environment variables at deploy time; none is stored in this repository. For it, reports of authentication bypass, session forgery, token exposure, or a failed or stale source being shown as current are especially welcome.
+
 ## Supported versions
 
 Only the latest commit on `main` is supported. There are no releases yet.
