@@ -1,6 +1,9 @@
 __pycache__/
 *.py[cod]
 *.egg-info/
+# setuptools build output, which `pip install -r requirements.txt` creates locally.
+build/
+dist/
 .venv/
 .pytest_cache/
 .mypy_cache/

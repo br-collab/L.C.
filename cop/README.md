@@ -81,10 +81,16 @@ Legate runs as its **own Railway service**, separate from Aureon's. Deploying or
 
 1. In the Railway project, choose **New** → **GitHub Repo** and select `br-collab/L.C.`. Set the deploy branch to `main`.
 2. In the new service's **Settings**:
-   - **Start command:** `gunicorn --workers=1 --threads=4 --bind 0.0.0.0:$PORT cop.app:app`
+   - **Build command:** `python -m pip install -r requirements.txt`
+   - **Start command:** `python -m gunicorn --workers=1 --threads=4 --bind 0.0.0.0:$PORT cop.app:app`
    - **Healthcheck path:** `/healthz`
-   - **Build:** the app needs the `cop` extra, and nothing in this repository tells Railway's Python builder to install extras. Set a custom build command, `pip install ".[cop]"`, and confirm in the first build log that Flask, gunicorn and cannae-kernel were installed.
    - Service name suggestion: `cannae-cop`.
+
+   Confirm in the first build log that Flask, gunicorn, httpx, PyYAML and cannae-kernel were installed.
+
+   **Do not put the extras marker in the build command.** Railpack strips it: a plan printed as `pip install ".[cop]"` or `python -m pip install .[cop]` executes as `pip install "."`, quoted or not, so only the bare package installs and none of the web dependencies do. Two deploys on 17 September 2026 failed exactly there — `gunicorn: command not found`, then `No module named gunicorn`, with nothing answering `/healthz`. The root `requirements.txt` exists for this reason: pip reads it line by line, so `.[cop]` survives. The `cop` extra in `pyproject.toml` is still the single source of truth for the dependency list.
+
+   **`python -m gunicorn`, not `gunicorn`,** so the start command does not depend on the console script being on `PATH` in the runtime image.
 3. In **Variables**, add:
    - `LEGATE_OPERATOR_KEY`: the key you will type at the login form. At least 16 characters; use a password manager to generate it.
    - `LEGATE_SESSION_SECRET`: signs the session cookie. At least 32 random characters, for example the output of `python -c "import secrets; print(secrets.token_urlsafe(48))"`. Changing it signs everyone out.
