@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}{{ product_name }}: sign in{% endblock %}
+{% block body %}
+<main class="login">
+  <h1>{{ product_name }}</h1>
+  <p>Common Operating Picture (COP) for the Cannae Legion program. Private and read-only.</p>
+  <form method="post" action="{{ url_for('login_submit') }}">
+    <label for="operator_key">Operator key</label>
+    <input id="operator_key" name="operator_key" type="password" autocomplete="current-password" required autofocus>
+    <button type="submit">Sign in</button>
+  </form>
+  {% if error %}<p class="login-error" role="alert">{{ error }}</p>{% endif %}
+</main>
+{% endblock %}

@@ -26,6 +26,7 @@ No middle-layer code is written until Research Charter §18.7 steps 1–4 are co
 ## Layout
 
 - `lc/` — Python package (import name `lc`)
+- `cop/` — Legate, the COP-0 (Common Operating Picture) program picture: a private, read-only status page. Separate from `lc`, with its own optional dependencies. See `cop/README.md`.
 - `tests/` — tests
 - `docs/` — specifications and phase records that belong with the code
 

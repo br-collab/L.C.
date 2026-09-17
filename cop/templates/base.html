@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="color-scheme" content="light dark">
+  <title>{% block title %}{{ product_name }}{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='cop.css') }}">
+  {% block scripts %}{% endblock %}
+</head>
+<body data-reload-seconds="{{ reload_seconds }}">
+{% block body %}{% endblock %}
+</body>
+</html>

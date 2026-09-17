@@ -1,0 +1,119 @@
+# Program state for the COP-0 (Common Operating Picture) program picture.
+#
+# STATUS ONLY. This repository is public (Research Charter §18.5): identifiers, statuses,
+# evidence identifiers, next actions with owners, and decision identifiers with one-line
+# titles. No design content. The schema in cop/program.py rejects anything else it can.
+#
+# Maintained by hand. Update `as_of` whenever you change a status.
+# Evidence identifiers: `<repository>#<pull request number>`, `<repository>@<tag or commit>`,
+# or a report name from the workspace `_reports/` folder.
+# Owners: Bill, Claude Code, Cowork.
+
+schema_version: 1
+as_of: 2026-09-17
+
+waves:
+  - number: 0
+    id: W0
+    name: Hygiene
+    status: DONE
+    evidence: [W0-report]
+    packages:
+      - {id: W0-1, name: L.C. repository scaffold, status: DONE, evidence: [L.C.@34ee907]}
+      - {id: W0-2, name: Aureon pins Atreides v0.3.3, status: DONE, evidence: [aureon#15]}
+      - id: W0-3
+        name: Lock files
+        status: DONE
+        evidence: [Project-Atreides#9, aureon#16]
+      - {id: W0-4, name: Aureon core tests in CI, status: DONE, evidence: [aureon#17]}
+      - id: W0-5
+        name: Strict-xfail regression probes
+        status: DONE
+        evidence: [aureon#18, Project-Atreides#10]
+      - id: W0-6
+        name: SR 26-2 references
+        status: DONE
+        evidence: [aureon#19, Project-Atreides#11]
+
+  - number: 1
+    id: W1
+    name: Shared kernel
+    status: DONE
+    evidence: [W1-report, cannae-kernel@v0.1.0]
+    packages:
+      - {id: W1-kernel, name: Kernel v0.1, status: DONE, evidence: [W1-report]}
+      - {id: W1.1, name: Kernel amendments, status: DONE, evidence: [W1-report]}
+      - id: W1-close
+        name: Tag and release v0.1.0
+        status: DONE
+        evidence: [cannae-kernel@v0.1.0]
+
+  - number: 2
+    id: W2
+    name: Contract-critical fixes
+    status: IN_PROGRESS
+    evidence: [W2A-report, W2B-report]
+    next_action: {action: 'Review and merge the W2A pull requests in order, Project-Atreides#12 to Project-Atreides#17', owner: Bill}
+    packages:
+      - {id: W2A-1, name: Atreides T1 integrity, status: IN_PROGRESS, evidence: [Project-Atreides#12]}
+      - {id: W2A-K, name: Kernel CHANGELOG heading for 0.1.0, status: DONE, evidence: [cannae-kernel#1]}
+      - {id: W2A-2, name: Atreides T2 pure validation, status: IN_PROGRESS, evidence: [Project-Atreides#13]}
+      - {id: W2A-3, name: Atreides T4 gate binding and halt, status: IN_PROGRESS, evidence: [Project-Atreides#14]}
+      - {id: W2A-4, name: Atreides T3 acceptance draft, status: IN_PROGRESS, evidence: [Project-Atreides#15]}
+      - {id: W2A-5, name: Atreides T7 minimal journal, status: IN_PROGRESS, evidence: [Project-Atreides#16]}
+      - {id: W2A-6, name: Atreides stress regressions, status: IN_PROGRESS, evidence: [Project-Atreides#17]}
+      - {id: W2B-1, name: Aureon kernel pin and test truth, status: NOT_STARTED}
+      - {id: W2B-2, name: Aureon A1 authority authentication, status: NOT_STARTED}
+      - {id: W2B-3, name: Aureon A3 and A9 binding policy, status: NOT_STARTED}
+      - {id: W2B-4, name: Aureon A4 approval without side effects, status: NOT_STARTED}
+      - {id: W2B-5, name: Aureon A2 and A7 envelope draft, status: NOT_STARTED}
+      - {id: W2B-6, name: Aureon runtime SR 26-2 strings, status: NOT_STARTED}
+      - {id: W2B-7, name: Aureon pins Atreides v0.4.0, status: NOT_STARTED}
+
+  - number: 3
+    id: W3
+    name: Contract freeze
+    status: NOT_STARTED
+    next_action: {action: Issue the Wave 3 order after Wave 2 closes, owner: Cowork}
+
+  - number: 4
+    id: W4
+    name: L.C. build
+    status: NOT_STARTED
+    next_action: {action: Waits for Wave 3, owner: Cowork}
+
+  - number: 5
+    id: W5
+    name: Vertical slices
+    status: NOT_STARTED
+    next_action: {action: Waits for Wave 4, owner: Cowork}
+
+  - number: 6
+    id: W6
+    name: Experiments and remaining upgrades
+    status: NOT_STARTED
+    next_action: {action: Waits for Wave 5, owner: Cowork}
+
+  - number: 7
+    id: W7
+    name: Further lifecycles and candidate models
+    status: NOT_STARTED
+    next_action: {action: Waits for Wave 6, owner: Cowork}
+
+  - number: 8
+    id: W8
+    name: Commercial lane
+    status: NOT_STARTED
+    next_action: {action: Waits for Wave 7, owner: Cowork}
+
+other_work:
+  - id: COP-0
+    name: COP-0 program picture
+    status: IN_PROGRESS
+    evidence: [L.C.#1]
+    next_action: {action: 'Review and merge L.C.#1, then create the Railway service', owner: Bill}
+
+decisions:
+  - {id: JUM-D-05, title: Where the shared kernel lives (built on the default), owner: Bill, opened: 2026-09-16}
+  - {id: JUM-D-06, title: Where the command and control (C2) harness and emulators live, owner: Bill, opened: 2026-09-16}
+  - {id: JUM-D-27, title: Final product name (the current name is a working name), owner: Bill, opened: 2026-09-17}

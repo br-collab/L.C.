@@ -1,0 +1,40 @@
+{# Shared pieces. Every colour comes with a written label; no status is colour-only. #}
+
+{% macro badge(b) -%}
+<span class="badge tone-{{ b.tone }}"><span class="swatch" aria-hidden="true"></span><strong class="badge-code">{{ b.code }}</strong> <span class="badge-label">{{ b.label }}</span></span>
+{%- endmacro %}
+
+{% macro provenance(t) -%}
+<p class="prov">
+  <span class="prov-kind">{{ t.provenance.kind }}</span> ({{ t.provenance.kind_label }})
+  · observed {{ t.provenance.observed_at }}
+  · source:
+  {% if t.provenance.is_link %}<a href="{{ t.provenance.source_url }}" rel="noreferrer">{{ t.provenance.source_url }}</a>{% else %}{{ t.provenance.source_url }}{% endif %}
+</p>
+{%- endmacro %}
+
+{% macro failure(t) -%}
+{% if not t.current %}
+<div class="failure" role="status">
+  <p><strong>INDETERMINATE</strong>: {{ t.error_class }}{% if t.error_detail %} ({{ t.error_detail }}){% endif %}.</p>
+  {% if t.stale_value is not none %}
+  <p>The value below is the <strong>last good value, from {{ t.stale_at }}</strong>. It is stale and is not current.</p>
+  {% else %}
+  <p>No good value has been observed yet.</p>
+  {% endif %}
+</div>
+{% endif %}
+{%- endmacro %}
+
+{% macro work_row_packages(item) -%}
+{% if item.packages %}
+<ul class="chips">
+  {% for pkg in item.packages %}
+  {% set b = work_badges[pkg.status] %}
+  <li class="chip tone-{{ b.tone }}"><span class="swatch" aria-hidden="true"></span><span class="chip-id">{{ pkg.id }}</span> {{ pkg.name }}: <strong>{{ b.label }}</strong>{% if pkg.evidence %} <span class="evidence">({{ pkg.evidence | join(', ') }})</span>{% endif %}</li>
+  {% endfor %}
+</ul>
+{% else %}
+<span class="muted">No work packages listed</span>
+{% endif %}
+{%- endmacro %}
