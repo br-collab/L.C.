@@ -1,0 +1,45 @@
+# Continuous integration: lint, strict type check and tests on Python 3.11.
+#
+# The import-boundary test (JUM-D-06) runs here from the first commit, so the
+# rule that `lc` never imports the harness or the emulators is checked on every
+# push rather than remembered.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Lint, type check, tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: ruff
+        run: ruff check .
+
+      - name: mypy
+        run: mypy lc tests
+
+      - name: pytest
+        run: pytest -q
