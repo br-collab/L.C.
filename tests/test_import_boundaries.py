@@ -11,13 +11,22 @@ shows; it holds no authority. So `lc` never imports `cop`, and `cop` never impor
 the harness, the emulators or a domain package. `cop` may import `cannae_kernel` and its
 own web and parsing dependencies, and nothing else outside the standard library.
 
-`harness_c2` and `emulators` do not exist yet, so those checks pass trivially today.
-They exist so the rule is enforced from the first commit that adds one, rather than
-written down and discovered broken later.
+`emulators` does not exist yet, so that check passes trivially today. It exists so the
+rule is enforced from the first commit that adds one, rather than written down and
+discovered broken later.
 
-The `cop` checks that read source run everywhere. The check that imports `cop` needs the
-`cop` extra; it is skipped when that extra is not installed, and the CI job that installs
-it sets COP_EXTRA_REQUIRED=1 so that a skip there is a failure.
+`harness_c2` (Thifur-C2, the top-level command and control harness) arrived with the
+Phase B lineage assembler, so its checks are live. It has a rule of its own and in the
+same direction: the harness works in **kernel contracts**, never in a domain's internals.
+`cannae_kernel` is the dependency root all three domains already share (JUM-D-05), so a
+C2 that reached into `lc` or `cop` would be coupling the harness to one domain's
+implementation of a shape the kernel already defines — and the next domain's version of
+that shape would not fit.
+
+The checks that read source run everywhere. The checks that *import* a package need that
+package's extra: they are skipped when it is not installed, and the CI job that installs
+it sets `COP_EXTRA_REQUIRED=1` or `HARNESS_EXTRA_REQUIRED=1` so that a skip there is a
+failure rather than a quiet pass.
 """
 
 import ast
@@ -38,6 +47,10 @@ COP_DIR = REPO_ROOT / "cop"
 
 FORBIDDEN = ("harness_c2", "emulators", "cop")
 COP_FORBIDDEN = ("lc", "harness_c2", "emulators", "aureon", "atreides")
+#: The harness reads the frozen contracts, not a domain's implementation of them.
+HARNESS_FORBIDDEN = ("lc", "cop", "emulators", "aureon", "atreides")
+HARNESS_ALLOWED_THIRD_PARTY = frozenset({"cannae_kernel", "pydantic"})
+HARNESS_DIR = REPO_ROOT / "harness_c2"
 COP_ALLOWED_THIRD_PARTY = frozenset(
     {"cannae_kernel", "flask", "werkzeug", "httpx", "yaml", "pydantic"}
 )
@@ -157,3 +170,71 @@ def test_importing_cop_loads_no_lc_or_forbidden_package() -> None:
     loaded = json.loads(result.stdout)
     assert [n for n in loaded if n.split(".", 1)[0] in COP_FORBIDDEN] == []
     assert "cannae_kernel" in loaded
+
+
+def test_harness_c2_source_imports_only_what_it_may() -> None:
+    """Thifur-C2 works in kernel contracts, never in a domain's internals.
+
+    Reads source, so a function-local import cannot hide behind a code path the
+    test happens not to run.
+    """
+    assert HARNESS_DIR.is_dir()
+    forbidden, unexpected = [], []
+    for path in sorted(HARNESS_DIR.rglob("*.py")):
+        for line, name in _absolute_imports(path):
+            root = name.split(".", 1)[0]
+            where = f"{path.relative_to(REPO_ROOT)}:{line} {name}"
+            if root in HARNESS_FORBIDDEN:
+                forbidden.append(where)
+            elif (
+                root != "harness_c2"
+                and root not in sys.stdlib_module_names
+                and root not in HARNESS_ALLOWED_THIRD_PARTY
+            ):
+                unexpected.append(where)
+    assert forbidden == []
+    assert unexpected == []
+
+
+def test_importing_harness_c2_loads_no_domain_package() -> None:
+    """The runtime half: a fresh interpreter, every submodule imported."""
+    missing = [m for m in ("cannae_kernel", "pydantic") if importlib.util.find_spec(m) is None]
+    if missing:
+        # Same rule as the cop probe: skipping is correct in the lean job, which
+        # installs no runtime dependency, and a failure in the job that does.
+        if os.environ.get("HARNESS_EXTRA_REQUIRED") == "1":
+            pytest.fail(f"harness extra required but not installed: {missing}")
+        pytest.skip(f"harness extra not installed ({', '.join(missing)}); runs in the harness job")
+    probe = (
+        "import importlib, json, pkgutil, sys\n"
+        "import harness_c2\n"
+        "for m in pkgutil.walk_packages(harness_c2.__path__, 'harness_c2.'):\n"
+        "    importlib.import_module(m.name)\n"
+        "print(json.dumps(sorted(sys.modules)))\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", probe], capture_output=True, text=True, check=True
+    )
+    loaded = json.loads(result.stdout)
+    assert [n for n in loaded if n.split(".", 1)[0] in HARNESS_FORBIDDEN] == []
+    assert "cannae_kernel" in loaded
+
+
+def test_the_harness_never_writes() -> None:
+    """Stop 1, enforced across the whole package rather than one module.
+
+    C2 never takes a market action, generates an order, modifies a position or
+    issues a settlement instruction. Every one of those needs a way out of the
+    process, and the harness has none: no network client, no database driver, no
+    file handle. A future work package that needs one has to change this test,
+    which is a decision somebody makes rather than a line somebody adds.
+    """
+    reaches_out = ("httpx", "requests", "urllib", "socket", "sqlite3", "subprocess", "smtplib")
+    offenders = []
+    for path in sorted(HARNESS_DIR.rglob("*.py")):
+        for line, name in _absolute_imports(path):
+            if name.split(".", 1)[0] in reaches_out:
+                offenders.append(f"{path.relative_to(REPO_ROOT)}:{line} {name}")
+        if "open(" in path.read_text(encoding="utf-8"):
+            offenders.append(f"{path.relative_to(REPO_ROOT)} opens a file")
+    assert offenders == [], f"the C2 harness has acquired a way to act: {offenders}"

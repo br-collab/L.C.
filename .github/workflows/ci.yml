@@ -4,13 +4,17 @@
 # rule that `lc` never imports the harness, the emulators or `cop` is checked on
 # every push rather than remembered.
 #
-# Two jobs:
-# - `check` installs only the `dev` extra, as before, and checks `lc`. It proves `lc`
-#   still needs no runtime dependency. The COP-0 tests (tests/cop) need the `cop` extra
-#   and are left to the second job.
-# - `cop` installs the `cop` and `dev` extras and runs everything: ruff, strict mypy
-#   over `lc`, `cop` and `tests`, and the whole test suite. COP_EXTRA_REQUIRED=1 turns
-#   the skip of the cop import-boundary probe into a failure.
+# Three jobs, and the split is the point: each proves what a package actually needs.
+# - `check` installs only the `dev` extra and checks `lc`. It proves `lc` still needs no
+#   runtime dependency at all. The COP-0 tests (tests/cop) and the harness tests
+#   (tests/harness_c2) both need dependencies, so they are left to the jobs below.
+# - `harness` installs only `harness` and `dev`: the frozen contracts and pydantic. It
+#   proves Thifur-C2 needs the kernel and nothing else — no web stack, no HTTP client,
+#   no database driver. A C2 that grew one fails here rather than passing because the
+#   `cop` extra happened to bring it along.
+# - `cop` installs `cop` and `dev` and runs everything: ruff, ruff format, strict mypy
+#   over every package, and the whole test suite. COP_EXTRA_REQUIRED=1 turns the skip of
+#   the cop import-boundary probe into a failure.
 
 name: CI
 
@@ -30,11 +34,11 @@ permissions:
 jobs:
   check:
     name: Lint, type check, tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
 
@@ -47,18 +51,41 @@ jobs:
         run: ruff check .
 
       - name: mypy
-        run: mypy lc tests --exclude tests/cop
+        run: mypy lc tests --exclude tests/cop --exclude tests/harness_c2
 
       - name: pytest
-        run: pytest -q --ignore=tests/cop
+        run: pytest -q --ignore=tests/cop --ignore=tests/harness_c2
+
+  harness:
+    name: Thifur-C2 harness (kernel only)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[harness,dev]"
+
+      - name: mypy
+        run: mypy harness_c2 tests/harness_c2
+
+      - name: pytest
+        env:
+          HARNESS_EXTRA_REQUIRED: "1"
+        run: pytest -q tests/harness_c2 tests/test_import_boundaries.py
 
   cop:
     name: COP-0 program picture (cop extra)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
 
@@ -73,9 +100,10 @@ jobs:
           ruff format --check .
 
       - name: mypy
-        run: mypy lc cop tests
+        run: mypy lc cop harness_c2 tests
 
       - name: pytest
         env:
           COP_EXTRA_REQUIRED: "1"
+          HARNESS_EXTRA_REQUIRED: "1"
         run: pytest -q
