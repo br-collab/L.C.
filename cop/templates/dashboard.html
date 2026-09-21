@@ -10,7 +10,7 @@
   <div class="banner-top">
     <div>
       <h1>{{ b.product_name }}</h1>
-      <p class="lede">Common Operating Picture (COP) for the Cannae Legion program: build status and live Aureon health. Read-only. Times are UTC (Coordinated Universal Time).</p>
+      <p class="lede">Common Operating Picture (COP) for the Cannae Legion program: build status, live Aureon health and Atreides agent activation. Read-only. Times are UTC (Coordinated Universal Time).</p>
     </div>
     <form method="post" action="{{ url_for('logout') }}" class="logout"><button type="submit">Sign out</button></form>
   </div>
@@ -22,7 +22,7 @@
   <div class="overall">
     <h2>Overall program state</h2>
     <p class="overall-badge">{{ badge(b.overall) }}</p>
-    <p class="muted">Computed (POLICY_RESULT) as the worst of: continuous integration on each <code>main</code> branch, scheduled checks, the Aureon snapshot, deploy drift, the AUR-I-17 marker, blocked waves, and every source being current. Open pull requests are not included.</p>
+    <p class="muted">Computed (POLICY_RESULT) as the worst of: continuous integration on each <code>main</code> branch, scheduled checks, the Aureon snapshot, deploy drift, the AUR-I-17 marker, blocked waves, Atreides agent activation, and every source being current. Open pull requests are not included.</p>
     {% if b.reasons %}
     <details {% if b.reasons | length <= 4 %}open{% endif %}>
       <summary>{{ b.reasons | length }} reason{{ 's' if b.reasons | length != 1 }}</summary>
@@ -227,7 +227,49 @@
 </section>
 {% endif %}
 
-{# 5 · Scheduled checks -------------------------------------------------------------- #}
+{# 5 · Atreides agents ---------------------------------------------------------------- #}
+{% if 'agents' in selected %}
+{% set ag = page.agents %}
+<section class="panel" id="agents" data-panel="agents">
+  <h2>Atreides agents {{ badge(ag.tile.badge) }}</h2>
+  <p class="lede">Phase {{ ag.phase }} of agent activation: the Tier 1 and Tier 2 agents run continuously and <strong>recommend only</strong>. No agent makes an approval decision; every approval gate requires explicit operator action (CAOM-001, Consolidated Authority Operating Mode). A lateral agent-to-agent handoff is refused by the receiving agent's own type check, because no C2 (Command and Control) runtime exists to authorize one.</p>
+
+  {% if ag.synthetic %}
+  <p class="warning" role="alert"><strong>SYNTHETIC FLOW.</strong> These agents are running against invented work, not venue facts. What is real is the behaviour: which agent held, what it refused, and what it recorded.</p>
+  {% endif %}
+
+  {{ provenance(ag.tile) }}
+  {{ failure(ag.tile) }}
+
+  <dl class="facts">
+    <div><dt>Halt state (server-side)</dt><dd>{% if ag.halted %}<strong>HALTED</strong> — {% endif %}{{ ag.halt_text }}</dd></div>
+    <div><dt>Last activation tick</dt><dd>{{ ag.tick_text }}</dd></div>
+  </dl>
+
+  {% if ag.rows %}
+  <div class="repo-grid">
+    {% for row in ag.rows %}
+    <article class="card tile" data-agent="{{ row.agent_id }}">
+      <h3>{{ row.agent_id }} {{ badge(row.badge) }}</h3>
+      <p class="muted">{{ row.tier }} · {{ row.role }}{% if row.expects_refusal %} · <strong>standing probe</strong>: healthy when refused{% endif %}</p>
+      <dl class="fields">
+        <div class="field"><dt>Last output</dt><dd><span class="field-value">{{ row.summary }}</span></dd></div>
+        <div class="field"><dt>Observed</dt><dd><span class="field-value">{{ row.observed_at }}</span></dd></div>
+        <div class="field"><dt>Claim kind</dt><dd><span class="field-value">{{ row.provenance }}</span></dd></div>
+        <div class="field"><dt>C2 handoff basis</dt><dd><span class="field-value">{{ row.handoff_basis }}</span> {{ badge(row.handoff_badge) }}</dd></div>
+        <div class="field"><dt>Last refusal</dt><dd><span class="field-value">{{ row.refusal }}</span> {{ badge(row.refusal_badge) }}</dd></div>
+        <div class="field"><dt>Recorded since start</dt><dd><span class="field-value">{{ row.recommendations }} recommendation{{ 's' if row.recommendations != 1 }}, {{ row.refusals }} refusal{{ 's' if row.refusals != 1 }}</span></dd></div>
+      </dl>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="value">No agent rows are shown, because no current activation snapshot was read. The badge above carries the reason. Nothing on this panel is a claim about what the agents are doing.</p>
+  {% endif %}
+</section>
+{% endif %}
+
+{# 6 · Scheduled checks -------------------------------------------------------------- #}
 {% if 'scheduled' in selected %}
 <section class="panel" id="scheduled" data-panel="scheduled">
   <h2>Nightly and scheduled checks</h2>
@@ -256,7 +298,7 @@
 </section>
 {% endif %}
 
-{# 6 · Open decisions ---------------------------------------------------------------- #}
+{# 7 · Open decisions ---------------------------------------------------------------- #}
 {% if 'decisions' in selected %}
 {% set t = page.program %}
 <section class="panel" id="decisions" data-panel="decisions">

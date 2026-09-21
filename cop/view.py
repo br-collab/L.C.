@@ -16,19 +16,24 @@ from datetime import UTC, datetime, time, timedelta
 from enum import StrEnum
 from typing import Any, Generic, TypeVar
 
+from cannae_kernel.absence import Absent, Recorded
 from cannae_kernel.disposition import Disposition
 from cannae_kernel.provenance import Provenance
 
+from cop.agents import AgentsSnapshot
+from cop.agents import AgentView as AgentRecord
 from cop.aureon import AureonSnapshot
-from cop.observation import Observation
+from cop.observation import NOT_CONFIGURED, Observation
 from cop.program import Program, WorkStatus
 from cop.settings import (
+    AGENTS_SNAPSHOT_SOURCE,
     AUREON_SNAPSHOT_URL,
     PRODUCT_NAME,
     REFRESH_SECONDS_WITHOUT_TOKEN,
     STALE_AFTER,
 )
 from cop.state import (
+    AgentsState,
     CiResult,
     DriftResult,
     MergeInfo,
@@ -188,6 +193,26 @@ def tile(obs: Observation[T], now: datetime, badge_for: Callable[[T], Badge]) ->
     )
 
 
+def shown_text(value: Recorded[Any] | Absent, render: Callable[[Any], str] = str) -> str:
+    """What a ``Recorded | Absent`` renders as. Never empty, never mistakable.
+
+    An absence renders as its kernel label — "nothing recorded · <reason>" — and
+    not as a dash, a blank or the word "none". #36 was an absence with nothing to
+    show, which the surface rendered louder than "not reached"; the fix is that
+    the absence always has something of its own to say.
+    """
+    if isinstance(value, Absent):
+        return value.label
+    return render(value.value)
+
+
+def absence_badge(value: Recorded[Any] | Absent, present: Badge) -> Badge:
+    """``present`` when a value was recorded, INDETERMINATE with the reason when not."""
+    if isinstance(value, Absent):
+        return unknown_badge(value.reason)
+    return present
+
+
 def _observed(_: object) -> Badge:
     return OBSERVED
 
@@ -232,6 +257,46 @@ def pending_drop_badge(result: PendingDropResult) -> Badge:
             Disposition.HOLD, "AUR-I-17 seen: pending decisions fell to 0 at a deploy"
         )
     return disposition_badge(Disposition.PASS, "No pending drop seen at a deploy")
+
+
+def agent_badge(agent: AgentRecord) -> Badge:
+    """One agent's badge, with the probe read the right way round.
+
+    The standing lateral-handoff probe is healthy when its input is refused, so a
+    PASS on a probe means "the refusal held" and a BLOCK means an inadmissible
+    input got through. Labelling them identically to an ordinary agent would
+    invite exactly the wrong reading of the most important row on the panel.
+    """
+    if agent.expects_refusal:
+        labels = {
+            Disposition.PASS: "Refusal held: the lateral input was refused",
+            Disposition.BLOCK: "REFUSAL BROKEN: a lateral input was admitted",
+            Disposition.HOLD: "Probe needs attention",
+            Disposition.INDETERMINATE: "Probe has not reported",
+        }
+        return disposition_badge(agent.disposition, labels[agent.disposition])
+    if not agent.up:
+        return disposition_badge(Disposition.INDETERMINATE, "Stopped")
+    labels = {
+        Disposition.PASS: "Nothing held",
+        Disposition.HOLD: "Held for the operator",
+        Disposition.BLOCK: "Refused",
+        Disposition.INDETERMINATE: "Nothing recorded",
+    }
+    return disposition_badge(agent.disposition, labels[agent.disposition])
+
+
+def agents_badge(snapshot: AgentsSnapshot) -> Badge:
+    """The activation as a whole."""
+    if snapshot.halted:
+        return disposition_badge(Disposition.BLOCK, "Halted: every agent is refusing new work")
+    labels = {
+        Disposition.PASS: "All agents reporting; nothing held",
+        Disposition.HOLD: "One or more agents held work for the operator",
+        Disposition.BLOCK: "An agent refused, or a refusal stopped holding",
+        Disposition.INDETERMINATE: "Not confirmed: an agent has recorded nothing",
+    }
+    return disposition_badge(snapshot.disposition, labels[snapshot.disposition])
 
 
 def program_badge(_: Program) -> Badge:
@@ -288,6 +353,44 @@ class AureonView:
 
 
 @dataclass(frozen=True)
+class AgentRowView:
+    """One row of the Agents panel, already rendered.
+
+    Every string here is final. The template chooses no wording and supplies no
+    fallback, so there is nowhere left for a renderer to decide that an empty
+    value means everything is fine — which is how the fifteen defects of Wave 2
+    happened, one renderer at a time.
+    """
+
+    agent_id: str
+    tier: str
+    role: str
+    up: bool
+    expects_refusal: bool
+    badge: Badge
+    summary: str
+    observed_at: str
+    provenance: str
+    handoff_basis: str
+    handoff_badge: Badge
+    refusal: str
+    refusal_badge: Badge
+    recommendations: int
+    refusals: int
+
+
+@dataclass(frozen=True)
+class AgentsView:
+    tile: TileView[AgentsSnapshot]
+    rows: tuple[AgentRowView, ...]
+    halted: bool
+    halt_text: str
+    tick_text: str
+    synthetic: bool
+    phase: str
+
+
+@dataclass(frozen=True)
 class Reason:
     badge: Badge
     text: str
@@ -323,6 +426,7 @@ class PageView:
     decisions: tuple[DecisionView, ...]
     repos: tuple[RepoView, ...]
     aureon: AureonView
+    agents: AgentsView
     work_status_badges: dict[WorkStatus, Badge] = field(
         default_factory=lambda: dict(WORK_STATUS_BADGES)
     )
@@ -398,6 +502,62 @@ def _aureon_fields(snapshot: TileView[AureonSnapshot]) -> tuple[FieldView, ...]:
     return tuple(fields)
 
 
+def _agent_row(agent: AgentRecord) -> AgentRowView:
+    return AgentRowView(
+        agent_id=agent.agent_id,
+        tier=agent.tier.replace("_", " ").title(),
+        role=agent.role,
+        up=agent.up,
+        expects_refusal=agent.expects_refusal,
+        badge=agent_badge(agent),
+        summary=shown_text(agent.last_summary),
+        observed_at=shown_text(agent.last_observed_at, fmt_time),
+        provenance=shown_text(agent.last_provenance, lambda p: p.value),
+        handoff_basis=shown_text(agent.last_handoff_basis),
+        handoff_badge=absence_badge(
+            agent.last_handoff_basis, Badge("C2_HANDOFF", "Recorded handoff", Tone.NEUTRAL)
+        ),
+        refusal=shown_text(agent.last_refusal, lambda r: f"{r.code}: {r.detail}"),
+        refusal_badge=absence_badge(
+            agent.last_refusal, Badge("REFUSED", "Last refusal", Tone.NEUTRAL)
+        ),
+        recommendations=agent.recommendations,
+        refusals=agent.refusals,
+    )
+
+
+def _agents_view(state: AgentsState, now: datetime) -> AgentsView:
+    """The Agents panel. Rows are built only from a current snapshot.
+
+    WP-A3: the surface must refuse to render a state the record does not hold.
+    A stale or failed snapshot yields no rows at all rather than rows drawn from
+    a value that is no longer current — the tile says INDETERMINATE and names the
+    reason, and there is nothing else on the panel for a reader to mistake for
+    live agent state.
+    """
+    tile_view = tile(state.snapshot, now, agents_badge)
+    snapshot = tile_view.value if tile_view.current else None
+    if snapshot is None:
+        return AgentsView(
+            tile=tile_view,
+            rows=(),
+            halted=False,
+            halt_text="Not confirmed: no current activation snapshot",
+            tick_text="Not confirmed: no current activation snapshot",
+            synthetic=True,
+            phase="A",
+        )
+    return AgentsView(
+        tile=tile_view,
+        rows=tuple(_agent_row(a) for a in snapshot.agents),
+        halted=snapshot.halted,
+        halt_text=shown_text(snapshot.halt_reason),
+        tick_text=shown_text(snapshot.tick, lambda t: f"tick {t}"),
+        synthetic=snapshot.synthetic,
+        phase=snapshot.phase,
+    )
+
+
 _SEVERITY_CODES = frozenset(d.value for d in Disposition)
 _SEVERITY = {
     Disposition.BLOCK: 3,
@@ -454,6 +614,34 @@ def _aureon_reasons(found: Found, aureon: AureonView) -> None:
             found.append((Disposition.HOLD, "Pending decisions fell to 0 at a deploy (AUR-I-17)"))
 
 
+def _agents_reasons(found: Found, agents: AgentsView) -> None:
+    """The agents' contribution to the overall state.
+
+    An unconfigured or stale snapshot makes the overall state INDETERMINATE and
+    says so. That is deliberate and it is the rule the panel exists to enforce:
+    a picture that cannot see the agents does not get to report that everything
+    is fine. The reason names the variable to set, so it is actionable rather
+    than merely red.
+    """
+    if not _unknown_if_not_current(found, agents.tile, "Atreides agent activation"):
+        return
+    if agents.halted:
+        found.append((Disposition.BLOCK, f"Agents halted: {agents.halt_text}"))
+    for row in agents.rows:
+        if row.expects_refusal:
+            if row.badge.code == Disposition.BLOCK:
+                found.append(
+                    (
+                        Disposition.BLOCK,
+                        f"{row.agent_id}: a lateral input was admitted with no recorded "
+                        f"C2 (command and control) handoff",
+                    )
+                )
+            continue
+        if row.badge.code in _SEVERITY_CODES and row.badge.code != Disposition.PASS:
+            found.append((Disposition(row.badge.code), f"Agent {row.agent_id}: {row.badge.label}"))
+
+
 _OVERALL_LABELS = {
     Disposition.BLOCK: "Something has failed",
     Disposition.INDETERMINATE: "Not confirmed: some sources are unavailable or stale",
@@ -465,14 +653,17 @@ def _overall(
     program: TileView[Program],
     repos: Sequence[RepoView],
     aureon: AureonView,
+    agents: AgentsView,
 ) -> tuple[Badge, tuple[Reason, ...]]:
     """Worst of: every source tile, CI on main, scheduled runs, Aureon stack, drift,
-    the AUR-I-17 marker and blocked waves. Open pull request checks are not included."""
+    the AUR-I-17 marker, blocked waves and Atreides agent activation. Open pull
+    request checks are not included."""
     found: Found = []
     _program_reasons(found, program)
     for repo in repos:
         _repo_reasons(found, repo)
     _aureon_reasons(found, aureon)
+    _agents_reasons(found, agents)
     if not found:
         return disposition_badge(Disposition.PASS, "All sources current; nothing failing"), ()
     worst = max((d for d, _ in found), key=lambda d: _SEVERITY[d])
@@ -501,6 +692,12 @@ def _stale_sources(snapshot: Snapshot, now: datetime) -> tuple[str, ...]:
             stale.append(f"GitHub: {repo.name}")
     if too_old(snapshot.aureon.snapshot):
         stale.append(f"Aureon snapshot ({AUREON_SNAPSHOT_URL})")
+    # A source nobody configured is not a stale source. Listing it here would send
+    # the reader to look at a thing that is working; the Agents panel already says
+    # what is missing and which variable sets it.
+    agents_obs = snapshot.agents.snapshot
+    if agents_obs.error_class != NOT_CONFIGURED and too_old(agents_obs):
+        stale.append(AGENTS_SNAPSHOT_SOURCE)
     return tuple(stale)
 
 
@@ -514,7 +711,8 @@ def build_page(snapshot: Snapshot, now: datetime) -> PageView:
         drift=tile(snapshot.aureon.drift, now, drift_badge),
         pending_drop=tile(snapshot.aureon.pending_drop, now, pending_drop_badge),
     )
-    overall, reasons = _overall(program, repos, aureon)
+    agents = _agents_view(snapshot.agents, now)
+    overall, reasons = _overall(program, repos, aureon, agents)
     decisions: tuple[DecisionView, ...] = ()
     if program.current and program.value is not None:
         decisions = tuple(
@@ -545,6 +743,7 @@ def build_page(snapshot: Snapshot, now: datetime) -> PageView:
         decisions=decisions,
         repos=repos,
         aureon=aureon,
+        agents=agents,
     )
 
 

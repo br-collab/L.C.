@@ -45,6 +45,24 @@ def _rate_limit_detail(response: httpx.Response) -> str | None:
     return None
 
 
+def get_bytes(
+    client: httpx.Client,
+    url: str,
+    *,
+    params: Mapping[str, str | int] | None = None,
+    headers: Mapping[str, str] | None = None,
+) -> bytes:
+    """GET ``url`` and return the undecoded body, or raise a ``SourceError``.
+
+    For a source whose models are validated in JSON mode. Decoding to Python
+    objects first and validating those is a different mode with different rules:
+    a strict model sees a datetime as a bare string and refuses it, and an enum
+    member as text it may not coerce. Keeping the bytes lets the parser apply the
+    rules the document was written under.
+    """
+    return _request(client, url, params=params, headers=headers).content
+
+
 def get_json(
     client: httpx.Client,
     url: str,
@@ -53,6 +71,21 @@ def get_json(
     headers: Mapping[str, str] | None = None,
 ) -> object:
     """GET ``url`` and return the decoded JSON body, or raise a ``SourceError``."""
+    response = _request(client, url, params=params, headers=headers)
+    try:
+        return response.json()
+    except ValueError:
+        raise SourceMalformedError("Response body is not valid JSON") from None
+
+
+def _request(
+    client: httpx.Client,
+    url: str,
+    *,
+    params: Mapping[str, str | int] | None = None,
+    headers: Mapping[str, str] | None = None,
+) -> httpx.Response:
+    """GET ``url``, turning every transport and status failure into a ``SourceError``."""
     try:
         response = client.get(url, params=params, headers=headers)
     except httpx.TimeoutException as exc:
@@ -65,7 +98,4 @@ def get_json(
         raise SourceRateLimitedError(limited)
     if response.status_code != HTTPStatus.OK:
         raise SourceHttpError(response.status_code)
-    try:
-        return response.json()
-    except ValueError:
-        raise SourceMalformedError("Response body is not valid JSON") from None
+    return response

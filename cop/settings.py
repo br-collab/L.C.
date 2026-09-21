@@ -25,6 +25,15 @@ MAIN_BRANCH = "main"
 GITHUB_API_URL = "https://api.github.com"
 GITHUB_WEB_URL = "https://github.com"
 AUREON_SNAPSHOT_URL = "https://aureon-production.up.railway.app/api/snapshot"
+
+# The Atreides Phase A activation snapshot (W3 § WP-A3). There is deliberately no
+# default URL: the document is not published anywhere yet, and a guessed address
+# would fail as a ConnectionError, which reads like an outage rather than like
+# "not configured". Unset, the Agents panel shows INDETERMINATE and says which
+# variable to set — the same rule the panel exists to enforce, applied to the
+# panel's own source.
+AGENTS_SNAPSHOT_SOURCE = "Atreides activation snapshot (ATREIDES_AGENTS_URL)"
+AGENTS_SOURCE_UNSET = "ATREIDES_AGENTS_URL is not set, so no activation snapshot is being read"
 PROGRAM_FILE = Path(__file__).with_name("program.yaml")
 
 HTTP_TIMEOUT_SECONDS = 10.0
@@ -63,6 +72,7 @@ ENV_SESSION_SECRET = "LEGATE_SESSION_SECRET"
 ENV_GITHUB_TOKEN = "GITHUB_TOKEN"
 ENV_INSECURE_LOCAL = "LEGATE_INSECURE_LOCAL"
 ENV_DEMO = "LEGATE_DEMO"
+ENV_AGENTS_URL = "ATREIDES_AGENTS_URL"
 
 
 @dataclass(frozen=True)
@@ -72,6 +82,9 @@ class Settings:
     operator_key: str | None = field(repr=False)
     session_secret: str | None = field(repr=False)
     github_token: str | None = field(repr=False)
+    agents_url: str | None
+    """Where the Atreides activation snapshot is published. ``None`` when unset,
+    which the Agents panel reports as INDETERMINATE rather than as a failure."""
     insecure_local: bool
     demo: bool
     production: bool
@@ -106,6 +119,7 @@ def load_settings(env: Mapping[str, str]) -> Settings:
     operator_key = _non_empty(env, ENV_OPERATOR_KEY)
     session_secret = _non_empty(env, ENV_SESSION_SECRET)
     github_token = _non_empty(env, ENV_GITHUB_TOKEN)
+    agents_url = _non_empty(env, ENV_AGENTS_URL)
     insecure_local = _flag(env, ENV_INSECURE_LOCAL)
     demo = _flag(env, ENV_DEMO)
     production = any(name in env for name in PRODUCTION_MARKERS)
@@ -137,6 +151,7 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         operator_key=operator_key,
         session_secret=session_secret,
         github_token=github_token,
+        agents_url=agents_url,
         insecure_local=insecure_local,
         demo=demo,
         production=production,

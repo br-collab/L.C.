@@ -1,10 +1,10 @@
 # Legate: COP-0 program picture
 
-Legate is a private, read-only web page: a COP (Common Operating Picture) for Project Cannae Legion. It shows the state of the build program and of the live Aureon service on one URL. "Legate" is a working name (decision JUM-D-27); in code it lives only in `cop/settings.py` as `PRODUCT_NAME`.
+Legate is a private, read-only web page: a COP (Common Operating Picture) for Project Cannae Legion. It shows the state of the build program, of the live Aureon service and of the Atreides agent family on one URL. "Legate" is a working name (decision JUM-D-27); in code it lives only in `cop/settings.py` as `PRODUCT_NAME`.
 
 It has no write routes and no controls. The halt control arrives in COP-1. The COP shows; the domains decide.
 
-This package is a sibling of `lc/`. `lc` never imports `cop`, and `cop` never imports `lc` (tested in `tests/test_import_boundaries.py`). `cop` imports only the standard library, `cannae_kernel` and its own web dependencies.
+This package is a sibling of `lc/`. `lc` never imports `cop`, and `cop` never imports `lc` (tested in `tests/test_import_boundaries.py`). `cop` imports only the standard library, `cannae_kernel` and its own web dependencies. That includes the Agents panel: `cop` never imports `atreides`, so the shapes in `cop/agents.py` are this repository's own reading of the published document, exactly as `cop/aureon.py` is its own reading of Aureon's snapshot.
 
 ## What the page shows
 
@@ -14,10 +14,11 @@ This package is a sibling of `lc/`. `lc` never imports `cop`, and `cop` never im
 | 2 | Wave board | Waves 0 to 8: status, work packages, evidence, next action and owner | `cop/program.yaml` |
 | 3 | Repositories | aureon, Project-Atreides, cannae-kernel and L.C.: `main` short SHA (Secure Hash Algorithm commit identifier), latest CI (continuous integration) result on `main`, latest tag, open pull requests with checks, "needs update branch" and age | GitHub REST API (representational state transfer application programming interface) |
 | 4 | Live Aureon | `deploy_sha`, stack, positions, pending decisions, market open; deploy drift; the AUR-I-17 pending-drop marker | `https://aureon-production.up.railway.app/api/snapshot` |
-| 5 | Nightly and scheduled checks | Newest run of each scheduled GitHub Actions workflow, with its date | GitHub REST API |
-| 6 | Open decisions | ID, title, owner, age | `cop/program.yaml` |
+| 5 | Atreides agents | Each activated agent: whether it is up, what it last recommended, what it refused, the C2 (Command and Control) handoff its work arrived under, and the server-side halt state | Atreides activation snapshot (`ATREIDES_AGENTS_URL`) |
+| 6 | Nightly and scheduled checks | Newest run of each scheduled GitHub Actions workflow, with its date | GitHub REST API |
+| 7 | Open decisions | ID, title, owner, age | `cop/program.yaml` |
 
-Each panel also has its own page, `/panel/<name>` (`waves`, `repositories`, `aureon`, `scheduled`, `decisions`), so one panel fits one laptop screen where its content allows.
+Each panel also has its own page, `/panel/<name>` (`waves`, `repositories`, `aureon`, `agents`, `scheduled`, `decisions`), so one panel fits one laptop screen where its content allows.
 
 ### Rules the page follows
 
@@ -31,7 +32,11 @@ Each panel also has its own page, `/panel/<name>` (`waves`, `repositories`, `aur
 - **CI on `main`** is the newest GitHub Actions run of each workflow for the `main` head commit, excluding scheduled runs. Any failure → `BLOCK`; any still running → `HOLD`; at least one success and nothing failing → `PASS`; no runs, or only skipped runs → `INDETERMINATE`. External status checks from other services are not read.
 - **Deploy drift** compares Aureon's `deploy_sha` with the aureon `main` commit read in the same refresh. Different → `HOLD` (expected for a few minutes after a merge). If either input is unavailable, or Aureon reports `deploy_sha` as `unset`, drift is `INDETERMINATE`.
 - **Pending-drop marker (AUR-I-17, pending decisions lost on redeploy)** fires when, between two consecutive good snapshots, `pending` fell from more than 0 to 0 **and** `deploy_sha` changed. Once seen it stays on the page until the Legate process restarts; it is not stored anywhere.
-- **Overall program state** is the worst of: CI on each `main`, scheduled runs, the Aureon stack, drift, the AUR-I-17 marker, blocked waves, and every source tile being current. Open pull requests are not included. Order of severity: `BLOCK`, `INDETERMINATE`, `HOLD`, `PASS`.
+- **Atreides agents** is Phase A of agent activation (tasking order `W3-agent-activation.md` and its amendment `AMD1`). The agents run continuously against a synthetic flow and **recommend only**: no agent makes an approval decision, and every approval gate still requires explicit operator action (CAOM-001, Consolidated Authority Operating Mode). The panel shows one card per agent. Three things on it are worth reading closely:
+  - **An agent that produced nothing is absent with a reason**, never blank and never a pass. A *stopped* agent reads "nothing recorded · agent stopped: …" and its last recommendation is **not** carried forward — a recommendation from before it stopped is not its current state.
+  - **The C2 handoff basis** is what the agent's work arrived under. While no C2 runtime exists this is the recorded absence "operator-direct under CAOM-001". It is a value in the record, not an empty field.
+  - **The lateral-handoff probe reads inverted.** It offers an agent-to-agent input on every tick with no recorded handoff, and it is healthy when that input is **refused** — "Refusal held". If it ever shows "REFUSAL BROKEN", an inadmissible input was admitted and the whole picture goes `BLOCK`.
+- **Overall program state** is the worst of: CI on each `main`, scheduled runs, the Aureon stack, drift, the AUR-I-17 marker, blocked waves, Atreides agent activation, and every source tile being current. Open pull requests are not included. Order of severity: `BLOCK`, `INDETERMINATE`, `HOLD`, `PASS`.
 
 ## `cop/program.yaml`
 
@@ -55,6 +60,8 @@ LEGATE_OPERATOR_KEY=… LEGATE_SESSION_SECRET=… LEGATE_INSECURE_LOCAL=1 flask 
 
 Open http://127.0.0.1:5000 and sign in with the operator key. Add `GITHUB_TOKEN=…` to avoid GitHub's unauthenticated limit (60 requests an hour; one refresh uses about 25 to 40).
 
+Add `ATREIDES_AGENTS_URL=…` to point the Agents panel at a published activation snapshot. **There is deliberately no default.** Unset, the panel reports `NotConfigured` and names the variable, which is different from a source that failed: it does not spoil the "last refresh with every source answering" time and it is not listed in the staleness warning. It does still hold the overall state at `INDETERMINATE`, because a picture that cannot see the agents may not report that they are fine.
+
 **Why `LEGATE_INSECURE_LOCAL=1`:** the session cookie is marked `Secure`, and browsers do not send `Secure` cookies over plain `http://`. Without the flag you can sign in but the next page will send you back to the login form. The flag removes only the `Secure` attribute (the cookie stays `HttpOnly` and `SameSite=Strict`) and drops the `Strict-Transport-Security` header. The app **refuses to serve** if the flag is set while any production marker is present (`PORT`, `RAILWAY_ENVIRONMENT`, `RAILWAY_ENVIRONMENT_NAME` or `RAILWAY_PROJECT_ID`).
 
 ### With fake data (demo mode)
@@ -63,7 +70,7 @@ Open http://127.0.0.1:5000 and sign in with the operator key. Add `GITHUB_TOKEN=
 LEGATE_DEMO=1 LEGATE_INSECURE_LOCAL=1 LEGATE_OPERATOR_KEY=demo LEGATE_SESSION_SECRET=demo flask --app cop.app run
 ```
 
-Demo mode replaces GitHub and Aureon with invented data (`cop/demo.py`) and shows a "DEMO DATA" warning in the banner. The data includes a failing nightly run, a pull request that needs an update, a timed-out source, deploy drift, and (from the second refresh, after 60 seconds) an AUR-I-17 pending drop. Demo mode makes no network calls. Like the insecure flag, it is refused when a production marker is present.
+Demo mode replaces GitHub, Aureon and Atreides with invented data (`cop/demo.py`) and shows a "DEMO DATA" warning in the banner. The data includes a failing nightly run, a pull request that needs an update, a timed-out source, deploy drift, and (from the second refresh, after 60 seconds) an AUR-I-17 pending drop. For the Agents panel it includes one agent reporting cleanly, one holding work for the operator, one stopped and therefore absent-with-reason, and the lateral-handoff probe being refused — every state the panel can show, because a demonstration that only showed the happy row would not tell anyone whether the unhappy ones render at all. Demo mode makes no network calls. Like the insecure flag, it is refused when a production marker is present.
 
 ### Tests and checks
 
@@ -73,7 +80,7 @@ mypy lc cop tests
 COP_EXTRA_REQUIRED=1 pytest -q
 ```
 
-No test reaches the network: GitHub and Aureon are faked behind `httpx.MockTransport`.
+No test reaches the network: GitHub, Aureon and the Atreides activation snapshot are faked behind `httpx.MockTransport`.
 
 ## Deploy to Railway (prepared, not performed)
 
@@ -95,6 +102,7 @@ Legate runs as its **own Railway service**, separate from Aureon's. Deploying or
    - `LEGATE_OPERATOR_KEY`: the key you will type at the login form. At least 16 characters; use a password manager to generate it.
    - `LEGATE_SESSION_SECRET`: signs the session cookie. At least 32 random characters, for example the output of `python -c "import secrets; print(secrets.token_urlsafe(48))"`. Changing it signs everyone out.
    - `GITHUB_TOKEN`: the fine-grained read-only token below.
+   - `ATREIDES_AGENTS_URL` (optional): where the Atreides Phase A activation snapshot is published. Leave it unset until that document is actually served; the Agents panel then reports "not configured" rather than failing against a guessed address.
    - Do **not** set `LEGATE_DEMO` or `LEGATE_INSECURE_LOCAL`. If either is set, the service refuses to serve.
 4. Under **Networking**, generate a Railway domain. Railway serves it over HTTPS (encrypted HTTP), which the `Secure` session cookie requires.
 5. Check: `https://<domain>/healthz` returns `{"status": "ok", ...}`. If it returns `{"status": "misconfigured"}` with HTTP 503, a variable is missing or too short; the deploy logs name which one. Railway's health check will fail in that state, which stops a misconfigured deploy from going live.
@@ -130,3 +138,5 @@ Legate sends the token only in the `Authorization` header to `api.github.com`. I
 - More than 99 open pull requests in one repository shows `INDETERMINATE` rather than a partial list.
 - Without `GITHUB_TOKEN` the refresh slows to every 10 minutes, so values pass the 5-minute staleness limit between refreshes and show as stale for part of each cycle.
 - The AUR-I-17 marker and failed-login counts are held in memory and reset when the process restarts.
+- **The Atreides activation snapshot is not published anywhere yet.** The reader, the panel and their tests are complete and exercised against a fake server, but until something serves that document at `ATREIDES_AGENTS_URL` the panel shows "not configured" in any real deployment. Publishing it is a deployment step, not a code change.
+- The reader accepts schema version 1 only. A document declaring any other version is refused outright rather than read field by field, because a renamed field read as absent would look like a fact about the agents instead of a fact about the reader.

@@ -66,6 +66,7 @@ class ProgramFileError(SourceError):
 
 NOT_YET_REFRESHED = "NotYetRefreshed"
 UNEXPECTED_ERROR = "UnexpectedError"
+NOT_CONFIGURED = "NotConfigured"
 
 
 @dataclass(frozen=True)
@@ -116,5 +117,37 @@ def pending(
         attempted_at=None,
         error_class=NOT_YET_REFRESHED,
         error_detail="No refresh has completed yet",
+        stale_after=stale_after,
+    )
+
+
+def not_configured(
+    key: str,
+    source_url: str,
+    provenance: Provenance,
+    detail: str,
+    stale_after: timedelta | None,
+) -> Observation[T]:
+    """A source that is not set up: indeterminate, and distinct from a failure.
+
+    Kept apart from a source that answered badly, because the two want different
+    responses. A failing source asks somebody to look at the source; an
+    unconfigured one asks somebody to configure it, and saying "stale" to that
+    person sends them to look at a thing that is working.
+
+    It is still never green. A picture that cannot see something does not get to
+    report that the something is fine.
+
+    ``attempted_at`` is ``None``, as it is for a source before its first refresh:
+    nothing was attempted, because there was nothing to attempt. A time here
+    would suggest somebody tried and got this back.
+    """
+    return Observation(
+        key=key,
+        source_url=source_url,
+        provenance=provenance,
+        attempted_at=None,
+        error_class=NOT_CONFIGURED,
+        error_detail=detail,
         stale_after=stale_after,
     )

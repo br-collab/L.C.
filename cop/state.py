@@ -13,6 +13,7 @@ from datetime import datetime
 
 from cannae_kernel.disposition import Disposition
 
+from cop.agents import AgentsSnapshot
 from cop.aureon import DEPLOY_SHA_UNSET, AureonSnapshot
 from cop.github import Tag, WorkflowRun
 from cop.observation import (
@@ -135,6 +136,20 @@ class AureonState:
 
 
 @dataclass(frozen=True)
+class AgentsState:
+    """The Atreides activation document, as one observation.
+
+    One observation rather than several: the document is published whole, so a
+    half-read one is not a partial picture of the agents but a source that
+    failed. Splitting it would let the panel show some agents as current beside
+    others that are not, which is the composite-freshness defect the Aureon panel
+    already avoids by keeping its snapshot in one tile.
+    """
+
+    snapshot: Observation[AgentsSnapshot]
+
+
+@dataclass(frozen=True)
 class Snapshot:
     started_at: datetime
     last_refresh_at: datetime | None
@@ -145,6 +160,7 @@ class Snapshot:
     program: Observation[Program]
     repos: tuple[RepoState, ...]
     aureon: AureonState
+    agents: AgentsState
 
 
 # Rules -----------------------------------------------------------------------------------
