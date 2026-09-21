@@ -258,21 +258,27 @@ dev = [
     { name = "ruff" },
     { name = "types-pyyaml" },
 ]
+harness = [
+    { name = "cannae-kernel" },
+    { name = "pydantic" },
+]
 
 [package.metadata]
 requires-dist = [
     { name = "cannae-kernel", marker = "extra == 'cop'", git = "https://github.com/br-collab/cannae-kernel.git?rev=v1.0.0" },
+    { name = "cannae-kernel", marker = "extra == 'harness'", git = "https://github.com/br-collab/cannae-kernel.git?rev=v1.0.0" },
     { name = "flask", marker = "extra == 'cop'", specifier = ">=3.0,<4.0" },
     { name = "gunicorn", marker = "extra == 'cop'", specifier = ">=22.0" },
     { name = "httpx", marker = "extra == 'cop'", specifier = ">=0.27,<1.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.14" },
     { name = "pydantic", marker = "extra == 'cop'", specifier = ">=2.6,<3.0" },
+    { name = "pydantic", marker = "extra == 'harness'", specifier = ">=2.6,<3.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "pyyaml", marker = "extra == 'cop'", specifier = ">=6.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4" },
     { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0" },
 ]
-provides-extras = ["dev", "cop"]
+provides-extras = ["dev", "harness", "cop"]
 
 [[package]]
 name = "librt"
