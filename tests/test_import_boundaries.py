@@ -23,9 +23,10 @@ C2 that reached into `lc` or `cop` would be coupling the harness to one domain's
 implementation of a shape the kernel already defines — and the next domain's version of
 that shape would not fit.
 
-The `cop` checks that read source run everywhere. The check that imports `cop` needs the
-`cop` extra; it is skipped when that extra is not installed, and the CI job that installs
-it sets COP_EXTRA_REQUIRED=1 so that a skip there is a failure.
+The checks that read source run everywhere. The checks that *import* a package need that
+package's extra: they are skipped when it is not installed, and the CI job that installs
+it sets `COP_EXTRA_REQUIRED=1` or `HARNESS_EXTRA_REQUIRED=1` so that a skip there is a
+failure rather than a quiet pass.
 """
 
 import ast
@@ -199,7 +200,11 @@ def test_importing_harness_c2_loads_no_domain_package() -> None:
     """The runtime half: a fresh interpreter, every submodule imported."""
     missing = [m for m in ("cannae_kernel", "pydantic") if importlib.util.find_spec(m) is None]
     if missing:
-        pytest.skip(f"kernel extra not installed ({', '.join(missing)})")
+        # Same rule as the cop probe: skipping is correct in the lean job, which
+        # installs no runtime dependency, and a failure in the job that does.
+        if os.environ.get("HARNESS_EXTRA_REQUIRED") == "1":
+            pytest.fail(f"harness extra required but not installed: {missing}")
+        pytest.skip(f"harness extra not installed ({', '.join(missing)}); runs in the harness job")
     probe = (
         "import importlib, json, pkgutil, sys\n"
         "import harness_c2\n"
