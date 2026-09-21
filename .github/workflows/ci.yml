@@ -40,6 +40,24 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - uses: astral-sh/setup-uv@v10.1.0
+
+      # uv.lock and pyproject.toml must agree. Nothing compared them until now:
+      # the `harness` extra was added in 3947575 and the lock was not
+      # regenerated, so `main` carried a lock that did not match its own
+      # manifest and every run stayed green, because nothing checked.
+      #
+      # cannae-kernel and Project-Atreides get this from `uv sync --locked`, and
+      # aureon from `scripts/compile_lock.py --check`. This repository installs
+      # with pip, so the check is its own step rather than a side effect of the
+      # install.
+      #
+      # `uv lock --check` resolves metadata and installs nothing, so it does not
+      # weaken what this job exists to prove: that `lc` needs no runtime
+      # dependency. It runs first so a drifted lock fails in seconds.
+      - name: Lock matches pyproject
+        run: uv lock --check
+
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
