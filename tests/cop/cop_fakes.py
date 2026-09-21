@@ -1,4 +1,4 @@
-"""Fake GitHub and Aureon servers, a fake clock and builders for COP-0 tests.
+"""Fake GitHub, Aureon and Atreides servers, a fake clock and builders for COP-0 tests.
 
 The fakes sit behind ``httpx.MockTransport``, so the real clients' error handling is
 exercised end to end and no test can reach the network: any request the fakes do not
@@ -17,11 +17,14 @@ import httpx
 from flask.testing import FlaskClient
 from werkzeug.test import TestResponse
 
+from cop.agents import HttpxAgentsClient
 from cop.app import create_app
 from cop.aureon import HttpxAureonClient
 from cop.github import HttpxGitHubClient
 from cop.refresher import Refresher, RefresherOptions
 from cop.settings import AUREON_SNAPSHOT_URL, PROGRAM_FILE, load_settings
+
+AGENTS_URL = "https://atreides.example.invalid/api/activation"
 
 START = datetime(2026, 9, 17, 15, 0, tzinfo=UTC)
 FAILURE_MODES = ("timeout", "http500", "malformed_json", "rate_limit")
@@ -195,13 +198,194 @@ class FakeAureon:
         return httpx.Response(200, json=self.body)
 
 
+def activation_body(
+    *,
+    halted: bool = False,
+    stopped: bool = False,
+    probe_admitted: bool = False,
+    schema_version: int = 1,
+) -> dict[str, Any]:
+    """An Atreides Phase A activation document, as JSON on the wire.
+
+    Written as a literal rather than built from the Atreides types on purpose:
+    ``cop`` must never import a domain package, and a fixture that did would make
+    this suite pass for a reason the application cannot rely on.
+
+    ``stopped`` stops the Tier 2 agent, which is the A-T4 case. ``probe_admitted``
+    turns the standing lateral-handoff probe's last output into a recommendation,
+    which is the state that must take the whole picture to BLOCK.
+    """
+    seen = _iso(START - timedelta(seconds=30))
+    operator_direct = {
+        "state": "absent",
+        "kind": "NOTHING_RECORDED",
+        "reason": "operator-direct under CAOM-001",
+    }
+    running = {
+        "state": "absent",
+        "kind": "NOT_APPLICABLE",
+        "reason": "this agent is running",
+    }
+    no_refusal = {
+        "state": "absent",
+        "kind": "NOTHING_RECORDED",
+        "reason": "this agent has refused nothing since activation",
+    }
+    stopped_absent = {
+        "state": "absent",
+        "kind": "NOTHING_RECORDED",
+        "reason": "agent stopped: the operator stopped this agent",
+    }
+    halt_refusal = {
+        "state": "recorded",
+        "value": {
+            "code": "HALT_ACTIVE",
+            "detail": "Refused: a halt is active and covers Atreides.",
+            "observed_at": seen,
+        },
+    }
+
+    def agent(**fields: Any) -> dict[str, Any]:
+        """One agent row. A stopped agent's every value becomes the same absence,
+        because a stopped agent has no current state — which is the A-T4 claim."""
+        up = fields["up"]
+        absent = None if up else stopped_absent
+        return {
+            "agent_id": fields["agent_id"],
+            "tier": fields["tier"],
+            "role": fields["role"],
+            "up": up,
+            "expects_refusal": fields.get("probe", False),
+            "disposition": fields["disposition"],
+            "stopped_reason": (
+                running if up else {"state": "recorded", "value": "the operator stopped this agent"}
+            ),
+            "last_summary": absent or {"state": "recorded", "value": fields["summary"]},
+            "last_observed_at": absent or {"state": "recorded", "value": seen},
+            "last_provenance": absent or {"state": "recorded", "value": "POLICY_RESULT"},
+            "last_handoff_basis": absent or operator_direct,
+            "last_refusal": absent or fields["refusal"],
+            "recommendations": fields["recommendations"],
+            "refusals": fields["refusals"],
+        }
+
+    tier2_up = not stopped
+    return {
+        "schema_version": schema_version,
+        "domain": "ATREIDES",
+        "phase": "A",
+        "synthetic": True,
+        "taken_at": _iso(START),
+        "tick": {"state": "recorded", "value": 7},
+        "last_tick_at": {"state": "recorded", "value": seen},
+        "halted": halted,
+        "halt_reason": (
+            {"state": "recorded", "value": "Tier 0 emergency halt"}
+            if halted
+            else {
+                "state": "absent",
+                "kind": "NOT_APPLICABLE",
+                "reason": "no halt covering Atreides is in effect",
+            }
+        ),
+        "disposition": "BLOCK" if (halted or probe_admitted) else "PASS",
+        "effects": {
+            "operation": "atreides.activation.advisory_output",
+            "effects": [],
+            "note": "Contained. An advisory agent output never submits to a rail.",
+        },
+        "agents": [
+            agent(
+                agent_id="settlement-operations-analyst",
+                tier="TIER_1",
+                role="Settlement Operations Analyst",
+                up=True,
+                probe=False,
+                disposition="BLOCK" if halted else "PASS",
+                summary="Pre-routing gates clear for ficc_gsd_dvp",
+                refusal=halt_refusal if halted else no_refusal,
+                recommendations=7,
+                refusals=1 if halted else 0,
+            ),
+            agent(
+                agent_id="fiat-operations-specialist",
+                tier="TIER_2",
+                role="FIAT Operations Specialist",
+                up=tier2_up,
+                probe=False,
+                disposition="INDETERMINATE" if stopped else ("BLOCK" if halted else "PASS"),
+                summary="Path selected: fedwire",
+                refusal=halt_refusal if halted else no_refusal,
+                recommendations=7,
+                refusals=1 if halted else 0,
+            ),
+            agent(
+                agent_id="lateral-handoff-probe",
+                tier="TIER_1",
+                role="Lateral handoff probe (WP-A2)",
+                up=True,
+                probe=True,
+                disposition="BLOCK" if probe_admitted else "PASS",
+                summary=(
+                    "a recommendation that should not exist"
+                    if probe_admitted
+                    else "Input refused at the receiving agent's own type check"
+                ),
+                refusal=(
+                    no_refusal
+                    if probe_admitted
+                    else {
+                        "state": "recorded",
+                        "value": {
+                            "code": "NO_RECORDED_HANDOFF",
+                            "detail": (
+                                "Refused at the receiving agent: a lateral input with no "
+                                "recorded handoff authorization."
+                            ),
+                            "observed_at": seen,
+                        },
+                    }
+                ),
+                recommendations=1 if probe_admitted else 0,
+                refusals=0 if probe_admitted else 7,
+            ),
+        ],
+    }
+
+
+class FakeAtreides:
+    """Serves the activation document at :data:`AGENTS_URL`."""
+
+    def __init__(self) -> None:
+        self.failure: str | None = None
+        self.calls = 0
+        self.unexpected: list[str] = []
+        self.body: dict[str, Any] = activation_body()
+
+    def handler(self, request: httpx.Request) -> httpx.Response:
+        self.calls += 1
+        if str(request.url) != AGENTS_URL:
+            self.unexpected.append(str(request.url))
+            raise UnexpectedRequestError(f"unexpected request {request.url}")
+        if self.failure is not None:
+            return failure_response(self.failure, request)
+        return httpx.Response(200, json=self.body)
+
+
 class Rig:
     """A refresher wired to fake servers and a fake clock."""
 
-    def __init__(self, program_path: Path = PROGRAM_FILE, token: str | None = "test-token") -> None:
+    def __init__(
+        self,
+        program_path: Path = PROGRAM_FILE,
+        token: str | None = "test-token",
+        *,
+        agents_configured: bool = True,
+    ) -> None:
         self.clock = FakeClock()
         self.github = FakeGitHub()
         self.aureon = FakeAureon()
+        self.atreides = FakeAtreides()
         self.github_client = HttpxGitHubClient(
             token, http=httpx.Client(transport=httpx.MockTransport(self.github.handler))
         )
@@ -209,6 +393,14 @@ class Rig:
             github=self.github_client,
             aureon=HttpxAureonClient(
                 http=httpx.Client(transport=httpx.MockTransport(self.aureon.handler))
+            ),
+            agents=(
+                HttpxAgentsClient(
+                    AGENTS_URL,
+                    http=httpx.Client(transport=httpx.MockTransport(self.atreides.handler)),
+                )
+                if agents_configured
+                else None
             ),
             clock=self.clock,
             options=RefresherOptions(
