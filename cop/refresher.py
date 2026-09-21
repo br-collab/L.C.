@@ -23,16 +23,20 @@ from typing import Any, TypeVar, cast
 from cannae_kernel.provenance import Provenance
 
 from cop import github as gh
+from cop.agents import AgentsSnapshot, AgentsSource
 from cop.aureon import AureonSnapshot, AureonSource
 from cop.observation import (
     UNEXPECTED_ERROR,
     InputUnavailableError,
     Observation,
     SourceError,
+    not_configured,
     pending,
 )
 from cop.program import Program, load_program
 from cop.settings import (
+    AGENTS_SNAPSHOT_SOURCE,
+    AGENTS_SOURCE_UNSET,
     AUREON_REPOSITORY,
     AUREON_SNAPSHOT_URL,
     GITHUB_OWNER,
@@ -42,6 +46,7 @@ from cop.settings import (
     STALE_AFTER,
 )
 from cop.state import (
+    AgentsState,
     AureonState,
     CiResult,
     DriftResult,
@@ -96,9 +101,13 @@ class Refresher:
         aureon: AureonSource,
         options: RefresherOptions,
         clock: Clock = utc_now,
+        agents: AgentsSource | None = None,
     ) -> None:
         self._github = github
         self._aureon = aureon
+        # ``None`` means no activation snapshot is configured. That is a state the
+        # panel reports, not an error it hides: see ``_refresh_agents``.
+        self._agents = agents
         self._clock = clock
         self._program_path = options.program_path
         self._refresh_seconds = options.refresh_seconds
@@ -151,6 +160,9 @@ class Refresher:
             demo=demo,
             program=pending("program", PROGRAM_SOURCE, Provenance.HUMAN_JUDGMENT, None),
             repos=repos,
+            agents=AgentsState(
+                snapshot=pending("agents:snapshot", AGENTS_SNAPSHOT_SOURCE, fact, STALE_AFTER)
+            ),
             aureon=AureonState(
                 snapshot=pending("aureon:snapshot", AUREON_SNAPSHOT_URL, fact, STALE_AFTER),
                 drift=pending("aureon:drift", _drift_source(main_url), policy, STALE_AFTER),
@@ -313,6 +325,32 @@ class Refresher:
         )
         return AureonState(snapshot=snapshot, drift=drift_obs, pending_drop=drop_obs)
 
+    def _refresh_agents(self) -> AgentsState:
+        """Read the activation document, or record why there is none.
+
+        An unconfigured source is not a failed one: nothing is wrong with a
+        source that was never set up, so it does not spoil a clean refresh and
+        does not appear in the stale-source warning. It is still INDETERMINATE,
+        because a picture that cannot see the agents may not report them fine.
+        """
+        if self._agents is None:
+            snapshot: Observation[AgentsSnapshot] = not_configured(
+                "agents:snapshot",
+                AGENTS_SNAPSHOT_SOURCE,
+                Provenance.FACT_EXTERNAL,
+                AGENTS_SOURCE_UNSET,
+                STALE_AFTER,
+            )
+            return AgentsState(snapshot=snapshot)
+        return AgentsState(
+            snapshot=self._observe(
+                "agents:snapshot",
+                AGENTS_SNAPSHOT_SOURCE,
+                Provenance.FACT_EXTERNAL,
+                self._agents.snapshot,
+            )
+        )
+
     # Refresh -----------------------------------------------------------------------------
 
     def refresh_once(self) -> Snapshot:
@@ -329,6 +367,7 @@ class Refresher:
             repos = tuple(self._refresh_repo(repo) for repo in REPOSITORIES)
             aureon_repo = next((r for r in repos if r.name == AUREON_REPOSITORY), None)
             aureon = self._refresh_aureon(aureon_repo)
+            agents = self._refresh_agents()
             now = self._clock()
             if not self._source_failed:
                 self._last_clean_refresh_at = now
@@ -343,6 +382,7 @@ class Refresher:
                 program=program,
                 repos=repos,
                 aureon=aureon,
+                agents=agents,
             )
             with self._snapshot_lock:
                 self._snapshot = new
@@ -371,6 +411,7 @@ class Refresher:
                     program=program,
                     repos=old.repos,
                     aureon=old.aureon,
+                    agents=old.agents,
                 )
             if not program.ok:
                 log.error("Program file is invalid: %s", program.error_detail)
