@@ -29,9 +29,10 @@ from flask import (
 )
 from werkzeug.wrappers.response import Response as BaseResponse
 
+from cop.agents import HttpxAgentsClient
 from cop.aureon import HttpxAureonClient
 from cop.auth import LoginLimiter, key_fingerprint, keys_match
-from cop.demo import DemoAureon, DemoGitHub
+from cop.demo import DemoAgents, DemoAureon, DemoGitHub
 from cop.github import HttpxGitHubClient
 from cop.refresher import Clock, Refresher, RefresherOptions, utc_now
 from cop.settings import (
@@ -55,6 +56,7 @@ PANELS: dict[str, str] = {
     "waves": "Wave board",
     "repositories": "Repositories",
     "aureon": "Live Aureon",
+    "agents": "Atreides agents",
     "scheduled": "Nightly and scheduled checks",
     "decisions": "Open decisions",
 }
@@ -92,6 +94,7 @@ def build_refresher(settings: Settings, clock: Clock = utc_now) -> Refresher:
         return Refresher(
             github=DemoGitHub(clock),
             aureon=DemoAureon(),
+            agents=DemoAgents(clock),
             clock=clock,
             options=RefresherOptions(
                 program_path=PROGRAM_FILE,
@@ -103,6 +106,11 @@ def build_refresher(settings: Settings, clock: Clock = utc_now) -> Refresher:
     return Refresher(
         github=HttpxGitHubClient(settings.github_token),
         aureon=HttpxAureonClient(),
+        # None when ATREIDES_AGENTS_URL is unset. The Agents panel then reports
+        # "not configured" rather than inventing an address to fail against.
+        agents=(
+            HttpxAgentsClient(settings.agents_url) if settings.agents_url is not None else None
+        ),
         clock=clock,
         options=RefresherOptions(
             program_path=PROGRAM_FILE,
