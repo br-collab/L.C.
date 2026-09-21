@@ -7,6 +7,12 @@ shows a "demo data" warning in the banner whenever these sources are in use.
 The fake data deliberately includes a failing scheduled run, a pull request that needs
 an update, a timed-out source, deploy drift and a pending drop at a deploy, so that each
 display state is visible.
+
+``DemoAgents`` does the same for the Atreides Agents panel: one agent reporting cleanly,
+one holding work for the operator, one stopped and therefore absent-with-reason, and the
+standing lateral-handoff probe being refused. Those four are every state the panel can
+show, which is the point — a demo that only showed the happy row would not tell anyone
+whether the unhappy ones render at all.
 """
 
 from __future__ import annotations
@@ -14,6 +20,11 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import datetime, timedelta
 
+from cannae_kernel.absence import AbsenceKind, Absent, Recorded
+from cannae_kernel.disposition import Disposition
+from cannae_kernel.provenance import Provenance
+
+from cop.agents import AgentsSnapshot, AgentView, RefusalView
 from cop.aureon import AureonSnapshot
 from cop.github import Commit, Pull, PullDetail, PullHead, Tag, WorkflowRun
 from cop.observation import SourceTimeoutError
@@ -136,4 +147,128 @@ class DemoAureon:
             positions=12,
             pending=3 if first else 0,
             market_open=False,
+        )
+
+
+class DemoAgents:
+    """A fake Atreides activation snapshot covering every display state.
+
+    Deliberately includes the stopped agent. WP-A4 is the claim that an agent
+    which produced nothing renders absent-with-reason and never as a pass, and a
+    demonstration that never stops an agent cannot show whether that is true.
+    """
+
+    def __init__(self, clock: Callable[[], datetime]) -> None:
+        self._clock = clock
+
+    def _absent(self, kind: AbsenceKind, reason: str) -> Absent:
+        return Absent(kind=kind, reason=reason)
+
+    def snapshot(self) -> AgentsSnapshot:
+        now = self._clock()
+        seen = now - timedelta(seconds=30)
+        operator_direct = self._absent(
+            AbsenceKind.NOTHING_RECORDED, "operator-direct under CAOM-001"
+        )
+        no_refusal = self._absent(
+            AbsenceKind.NOTHING_RECORDED, "this agent has refused nothing since activation"
+        )
+        running = self._absent(AbsenceKind.NOT_APPLICABLE, "this agent is running")
+        stopped_reason = "demo: stopped by the operator"
+        stopped = self._absent(AbsenceKind.NOTHING_RECORDED, f"agent stopped: {stopped_reason}")
+        return AgentsSnapshot(
+            schema_version=1,
+            phase="A",
+            synthetic=True,
+            taken_at=now,
+            tick=Recorded[int](value=42),
+            last_tick_at=Recorded[datetime](value=seen),
+            halted=False,
+            halt_reason=self._absent(
+                AbsenceKind.NOT_APPLICABLE, "no halt covering Atreides is in effect"
+            ),
+            disposition=Disposition.INDETERMINATE,
+            agents=(
+                AgentView(
+                    agent_id="settlement-operations-analyst",
+                    tier="TIER_1",
+                    role="Settlement Operations Analyst",
+                    up=True,
+                    expects_refusal=False,
+                    disposition=Disposition.PASS,
+                    stopped_reason=running,
+                    last_summary=Recorded[str](value="Pre-routing gates clear for ficc_gsd_dvp"),
+                    last_observed_at=Recorded[datetime](value=seen),
+                    last_provenance=Recorded[Provenance](value=Provenance.POLICY_RESULT),
+                    last_handoff_basis=operator_direct,
+                    last_refusal=no_refusal,
+                    recommendations=42,
+                    refusals=0,
+                ),
+                AgentView(
+                    agent_id="settlement-investigation-analyst",
+                    tier="TIER_1",
+                    role="Settlement Investigation Analyst",
+                    up=True,
+                    expects_refusal=False,
+                    disposition=Disposition.HOLD,
+                    stopped_reason=running,
+                    last_summary=Recorded[str](
+                        value="Investigation escalated (evidence_incomplete): 1 source "
+                        "unaccounted for"
+                    ),
+                    last_observed_at=Recorded[datetime](value=seen),
+                    last_provenance=Recorded[Provenance](value=Provenance.POLICY_RESULT),
+                    last_handoff_basis=operator_direct,
+                    last_refusal=no_refusal,
+                    recommendations=42,
+                    refusals=0,
+                ),
+                AgentView(
+                    agent_id="fiat-operations-specialist",
+                    tier="TIER_2",
+                    role="FIAT Operations Specialist",
+                    up=False,
+                    expects_refusal=False,
+                    disposition=Disposition.INDETERMINATE,
+                    stopped_reason=Recorded[str](value=stopped_reason),
+                    last_summary=stopped,
+                    last_observed_at=stopped,
+                    last_provenance=stopped,
+                    last_handoff_basis=stopped,
+                    last_refusal=stopped,
+                    recommendations=17,
+                    refusals=0,
+                ),
+                AgentView(
+                    agent_id="lateral-handoff-probe",
+                    tier="TIER_1",
+                    role="Lateral handoff probe (WP-A2)",
+                    up=True,
+                    expects_refusal=True,
+                    disposition=Disposition.PASS,
+                    stopped_reason=running,
+                    last_summary=Recorded[str](
+                        value="Input refused at the receiving agent's own type check"
+                    ),
+                    last_observed_at=Recorded[datetime](value=seen),
+                    last_provenance=Recorded[Provenance](value=Provenance.POLICY_RESULT),
+                    last_handoff_basis=self._absent(
+                        AbsenceKind.NOTHING_RECORDED, "operator-direct under CAOM-001"
+                    ),
+                    last_refusal=Recorded[RefusalView](
+                        value=RefusalView(
+                            code="NO_RECORDED_HANDOFF",
+                            detail=(
+                                "Refused at the receiving agent: a lateral agent-to-agent "
+                                "input with no recorded handoff authorization. No C2 runtime "
+                                "exists to issue one."
+                            ),
+                            observed_at=seen,
+                        )
+                    ),
+                    recommendations=0,
+                    refusals=42,
+                ),
+            ),
         )
