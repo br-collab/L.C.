@@ -21,8 +21,10 @@ name: CI
 on:
   push:
     branches: [main]
+  # Every pull request, whatever it targets. Filtering on `branches: [main]` meant a
+  # pull request based on another branch — a stacked one, say — got no checks at all:
+  # not a failure and no red mark, simply nothing to see. #7 was merged that way.
   pull_request:
-    branches: [main]
 
 concurrency:
   group: ci-${{ github.ref }}
