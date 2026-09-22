@@ -25,6 +25,8 @@ from cannae_kernel.provenance import Provenance
 from cop import github as gh
 from cop.agents import AgentsSnapshot, AgentsSource
 from cop.aureon import AureonSnapshot, AureonSource
+from cop.breaks import BREAKS_SOURCE_LABEL, BreakRecord, BreakSource
+from cop.cash_leg import CashLeg, CashLegSource
 from cop.escalations import EscalationQueue, EscalationSource
 from cop.lifecycle import LifecycleRow
 from cop.observation import (
@@ -39,8 +41,10 @@ from cop.program import Program, load_program
 from cop.settings import (
     AGENTS_SNAPSHOT_SOURCE,
     AGENTS_SOURCE_UNSET,
+    AUREON_CASH_LEG_URL,
     AUREON_REPOSITORY,
     AUREON_SNAPSHOT_URL,
+    CASH_LEG_SOURCE,
     ESCALATION_SOURCE,
     ESCALATION_SOURCE_UNSET,
     GITHUB_OWNER,
@@ -54,6 +58,8 @@ from cop.settings import (
 from cop.state import (
     AgentsState,
     AureonState,
+    BreaksState,
+    CashLegState,
     CiResult,
     DriftResult,
     EscalationState,
@@ -114,6 +120,8 @@ class Sources:
     agents: AgentsSource | None = None
     lifecycles: LifecycleSource | None = None
     escalations: EscalationSource | None = None
+    breaks: BreakSource | None = None
+    cash_leg: CashLegSource | None = None
 
 
 @dataclass(frozen=True)
@@ -141,6 +149,8 @@ class Refresher:
         # outside demo mode until Wave 4 builds the layer that would supply one.
         self._lifecycles = sources.lifecycles
         self._escalations = sources.escalations
+        self._breaks = sources.breaks
+        self._cash_leg = sources.cash_leg
         self._clock = clock
         self._program_path = options.program_path
         self._refresh_seconds = options.refresh_seconds
@@ -201,6 +211,14 @@ class Refresher:
             ),
             escalations=EscalationState(
                 queue=pending("escalations", ESCALATION_SOURCE, fact, STALE_AFTER)
+            ),
+            breaks=BreaksState(
+                records=pending(
+                    "breaks", BREAKS_SOURCE_LABEL, Provenance.FACT_SYNTHETIC, STALE_AFTER
+                )
+            ),
+            cash_leg=CashLegState(
+                cash_leg=pending("cash_leg", AUREON_CASH_LEG_URL, fact, STALE_AFTER)
             ),
             aureon=AureonState(
                 snapshot=pending("aureon:snapshot", AUREON_SNAPSHOT_URL, fact, STALE_AFTER),
@@ -431,6 +449,41 @@ class Refresher:
             )
         )
 
+    def _refresh_breaks(self) -> BreaksState:
+        if self._breaks is None:
+            records: Observation[tuple[BreakRecord, ...]] = not_configured(
+                "breaks",
+                BREAKS_SOURCE_LABEL,
+                Provenance.FACT_SYNTHETIC,
+                "no synthetic break source is connected",
+                STALE_AFTER,
+            )
+            return BreaksState(records=records)
+        return BreaksState(
+            records=self._observe(
+                "breaks", BREAKS_SOURCE_LABEL, Provenance.FACT_SYNTHETIC, self._breaks.breaks
+            )
+        )
+
+    def _refresh_cash_leg(self) -> CashLegState:
+        if self._cash_leg is None:
+            value: Observation[CashLeg] = not_configured(
+                "cash_leg",
+                AUREON_CASH_LEG_URL,
+                Provenance.FACT_EXTERNAL,
+                f"{CASH_LEG_SOURCE} is not connected",
+                STALE_AFTER,
+            )
+            return CashLegState(cash_leg=value)
+        return CashLegState(
+            cash_leg=self._observe(
+                "cash_leg",
+                AUREON_CASH_LEG_URL,
+                Provenance.FACT_EXTERNAL,
+                self._cash_leg.cash_leg,
+            )
+        )
+
     # Refresh -----------------------------------------------------------------------------
 
     def refresh_once(self) -> Snapshot:
@@ -450,6 +503,8 @@ class Refresher:
             agents = self._refresh_agents()
             lifecycles = self._refresh_lifecycles()
             escalations = self._refresh_escalations()
+            breaks = self._refresh_breaks()
+            cash_leg = self._refresh_cash_leg()
             now = self._clock()
             if not self._source_failed:
                 self._last_clean_refresh_at = now
@@ -467,6 +522,8 @@ class Refresher:
                 agents=agents,
                 lifecycles=lifecycles,
                 escalations=escalations,
+                breaks=breaks,
+                cash_leg=cash_leg,
             )
             with self._snapshot_lock:
                 self._snapshot = new
@@ -498,6 +555,8 @@ class Refresher:
                     agents=old.agents,
                     lifecycles=old.lifecycles,
                     escalations=old.escalations,
+                    breaks=old.breaks,
+                    cash_leg=old.cash_leg,
                 )
             if not program.ok:
                 log.error("Program file is invalid: %s", program.error_detail)

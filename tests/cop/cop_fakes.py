@@ -20,10 +20,11 @@ from werkzeug.test import TestResponse
 from cop.agents import HttpxAgentsClient
 from cop.app import create_app
 from cop.aureon import HttpxAureonClient
-from cop.demo import DemoEscalations, DemoLifecycles
+from cop.cash_leg import HttpxCashLegClient
+from cop.demo import DemoBreaks, DemoEscalations, DemoLifecycles
 from cop.github import HttpxGitHubClient
 from cop.refresher import Refresher, RefresherOptions, Sources
-from cop.settings import AUREON_SNAPSHOT_URL, PROGRAM_FILE, load_settings
+from cop.settings import AUREON_CASH_LEG_URL, AUREON_SNAPSHOT_URL, PROGRAM_FILE, load_settings
 
 AGENTS_URL = "https://atreides.example.invalid/api/activation"
 
@@ -193,6 +194,44 @@ class FakeAureon:
         self.calls += 1
         if str(request.url) != AUREON_SNAPSHOT_URL:
             self.unexpected.append(str(request.url))
+            raise UnexpectedRequestError(f"unexpected request {request.url}")
+        if self.failure is not None:
+            return failure_response(self.failure, request)
+        return httpx.Response(200, json=self.body)
+
+
+class FakeCashLeg:
+    def __init__(self) -> None:
+        self.failure: str | None = None
+        self.calls = 0
+        self.body: dict[str, Any] = {
+            "status": "ok",
+            "scenario": "USD 1,000,000 cash leg against a Treasury purchase",
+            "boundary": "Atreides prepares, governs, reconciles. The entitled member submits.",
+            "stages": [
+                {
+                    "stage": "1. Funding — can it settle?",
+                    "headline": "will_queue — shortfall 750000, clears at +5400s",
+                    "detail": {
+                        "disposition": "will_queue",
+                        "net_debit_cap_headroom": "49250000",
+                    },
+                },
+                {
+                    "stage": "2. CATO-F — which rail, how final?",
+                    "headline": "PROCEED — fedwire (GROSS_FINAL)",
+                    "detail": {
+                        "decision": "PROCEED",
+                        "recommended_rail": "fedwire",
+                        "finality_class": "GROSS_FINAL",
+                    },
+                },
+            ],
+        }
+
+    def handler(self, request: httpx.Request) -> httpx.Response:
+        self.calls += 1
+        if str(request.url) != AUREON_CASH_LEG_URL:
             raise UnexpectedRequestError(f"unexpected request {request.url}")
         if self.failure is not None:
             return failure_response(self.failure, request)
@@ -388,6 +427,7 @@ class Rig:
         self.clock = FakeClock()
         self.github = FakeGitHub()
         self.aureon = FakeAureon()
+        self.cash_leg = FakeCashLeg()
         self.atreides = FakeAtreides()
         self.github_client = HttpxGitHubClient(
             token, http=httpx.Client(transport=httpx.MockTransport(self.github.handler))
@@ -408,6 +448,10 @@ class Rig:
                 ),
                 lifecycles=DemoLifecycles(self.clock) if lifecycles_configured else None,
                 escalations=(DemoEscalations(self.clock) if escalations_configured else None),
+                breaks=DemoBreaks(self.clock),
+                cash_leg=HttpxCashLegClient(
+                    http=httpx.Client(transport=httpx.MockTransport(self.cash_leg.handler))
+                ),
             ),
             clock=self.clock,
             options=RefresherOptions(

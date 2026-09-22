@@ -25,6 +25,8 @@ MAIN_BRANCH = "main"
 GITHUB_API_URL = "https://api.github.com"
 GITHUB_WEB_URL = "https://github.com"
 AUREON_SNAPSHOT_URL = "https://aureon-production.up.railway.app/api/snapshot"
+AUREON_CASH_LEG_URL = "https://aureon-production.up.railway.app/api/cashleg/demo"
+CASH_LEG_SOURCE = "Aureon cash-leg demonstration (/api/cashleg/demo)"
 
 # The Atreides Phase A activation snapshot (W3 § WP-A3). There is deliberately no
 # default URL: the document is not published anywhere yet, and a guessed address
