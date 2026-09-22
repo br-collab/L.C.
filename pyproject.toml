@@ -28,7 +28,21 @@ dev = [
 # fail there rather than pass because `cop` happened to bring it along.
 harness = [
     "pydantic>=2.6,<3.0",
-    "cannae-kernel @ git+https://github.com/br-collab/cannae-kernel.git@v1.0.0",
+    "cannae-kernel @ git+https://github.com/br-collab/cannae-kernel.git@v1.1.0",
+]
+# Thifur-H, the adaptive intelligence class (thifur_h/). Phase C.
+#
+# Its own extra, for the reason the harness has its own: **model work will bring heavy
+# dependencies** (AMD2 §2), and the day it does, the lean job must still prove `lc` needs
+# nothing and the harness job must still prove Thifur-C2 needs only the kernel. An extra
+# that shared those would make both claims untestable the moment a tensor library landed.
+#
+# Today it is the kernel and pydantic, because condition A is deterministic and needs no
+# model at all. That is the point of building the baseline first, and this list growing is
+# how a reader will know conditions B, C and D arrived.
+h = [
+    "pydantic>=2.6,<3.0",
+    "cannae-kernel @ git+https://github.com/br-collab/cannae-kernel.git@v1.1.0",
 ]
 # COP-0 (Common Operating Picture) program picture (cop/). Not needed by `lc`, which keeps
 # zero runtime dependencies. Install with: pip install -e ".[cop,dev]"
@@ -38,7 +52,7 @@ cop = [
     "httpx>=0.27,<1.0",
     "PyYAML>=6.0",
     "pydantic>=2.6,<3.0",
-    "cannae-kernel @ git+https://github.com/br-collab/cannae-kernel.git@v1.0.0",
+    "cannae-kernel @ git+https://github.com/br-collab/cannae-kernel.git@v1.1.0",
 ]
 
 [build-system]
@@ -47,7 +61,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["lc*", "cop*", "harness_c2*"]
+include = ["lc*", "cop*", "harness_c2*", "thifur_h*"]
 
 [tool.setuptools.package-data]
 cop = ["program.yaml", "templates/*.html", "static/*.css", "static/*.js"]

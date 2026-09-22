@@ -51,6 +51,17 @@ COP_FORBIDDEN = ("lc", "harness_c2", "emulators", "aureon", "atreides")
 HARNESS_FORBIDDEN = ("lc", "cop", "emulators", "aureon", "atreides")
 HARNESS_ALLOWED_THIRD_PARTY = frozenset({"cannae_kernel", "pydantic"})
 HARNESS_DIR = REPO_ROOT / "harness_c2"
+
+#: Thifur-H measures the middle layer, so it must not be able to see it. If the
+#: thing being measured could see the domain it is measuring, an experiment could
+#: no longer show that the result was independent of the measurement (Research
+#: Charter §17.9) - the same reason `lc` cannot see the harness.
+#:
+#: `harness_c2` is forbidden as well: C2 grants handoffs and H consumes them, and
+#: a model that could reach the issuer would be scoring a system it can alter.
+H_FORBIDDEN = ("lc", "cop", "harness_c2", "emulators", "aureon", "atreides")
+H_ALLOWED_THIRD_PARTY = frozenset({"cannae_kernel", "pydantic"})
+H_DIR = REPO_ROOT / "thifur_h"
 COP_ALLOWED_THIRD_PARTY = frozenset(
     {"cannae_kernel", "flask", "werkzeug", "httpx", "yaml", "pydantic"}
 )
@@ -238,3 +249,68 @@ def test_the_harness_never_writes() -> None:
         if "open(" in path.read_text(encoding="utf-8"):
             offenders.append(f"{path.relative_to(REPO_ROOT)} opens a file")
     assert offenders == [], f"the C2 harness has acquired a way to act: {offenders}"
+
+
+def test_thifur_h_source_imports_only_what_it_may() -> None:
+    """Thifur-H works in kernel contracts and its own value types.
+
+    Notably it may not import `atreides`, so a condition takes a
+    `FundingProjection` handed to it rather than reaching into the domain it is
+    forecasting. That also makes every score replayable, which is the property
+    the experiment needs.
+    """
+    assert H_DIR.is_dir()
+    forbidden, unexpected = [], []
+    for path in sorted(H_DIR.rglob("*.py")):
+        for line, name in _absolute_imports(path):
+            root = name.split(".", 1)[0]
+            where = f"{path.relative_to(REPO_ROOT)}:{line} {name}"
+            if root in H_FORBIDDEN:
+                forbidden.append(where)
+            elif (
+                root != "thifur_h"
+                and root not in sys.stdlib_module_names
+                and root not in H_ALLOWED_THIRD_PARTY
+            ):
+                unexpected.append(where)
+    assert forbidden == []
+    assert unexpected == []
+
+
+def test_importing_thifur_h_loads_no_domain_package() -> None:
+    missing = [m for m in ("cannae_kernel", "pydantic") if importlib.util.find_spec(m) is None]
+    if missing:
+        if os.environ.get("H_EXTRA_REQUIRED") == "1":
+            pytest.fail(f"h extra required but not installed: {missing}")
+        pytest.skip(f"h extra not installed ({', '.join(missing)}); runs in the H job")
+    probe = (
+        "import importlib, json, pkgutil, sys\n"
+        "import thifur_h\n"
+        "for m in pkgutil.walk_packages(thifur_h.__path__, 'thifur_h.'):\n"
+        "    importlib.import_module(m.name)\n"
+        "print(json.dumps(sorted(sys.modules)))\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", probe], capture_output=True, text=True, check=True
+    )
+    loaded = json.loads(result.stdout)
+    assert [n for n in loaded if n.split(".", 1)[0] in H_FORBIDDEN] == []
+
+
+def test_thifur_h_never_acts() -> None:
+    """H recommends and never authorizes or submits, under any condition.
+
+    Enforced the way Stop 1 is enforced for the harness: the package has no way
+    out of the process. No network client, no database driver, no file handle. A
+    later condition that needs one - a model loading weights, say - has to change
+    this test, which is a decision somebody makes rather than a line somebody adds.
+    """
+    reaches_out = ("httpx", "requests", "urllib", "socket", "sqlite3", "subprocess", "smtplib")
+    offenders = []
+    for path in sorted(H_DIR.rglob("*.py")):
+        for line, name in _absolute_imports(path):
+            if name.split(".", 1)[0] in reaches_out:
+                offenders.append(f"{path.relative_to(REPO_ROOT)}:{line} {name}")
+        if "open(" in path.read_text(encoding="utf-8"):
+            offenders.append(f"{path.relative_to(REPO_ROOT)} opens a file")
+    assert offenders == [], f"Thifur-H has acquired a way to act: {offenders}"
