@@ -126,3 +126,20 @@ above. If the register is `Absent` or unreadable, every health value is `Absent`
 
 While CAOM-001 applies, every page displays exactly: **“Single operator: no separation of
 duties.”** This is policy text, not a disposition and not evidence that a second reviewer exists.
+
+## Governance, controls and risk panels
+
+These panels admit demo records only under `LEGATE_DEMO=1`. Production remains `Absent` until
+the source register names a published producer.
+
+| Field | Kernel type or kernel-backed rule | Source key | If unread or absent |
+|---|---|---|---|
+| **Governance event** | Stable `Recorded[str]` ID and event kind | `dsor`, `aureon-snapshot`, `github` | Panel `Absent`; no empty audit trail |
+| **Decision actor** | Authenticated kernel `ActorRef` | `dsor` | Event rejected; actor is never inferred |
+| **Decision time** | Kernel `EventTimes`, displaying `decision_time` when recorded | `dsor` | `Absent`; COP observation time never substitutes |
+| **Doctrine and evidence** | Recorded doctrine version and evidence references with kernel `Provenance` | `dsor` | `Absent`; no unsupported decision narrative |
+| **Control result** | Kernel `Disposition` plus separate status text | `controls` | `INDETERMINATE` when test evidence or its `EventTimes` is absent, never `PASS` |
+| **Regulatory mapping** | Recorded control-to-rule references | `controls` | `Absent`; no inferred mapping |
+| **Risk exposure and limit** | Recorded `Decimal` values sharing a unit | `limits`, `cash-leg` | Panel `Absent` unless both are published |
+| **Risk utilisation** | `exposure / limit`; `PASS` below 80%, `HOLD` at 80–99.99%, `BLOCK` at or above 100% | Computed only from recorded exposure and limit | `Absent`; an exposure without a limit is not zero utilisation |
+| **Risk clock** | Kernel `EventTimes` from the source measure | `limits`, `cash-leg` | `Absent`; local wall time never substitutes |

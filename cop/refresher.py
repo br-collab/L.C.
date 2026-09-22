@@ -29,6 +29,17 @@ from cop.breaks import BREAKS_SOURCE_LABEL, BreakRecord, BreakSource
 from cop.cash_leg import CashLeg, CashLegSource
 from cop.escalations import EscalationQueue, EscalationSource
 from cop.exceptions import EXCEPTIONS_SOURCE, ExceptionRegister, ExceptionSource
+from cop.grc import (
+    CONTROLS_SOURCE,
+    GOVERNANCE_SOURCE,
+    RISK_SOURCE,
+    ControlRecord,
+    ControlsSource,
+    GovernanceEvent,
+    GovernanceSource,
+    RiskLimit,
+    RiskSource,
+)
 from cop.lifecycle import LifecycleRow
 from cop.observation import (
     UNEXPECTED_ERROR,
@@ -65,6 +76,7 @@ from cop.state import (
     DriftResult,
     EscalationState,
     ExceptionsState,
+    GrcState,
     LifecycleState,
     MergeInfo,
     PendingDropResult,
@@ -125,6 +137,9 @@ class Sources:
     breaks: BreakSource | None = None
     cash_leg: CashLegSource | None = None
     exceptions: ExceptionSource | None = None
+    governance: GovernanceSource | None = None
+    controls: ControlsSource | None = None
+    risks: RiskSource | None = None
 
 
 @dataclass(frozen=True)
@@ -155,6 +170,9 @@ class Refresher:
         self._breaks = sources.breaks
         self._cash_leg = sources.cash_leg
         self._exceptions = sources.exceptions
+        self._governance = sources.governance
+        self._controls = sources.controls
+        self._risks = sources.risks
         self._clock = clock
         self._program_path = options.program_path
         self._refresh_seconds = options.refresh_seconds
@@ -228,6 +246,11 @@ class Refresher:
                 register=pending(
                     "exceptions", EXCEPTIONS_SOURCE, Provenance.FACT_SYNTHETIC, STALE_AFTER
                 )
+            ),
+            grc=GrcState(
+                governance=pending("governance", GOVERNANCE_SOURCE, fact, STALE_AFTER),
+                controls=pending("controls", CONTROLS_SOURCE, fact, STALE_AFTER),
+                risks=pending("risks", RISK_SOURCE, fact, STALE_AFTER),
             ),
             aureon=AureonState(
                 snapshot=pending("aureon:snapshot", AUREON_SNAPSHOT_URL, fact, STALE_AFTER),
@@ -512,6 +535,43 @@ class Refresher:
             )
         )
 
+    def _refresh_grc(self) -> GrcState:
+        def read_or_absent(
+            key: str,
+            label: str,
+            source: object | None,
+            fetch: Callable[[], T],
+        ) -> Observation[T]:
+            if source is None:
+                return not_configured(
+                    key,
+                    label,
+                    Provenance.FACT_EXTERNAL,
+                    f"{label} is not connected",
+                    STALE_AFTER,
+                )
+            return self._observe(key, label, Provenance.FACT_SYNTHETIC, fetch)
+
+        governance: Observation[tuple[GovernanceEvent, ...]] = read_or_absent(
+            "governance",
+            GOVERNANCE_SOURCE,
+            self._governance,
+            lambda: self._governance.governance() if self._governance else (),
+        )
+        controls: Observation[tuple[ControlRecord, ...]] = read_or_absent(
+            "controls",
+            CONTROLS_SOURCE,
+            self._controls,
+            lambda: self._controls.controls() if self._controls else (),
+        )
+        risks: Observation[tuple[RiskLimit, ...]] = read_or_absent(
+            "risks",
+            RISK_SOURCE,
+            self._risks,
+            lambda: self._risks.risks() if self._risks else (),
+        )
+        return GrcState(governance=governance, controls=controls, risks=risks)
+
     # Refresh -----------------------------------------------------------------------------
 
     def refresh_once(self) -> Snapshot:
@@ -534,6 +594,7 @@ class Refresher:
             breaks = self._refresh_breaks()
             cash_leg = self._refresh_cash_leg()
             exceptions = self._refresh_exceptions()
+            grc = self._refresh_grc()
             now = self._clock()
             if not self._source_failed:
                 self._last_clean_refresh_at = now
@@ -554,6 +615,7 @@ class Refresher:
                 breaks=breaks,
                 cash_leg=cash_leg,
                 exceptions=exceptions,
+                grc=grc,
             )
             with self._snapshot_lock:
                 self._snapshot = new
@@ -588,6 +650,7 @@ class Refresher:
                     breaks=old.breaks,
                     cash_leg=old.cash_leg,
                     exceptions=old.exceptions,
+                    grc=old.grc,
                 )
             if not program.ok:
                 log.error("Program file is invalid: %s", program.error_detail)

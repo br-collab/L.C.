@@ -92,11 +92,6 @@
   </div>
   <p><a href="{{ url_for('section', name='exceptions') }}">Exceptions is the workbench →</a></p>
 </section>
-{% elif active_section in ('controls', 'risk') %}
-<section class="panel absent-section" data-panel="{{ active_section }}">
-  <h2>{{ rail[active_section].label }} {{ badge(rail[active_section].badge) }}</h2>
-  <p class="warning"><strong>Absent in production.</strong> The data dictionary records the missing producer. No zero or empty register is shown in its place.</p>
-</section>
 {% elif active_section == 'exceptions' %}
 {% set ex = page.exceptions %}
 <section class="panel exceptions-panel" data-panel="exceptions">
@@ -525,6 +520,69 @@
 {% endif %}
 
 {# 10 · Open decisions --------------------------------------------------------------- #}
+{% if 'governance' in selected %}
+{% set gov = page.grc %}
+<section class="panel" id="governance" data-panel="governance">
+  <h2>Governance trail {{ badge(rail['decisions'].badge) }}</h2>
+  <p class="lede">Recent authority decisions, overrides, halt changes, doctrine versions and deploys. The actor, producer clock and cited evidence are kept together.</p>
+  {% if gov.governance %}
+  <p class="warning demo"><strong>DEMO DATA.</strong> No production DSOR decision feed is published.</p>
+  <div class="governance-timeline">
+  {% for row in gov.governance %}<article class="card">
+    <h3>{{ row.record.event_id }} · {{ row.record.kind.value }} {{ badge(row.badge) }}</h3>
+    <p>{{ row.record.summary }}</p>
+    <dl class="fields">
+      <div class="field"><dt>Who decided</dt><dd>{{ row.record.actor.role }} · <code>{{ row.record.actor.actor_id }}</code></dd></div>
+      <div class="field"><dt>Decision time</dt><dd>{{ row.decided }}</dd></div>
+      <div class="field"><dt>Doctrine</dt><dd>{{ row.record.doctrine_version }}</dd></div>
+      <div class="field"><dt>Evidence</dt><dd>{{ row.record.evidence | join(', ') }}</dd></div>
+    </dl>
+    <p class="prov">{{ row.record.provenance.value }} · <a href="{{ row.record.source_uri }}" rel="noreferrer">authority record</a></p>
+  </article>{% endfor %}
+  </div>
+  {% else %}<p class="warning"><strong>Absent in production.</strong> No published DSOR decision feed exists. Deploy observations do not substitute for authority records.</p>{% endif %}
+</section>
+{% endif %}
+
+{% if 'controls' in selected %}
+{% set ctl = page.grc %}
+<section class="panel" id="controls" data-panel="controls">
+  <h2>Controls and compliance {{ badge(rail['controls'].badge) }}</h2>
+  <p class="lede">Sanctions, eligibility, anti-money-laundering coverage, control tests and regulatory mappings. A control without test evidence is Indeterminate, never passing.</p>
+  {% if ctl.controls %}
+  <p class="warning demo"><strong>DEMO DATA.</strong> No production Aureon/Verana control aggregate is published.</p>
+  <div class="repo-grid">{% for row in ctl.controls %}<article class="card">
+    <h3>{{ row.record.control_id }} {{ badge(row.badge) }}</h3>
+    <p><strong>{{ row.record.name }}</strong><br>{{ row.record.status_text }}</p>
+    <dl class="fields">
+      <div class="field"><dt>Control class</dt><dd>{{ row.record.category }}</dd></div>
+      <div class="field"><dt>Test clock</dt><dd>{{ row.tested }}</dd></div>
+      <div class="field"><dt>Test evidence</dt><dd>{{ row.record.evidence | join(', ') if row.record.evidence else 'Absent — no test evidence recorded' }}</dd></div>
+      <div class="field"><dt>Regulatory mapping</dt><dd>{{ row.record.regulatory_mappings | join(', ') if row.record.regulatory_mappings else 'Absent' }}</dd></div>
+    </dl>
+  </article>{% endfor %}</div>
+  {% else %}<p class="warning"><strong>Absent in production.</strong> No published aggregate supplies Verana screening, eligibility, AML coverage or control-test evidence.</p>{% endif %}
+</section>
+{% endif %}
+
+{% if 'risk' in selected %}
+{% set risk = page.grc %}
+<section class="panel" id="risk" data-panel="risk">
+  <h2>Risk limits {{ badge(rail['risk'].badge) }}</h2>
+  <p class="lede">Funding and liquidity exposure, settlement-fail rate and concentration against published limits. Bands are Pass below 80%, Hold from 80%, and Block at 100%.</p>
+  {% if risk.risks %}
+  <p class="warning demo"><strong>DEMO DATA.</strong> Production has no published limit definitions.</p>
+  <div class="risk-grid">{% for row in risk.risks %}<article class="card">
+    <h3>{{ row.record.name }} {{ badge(row.badge) }}</h3>
+    <p class="risk-number">{{ row.record.exposure }} {{ row.record.unit }} <span>/ {{ row.record.limit }} {{ row.record.unit }}</span></p>
+    <div class="risk-scale" aria-label="{{ row.utilisation }} percent utilised"><span class="util-{{ [[(row.utilisation // 10) * 10, 10] | max, 100] | min }} {{ 'past' if row.utilisation >= 100 else 'near' if row.utilisation >= 80 }}"></span></div>
+    <p><strong>{{ row.utilisation }}% utilised</strong> · producer clock {{ row.stamped }}</p>
+    <p class="prov">{{ row.record.provenance.value }} · <a href="{{ row.record.source_uri }}" rel="noreferrer">limit record</a></p>
+  </article>{% endfor %}</div>
+  {% else %}<p class="warning"><strong>Absent in production.</strong> Exposure without a published limit cannot produce utilisation, so no zero or green value is shown.</p>{% endif %}
+</section>
+{% endif %}
+
 {% if 'decisions' in selected %}
 {% set t = page.program %}
 <section class="panel" id="decisions" data-panel="decisions">

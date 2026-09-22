@@ -20,6 +20,7 @@ from cop.cash_leg import CashLeg
 from cop.escalations import EscalationQueue
 from cop.exceptions import ExceptionRegister
 from cop.github import Tag, WorkflowRun
+from cop.grc import ControlRecord, GovernanceEvent, RiskLimit
 from cop.lifecycle import LifecycleRow
 from cop.observation import (
     InputUnavailableError,
@@ -187,6 +188,13 @@ class ExceptionsState:
 
 
 @dataclass(frozen=True)
+class GrcState:
+    governance: Observation[tuple[GovernanceEvent, ...]]
+    controls: Observation[tuple[ControlRecord, ...]]
+    risks: Observation[tuple[RiskLimit, ...]]
+
+
+@dataclass(frozen=True)
 class Snapshot:
     started_at: datetime
     last_refresh_at: datetime | None
@@ -203,6 +211,7 @@ class Snapshot:
     breaks: BreaksState
     cash_leg: CashLegState
     exceptions: ExceptionsState
+    grc: GrcState
 
 
 # Rules -----------------------------------------------------------------------------------
