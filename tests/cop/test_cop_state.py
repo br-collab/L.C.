@@ -8,7 +8,7 @@ from typing import Any, TypeVar
 import pytest
 from cannae_kernel.disposition import Disposition
 from cannae_kernel.provenance import Provenance
-from cop_fakes import MAIN_SHA, Rig
+from cop_fakes import MAIN_SHA, Rig, login
 
 from cop.aureon import AureonSnapshot
 from cop.github import Tag, WorkflowRun
@@ -161,6 +161,10 @@ def test_pending_drop_through_the_refresher_is_latched() -> None:
     assert drop is not None and not drop.detected_now and drop.last_event is not None
     page = build_page(third, rig.clock.now)
     assert "AUR-I-17" in page.aureon.pending_drop.badge.label
+    client = rig.app_client()
+    login(client)
+    html = client.get("/panel/aureon").get_data(as_text=True)
+    assert "COP detection clock · 17 Sep 2026 15:01 UTC" in html
 
 
 # CI combination and tags -----------------------------------------------------------------

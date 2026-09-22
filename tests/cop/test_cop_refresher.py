@@ -93,11 +93,20 @@ def test_happy_path() -> None:
     repos_html = section(page, "repositories")
     assert "aaaaaaa" in repos_html and "INDETERMINATE" not in repos_html
     assert "Needs update branch" in repos_html
-    assert "FACT_EXTERNAL" in repos_html and "observed 17 Sep 2026 15:00:00 UTC" in repos_html
+    assert (
+        "FACT_EXTERNAL" in repos_html
+        and "COP observation clock: 17 Sep 2026 15:00:00 UTC" in repos_html
+    )
     assert "https://api.github.com/repos/br-collab/aureon/commits/main" in repos_html
-    assert "Nightly" in section(page, "scheduled")
+    assert "GitHub clock · opened 17 Sep 2026" in repos_html
+    scheduled_html = section(page, "scheduled")
+    assert "Nightly" in scheduled_html
+    assert "GitHub clock · run 17 Sep 2026" in scheduled_html
+    assert "Atreides clock · 17 Sep 2026 14:59:30 UTC" in section(page, "agents")
+    banner_html = section(page, "banner")
+    assert banner_html.count("COP clock · 17 Sep 2026 15:00:00 UTC") == 3
     # A failing nightly makes the overall state BLOCK, not green.
-    assert "BLOCK" in section(page, "banner")
+    assert "BLOCK" in banner_html
 
 
 @pytest.mark.parametrize("mode", FAILURE_MODES)
