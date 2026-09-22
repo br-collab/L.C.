@@ -28,7 +28,7 @@ dev = [
 # fail there rather than pass because `cop` happened to bring it along.
 harness = [
     "pydantic>=2.6,<3.0",
-    "cannae-kernel @ git+https://github.com/br-collab/cannae-kernel.git@v1.0.0",
+    "cannae-kernel @ git+https://github.com/br-collab/cannae-kernel.git@v1.1.0",
 ]
 # Thifur-H, the adaptive intelligence class (thifur_h/). Phase C.
 #
@@ -52,7 +52,7 @@ cop = [
     "httpx>=0.27,<1.0",
     "PyYAML>=6.0",
     "pydantic>=2.6,<3.0",
-    "cannae-kernel @ git+https://github.com/br-collab/cannae-kernel.git@v1.0.0",
+    "cannae-kernel @ git+https://github.com/br-collab/cannae-kernel.git@v1.1.0",
 ]
 
 [build-system]
