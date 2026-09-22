@@ -27,6 +27,7 @@ from cop.blindspots import BlindSpot, LayerStatus, SourceStatus, blind_spots
 from cop.breaks import BreakRecord
 from cop.cash_leg import CashLeg
 from cop.escalations import EscalationQueue
+from cop.exceptions import ExceptionHealth, ExceptionRecord, health
 from cop.lifecycle import CHECKPOINT_ORDER, LifecycleRow
 from cop.observation import NOT_CONFIGURED, Observation
 from cop.program import Program, WorkStatus
@@ -512,6 +513,24 @@ class DecisionView:
 
 
 @dataclass(frozen=True)
+class ExceptionRowView:
+    record: ExceptionRecord
+    age: str
+    sla: str
+    time_left: str
+    utilisation: int
+    owner: str
+    badge: Badge
+
+
+@dataclass(frozen=True)
+class ExceptionsView:
+    tile: TileView[Any]
+    rows: tuple[ExceptionRowView, ...]
+    health: ExceptionHealth | None
+
+
+@dataclass(frozen=True)
 class PageView:
     banner: BannerView
     program: TileView[Program]
@@ -523,6 +542,7 @@ class PageView:
     escalations: EscalationView
     breaks: BreaksView
     cash_leg: CashLegView
+    exceptions: ExceptionsView
     blind_spots: tuple[BlindSpotView, ...]
     work_status_badges: dict[WorkStatus, Badge] = field(
         default_factory=lambda: dict(WORK_STATUS_BADGES)
@@ -576,7 +596,15 @@ def build_rail(page: PageView) -> dict[str, RailItemView]:
             "Trades",
             trade_badge,
         ),
-        "exceptions": RailItemView("exceptions", "Exceptions", absent),
+        "exceptions": RailItemView(
+            "exceptions",
+            "Exceptions",
+            source_badge(page.exceptions.tile)
+            if not page.exceptions.rows
+            else _worst_badge(
+                tuple(row.badge for row in page.exceptions.rows), str(len(page.exceptions.rows))
+            ),
+        ),
         "cash": RailItemView("cash", "Cash & liquidity", source_badge(page.cash_leg.tile)),
         "decisions": RailItemView(
             "decisions",
@@ -1090,6 +1118,36 @@ def build_page(snapshot: Snapshot, now: datetime) -> PageView:
     escalations = _escalation_view(snapshot.escalations, now)
     breaks = _breaks_view(snapshot.breaks, now)
     cash_leg = _cash_leg_view(snapshot.cash_leg, now)
+    exception_tile = tile(snapshot.exceptions.register, now, _observed)
+    exception_register = exception_tile.shown
+    exception_rows: tuple[ExceptionRowView, ...] = ()
+    exception_health = None
+    if exception_register is not None:
+        built = []
+        for record in exception_register.records:
+            elapsed = max(timedelta(), now - record.first_times.event_time)
+            left = record.sla_target - elapsed
+            utilisation = round(100 * elapsed.total_seconds() / record.sla_target.total_seconds())
+            built.append(
+                ExceptionRowView(
+                    record=record,
+                    age=fmt_age(elapsed),
+                    sla=fmt_age(record.sla_target),
+                    time_left=(
+                        f"{fmt_age(-left)} past" if left < timedelta() else f"{fmt_age(left)} left"
+                    ),
+                    utilisation=utilisation,
+                    owner=record.owner.role
+                    if record.owner is not None
+                    else "Absent — no owner recorded",
+                    badge=disposition_badge(
+                        record.effective_disposition, record.effective_disposition.value
+                    ),
+                )
+            )
+        exception_rows = tuple(built)
+        exception_health = health(exception_register, now)
+    exceptions = ExceptionsView(exception_tile, exception_rows, exception_health)
     overall, reasons = _overall(program, repos, aureon, agents)
     decisions: tuple[DecisionView, ...] = ()
     if program.current and program.value is not None:
@@ -1126,6 +1184,7 @@ def build_page(snapshot: Snapshot, now: datetime) -> PageView:
         escalations=escalations,
         breaks=breaks,
         cash_leg=cash_leg,
+        exceptions=exceptions,
         blind_spots=_blind_spots(snapshot, now),
     )
 

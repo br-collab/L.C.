@@ -21,7 +21,7 @@ from cop.agents import HttpxAgentsClient
 from cop.app import create_app
 from cop.aureon import HttpxAureonClient
 from cop.cash_leg import HttpxCashLegClient
-from cop.demo import DemoBreaks, DemoEscalations, DemoLifecycles
+from cop.demo import DemoBreaks, DemoEscalations, DemoExceptions, DemoLifecycles
 from cop.github import HttpxGitHubClient
 from cop.refresher import Refresher, RefresherOptions, Sources
 from cop.settings import AUREON_CASH_LEG_URL, AUREON_SNAPSHOT_URL, PROGRAM_FILE, load_settings
@@ -415,7 +415,7 @@ class FakeAtreides:
 class Rig:
     """A refresher wired to fake servers and a fake clock."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - switches deliberately expose source availability
         self,
         program_path: Path = PROGRAM_FILE,
         token: str | None = "test-token",
@@ -423,6 +423,7 @@ class Rig:
         agents_configured: bool = True,
         lifecycles_configured: bool = True,
         escalations_configured: bool = True,
+        exceptions_configured: bool = False,
     ) -> None:
         self.clock = FakeClock()
         self.github = FakeGitHub()
@@ -452,6 +453,7 @@ class Rig:
                 cash_leg=HttpxCashLegClient(
                     http=httpx.Client(transport=httpx.MockTransport(self.cash_leg.handler))
                 ),
+                exceptions=DemoExceptions(self.clock) if exceptions_configured else None,
             ),
             clock=self.clock,
             options=RefresherOptions(

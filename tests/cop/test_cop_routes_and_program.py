@@ -58,6 +58,7 @@ def test_side_rail_routes_every_existing_panel_once_and_keeps_blind_spots_pinned
         "blindspots",
         "scheduled",
         "decisions",
+        "exceptions",
     }
     assert SECTIONS["blind"] == ("blindspots",)
 

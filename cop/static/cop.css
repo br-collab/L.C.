@@ -221,6 +221,31 @@ button {
 .pulls li { margin-bottom: 0.5rem; }
 .pr-status { margin-top: 0.2rem; font-size: 0.9rem; }
 
+/* COP-2 exception workbench. */
+.exception-health { display: grid; grid-template-columns: repeat(6, minmax(7rem, 1fr)); gap: 0.6rem; margin: 1rem 0; }
+.exception-health article { border: 1px solid var(--border); border-radius: 0.5rem; padding: 0.7rem; background: var(--surface); }
+.exception-health strong, .exception-health span, .exception-register small { display: block; }
+.exception-health strong { font-size: 1.45rem; }
+.exception-health span, .exception-register small { color: var(--muted); font-size: 0.75rem; }
+.exception-filters { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1rem 0; }
+.exception-filters a { border: 1px solid var(--border); border-radius: 1rem; padding: 0.25rem 0.7rem; text-decoration: none; }
+.exception-filters a[aria-current="page"] { background: var(--mid-blue); color: #fff; }
+.exception-workbench.has-drawer { display: grid; grid-template-columns: minmax(0, 1fr) minmax(18rem, 28rem); gap: 1rem; align-items: start; }
+.exception-register { overflow-x: auto; }
+.exception-register tr:has(a[href*="selected="]) { scroll-margin-top: 4rem; }
+.sla { width: 8rem; height: 0.35rem; margin: 0.25rem 0; background: var(--neutral-bg); border-radius: 1rem; overflow: hidden; }
+.sla span { display: block; height: 100%; background: var(--good); }
+.sla span.near { background: var(--attention); }
+.sla span.past { background: var(--bad); }
+.sla .util-10 { width: 10%; } .sla .util-20 { width: 20%; }
+.sla .util-30 { width: 30%; } .sla .util-40 { width: 40%; }
+.sla .util-50 { width: 50%; } .sla .util-60 { width: 60%; }
+.sla .util-70 { width: 70%; } .sla .util-80 { width: 80%; }
+.sla .util-90 { width: 90%; } .sla .util-100 { width: 100%; }
+.exception-drawer { position: sticky; top: 4rem; border-left: 4px solid var(--mid-blue); background: var(--surface); padding: 1rem; box-shadow: 0 0.4rem 1.2rem rgba(0,0,0,.15); }
+.exception-drawer ol { padding-left: 1.2rem; }
+.exception-drawer li { margin-bottom: 0.8rem; }
+
 .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 0.8rem; margin: 0.5rem 0; }
 .field dt { color: var(--muted); font-size: 0.85rem; }
 .field dd { margin: 0.1rem 0 0; display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
@@ -255,6 +280,9 @@ table.waves td:nth-child(3) { width: 55%; }
   .cop-shell { grid-template-columns: 11rem minmax(0, 1fr); }
   .clock-strip { flex-wrap: nowrap; }
   .now-grid { grid-template-columns: 1fr; }
+  .exception-health { grid-template-columns: repeat(3, 1fr); }
+  .exception-workbench { display: block; position: relative; }
+  .exception-drawer { position: fixed; z-index: 10; inset: 4rem 1rem 1rem auto; width: min(30rem, calc(100vw - 2rem)); overflow: auto; }
 }
 
 @media (max-width: 48rem) {

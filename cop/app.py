@@ -38,6 +38,7 @@ from cop.demo import (
     DemoBreaks,
     DemoCashLeg,
     DemoEscalations,
+    DemoExceptions,
     DemoGitHub,
     DemoLifecycles,
 )
@@ -57,7 +58,15 @@ from cop.settings import (
     Settings,
     load_settings,
 )
-from cop.view import WORK_STATUS_BADGES, build_page, build_rail, fmt_age, run_badge, short_sha
+from cop.view import (
+    WORK_STATUS_BADGES,
+    build_page,
+    build_rail,
+    disposition_badge,
+    fmt_age,
+    run_badge,
+    short_sha,
+)
 
 log = logging.getLogger(__name__)
 
@@ -73,12 +82,13 @@ PANELS: dict[str, str] = {
     "blindspots": "What this picture cannot see",
     "scheduled": "Nightly and scheduled checks",
     "decisions": "Open decisions",
+    "exceptions": "Exception register and health",
 }
 
 SECTIONS: dict[str, tuple[str, ...]] = {
     "now": (),
     "trades": ("lifecycles", "breaks"),
-    "exceptions": (),
+    "exceptions": ("exceptions",),
     "cash": ("cashleg",),
     "decisions": ("escalations", "decisions"),
     "controls": (),
@@ -133,6 +143,7 @@ def build_refresher(settings: Settings, clock: Clock = utc_now) -> Refresher:
                 escalations=DemoEscalations(clock),
                 breaks=DemoBreaks(clock),
                 cash_leg=DemoCashLeg(),
+                exceptions=DemoExceptions(clock),
             ),
             clock=clock,
             options=RefresherOptions(
@@ -166,6 +177,7 @@ def build_refresher(settings: Settings, clock: Clock = utc_now) -> Refresher:
             # synthetic break and /api/cashleg/demo values are demo-mode only.
             breaks=None,
             cash_leg=None,
+            exceptions=None,
         ),
         clock=clock,
         options=RefresherOptions(
@@ -247,6 +259,7 @@ def create_app(  # noqa: PLR0915 - route definitions read best in one place
         section_groups=SECTION_GROUPS,
         short_sha=short_sha,
         run_badge=run_badge,
+        disposition_badge=disposition_badge,
         work_badges=WORK_STATUS_BADGES,
         stale_minutes=int(STALE_AFTER.total_seconds() // 60),
         reload_seconds=PAGE_RELOAD_SECONDS,
@@ -330,12 +343,22 @@ def create_app(  # noqa: PLR0915 - route definitions read best in one place
         if state.refresher is None:  # guard() already refuses; kept so this fails closed
             raise RuntimeError("refresher missing")
         page = build_page(state.refresher.snapshot, state.clock())
+        exception_filter = request.args.get("filter", "all")
+        allowed_filters = {"all", "past-sla", "no-owner", "breaks", "decisions-overrides"}
+        if exception_filter not in allowed_filters:
+            exception_filter = "all"
+        selected_id = request.args.get("selected")
+        selected_exception = next(
+            (row for row in page.exceptions.rows if row.record.exception_id == selected_id), None
+        )
         return render_template(
             "dashboard.html",
             page=page,
             rail=build_rail(page),
             selected=selected,
             active_section=active_section,
+            exception_filter=exception_filter,
+            selected_exception=selected_exception,
         )
 
     @app.get("/")

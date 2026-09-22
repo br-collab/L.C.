@@ -92,10 +92,67 @@
   </div>
   <p><a href="{{ url_for('section', name='exceptions') }}">Exceptions is the workbench →</a></p>
 </section>
-{% elif active_section in ('exceptions', 'controls', 'risk') %}
+{% elif active_section in ('controls', 'risk') %}
 <section class="panel absent-section" data-panel="{{ active_section }}">
   <h2>{{ rail[active_section].label }} {{ badge(rail[active_section].badge) }}</h2>
   <p class="warning"><strong>Absent in production.</strong> The data dictionary records the missing producer. No zero or empty register is shown in its place.</p>
+</section>
+{% elif active_section == 'exceptions' %}
+{% set ex = page.exceptions %}
+<section class="panel exceptions-panel" data-panel="exceptions">
+  <p class="section-kicker">OPERATE · EXCEPTIONS</p>
+  <h2>Exception register {{ badge(rail['exceptions'].badge) }}</h2>
+  {% if ex.tile.current and ex.tile.shown %}
+  <p class="warning demo" role="alert"><strong>DEMO DATA.</strong> This register is illustrative. Production remains Absent until break, escalation, hold and override producers publish.</p>
+  {% set health = ex.health %}
+  <div class="exception-health" aria-label="Exception health">
+    <article><strong>{{ health.under_1h }}</strong><span>&lt; 1 hour</span></article>
+    <article><strong>{{ health.one_to_4h }}</strong><span>1–4 hours</span></article>
+    <article><strong>{{ health.four_to_24h }}</strong><span>4–24 hours</span></article>
+    <article><strong>{{ health.over_24h }}</strong><span>&gt; 24 hours</span></article>
+    <article><strong>{{ health.resolved_within_sla_percent ~ '%' if health.resolved_within_sla_percent is not none else 'Absent' }}</strong><span>resolved within SLA</span></article>
+    <article><strong>{{ health.written_off }}</strong><span>written off · separate</span></article>
+  </div>
+  <p><strong>Repeat root causes:</strong> {{ health.repeat_root_causes | join(', ') if health.repeat_root_causes else 'None in demo register' }} · <strong>Trend:</strong> {{ health.trend | join(' → ') if health.trend else 'Absent — no published history' }}</p>
+  <nav class="exception-filters" aria-label="Exception filters">
+    {% for key, label in [('all','All'),('past-sla','Past SLA'),('no-owner','No owner'),('breaks','Breaks'),('decisions-overrides','Decisions & overrides')] %}
+    <a href="{{ url_for('section', name='exceptions', filter=key) }}"{% if exception_filter == key %} aria-current="page"{% endif %}>{{ label }}</a>
+    {% endfor %}
+  </nav>
+  <div class="exception-workbench{{ ' has-drawer' if selected_exception else '' }}">
+  <div class="exception-register">
+  <table>
+    <thead><tr><th>ID / exception</th><th>Kind</th><th>Age / SLA</th><th>Owner</th><th>Root cause</th><th>State</th></tr></thead>
+    <tbody>
+    {% for row in ex.rows %}
+    {% set show = exception_filter == 'all' or (exception_filter == 'past-sla' and row.utilisation > 100) or (exception_filter == 'no-owner' and row.record.owner is none) or (exception_filter == 'breaks' and row.record.kind.value == 'Break') or (exception_filter == 'decisions-overrides' and row.record.kind.value in ('Escalation', 'Override')) %}
+    {% if show %}<tr>
+      <th><a href="{{ url_for('section', name='exceptions', filter=exception_filter, selected=row.record.exception_id) }}">{{ row.record.exception_id }} · {{ row.record.title }}</a><small>{{ row.record.lifecycle_id }}</small></th>
+      <td>{{ row.record.kind.value }}</td>
+      <td>{{ row.age }} / {{ row.sla }}<div class="sla"><span class="util-{{ [[(row.utilisation // 10) * 10, 10] | max, 100] | min }} {{ 'past' if row.utilisation > 100 else 'near' if row.utilisation >= 75 }}"></span></div><small>{{ row.time_left }}</small></td>
+      <td>{{ row.owner }}</td><td>{{ row.record.root_cause }}</td>
+      <td>{{ badge(row.badge) }}<small>{{ row.record.status_text }}</small></td>
+    </tr>{% endif %}
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% if selected_exception %}{% set row = selected_exception %}
+  <aside class="exception-drawer" aria-label="Exception detail">
+    <p><a href="{{ url_for('section', name='exceptions', filter=exception_filter) }}">Close detail</a></p>
+    <h3>{{ row.record.exception_id }} {{ badge(row.badge) }}</h3>
+    <p><strong>{{ row.record.title }}</strong><br>{{ row.record.detail }}</p>
+    <h4>Trail across layers</h4>
+    <ol>{% for step in row.record.trail %}<li><strong>{{ step.layer }}</strong> · {{ step.times.event_time.strftime('%d %b %Y %H:%M:%S UTC') }}<br>{{ badge(disposition_badge(step.disposition, step.disposition.value)) }} {{ step.status_text }}<br><small>{{ step.evidence }} · {{ step.provenance.value }}</small></li>{% endfor %}</ol>
+    <h4>What closes it</h4><p>{{ row.record.close_condition }}</p>
+    {% if row.record.authority_uri %}<p><a href="{{ row.record.authority_uri }}" rel="noreferrer">Open where authority lives →</a></p>{% else %}<p>Authority link: Absent</p>{% endif %}
+    <p class="muted">Read-only. Ownership and authority are recorded in the source system.</p>
+  </aside>
+  {% endif %}
+  </div>
+  {% else %}
+  <p class="warning"><strong>Absent in production.</strong> No published aggregate supplies break, escalation, hold and override records. No zero or empty register is shown.</p>
+  {% endif %}
 </section>
 {% endif %}
 {# 2 · Wave board -------------------------------------------------------------------- #}
