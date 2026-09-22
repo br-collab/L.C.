@@ -28,6 +28,7 @@ from cop.breaks import BreakRecord
 from cop.cash_leg import CashLeg
 from cop.escalations import EscalationQueue
 from cop.exceptions import ExceptionHealth, ExceptionRecord, health
+from cop.grc import ControlRecord, GovernanceEvent, RiskLimit
 from cop.lifecycle import CHECKPOINT_ORDER, LifecycleRow
 from cop.observation import NOT_CONFIGURED, Observation
 from cop.program import Program, WorkStatus
@@ -531,6 +532,38 @@ class ExceptionsView:
 
 
 @dataclass(frozen=True)
+class GovernanceRowView:
+    record: GovernanceEvent
+    badge: Badge
+    decided: str
+
+
+@dataclass(frozen=True)
+class ControlRowView:
+    record: ControlRecord
+    badge: Badge
+    tested: str
+
+
+@dataclass(frozen=True)
+class RiskRowView:
+    record: RiskLimit
+    badge: Badge
+    utilisation: int
+    stamped: str
+
+
+@dataclass(frozen=True)
+class GrcView:
+    governance_tile: TileView[Any]
+    governance: tuple[GovernanceRowView, ...]
+    controls_tile: TileView[Any]
+    controls: tuple[ControlRowView, ...]
+    risks_tile: TileView[Any]
+    risks: tuple[RiskRowView, ...]
+
+
+@dataclass(frozen=True)
 class PageView:
     banner: BannerView
     program: TileView[Program]
@@ -543,6 +576,7 @@ class PageView:
     breaks: BreaksView
     cash_leg: CashLegView
     exceptions: ExceptionsView
+    grc: GrcView
     blind_spots: tuple[BlindSpotView, ...]
     work_status_badges: dict[WorkStatus, Badge] = field(
         default_factory=lambda: dict(WORK_STATUS_BADGES)
@@ -583,6 +617,31 @@ def build_rail(page: PageView) -> dict[str, RailItemView]:
         if page.decisions
         else page.program.badge
     )
+    governance_badge = source_badge(page.grc.governance_tile)
+    if page.grc.governance:
+        governance_badge = _worst_badge(
+            tuple(row.badge for row in page.grc.governance),
+            f"{len(page.grc.governance)} events",
+        )
+    decision_section_badge = (
+        disposition_badge(Disposition.INDETERMINATE, "Partial coverage: governance Absent")
+        if governance_badge == absent
+        else _worst_badge(
+            (page.escalations.tile.badge, decision_badge, governance_badge),
+            "Decision state",
+        )
+    )
+    controls_badge = source_badge(page.grc.controls_tile)
+    if page.grc.controls:
+        controls_badge = _worst_badge(
+            tuple(row.badge for row in page.grc.controls),
+            f"{len(page.grc.controls)} controls",
+        )
+    risks_badge = source_badge(page.grc.risks_tile)
+    if page.grc.risks:
+        risks_badge = _worst_badge(
+            tuple(row.badge for row in page.grc.risks), f"{len(page.grc.risks)} limits"
+        )
     programme_badges = [page.program.badge]
     for repo in page.repos:
         programme_badges.extend((repo.main_ci.badge, repo.scheduled.badge))
@@ -609,10 +668,10 @@ def build_rail(page: PageView) -> dict[str, RailItemView]:
         "decisions": RailItemView(
             "decisions",
             "Decisions",
-            _worst_badge((page.escalations.tile.badge, decision_badge), "Decision state"),
+            decision_section_badge,
         ),
-        "controls": RailItemView("controls", "Controls & compliance", absent),
-        "risk": RailItemView("risk", "Risk limits", absent),
+        "controls": RailItemView("controls", "Controls & compliance", controls_badge),
+        "risk": RailItemView("risk", "Risk limits", risks_badge),
         "agents": RailItemView("agents", "Agents", source_badge(page.agents.tile)),
         "programme": RailItemView(
             "programme", "Programme", _worst_badge(programme_badges, "Programme state")
@@ -1148,6 +1207,39 @@ def build_page(snapshot: Snapshot, now: datetime) -> PageView:
         exception_rows = tuple(built)
         exception_health = health(exception_register, now)
     exceptions = ExceptionsView(exception_tile, exception_rows, exception_health)
+    governance_tile = tile(snapshot.grc.governance, now, _observed)
+    governance_rows = tuple(
+        GovernanceRowView(
+            record=record,
+            badge=disposition_badge(record.disposition, record.disposition.value),
+            decided=fmt_time(record.times.decision_time or record.times.processing_time),
+        )
+        for record in (governance_tile.shown or ())
+    )
+    controls_tile = tile(snapshot.grc.controls, now, _observed)
+    control_rows = tuple(
+        ControlRowView(
+            record=record,
+            badge=disposition_badge(
+                record.effective_disposition, record.effective_disposition.value
+            ),
+            tested=(fmt_time(record.test_times.event_time) if record.test_times else "Absent"),
+        )
+        for record in (controls_tile.shown or ())
+    )
+    risks_tile = tile(snapshot.grc.risks, now, _observed)
+    risk_rows = tuple(
+        RiskRowView(
+            record=record,
+            badge=disposition_badge(record.disposition, record.disposition.value),
+            utilisation=round(record.utilisation),
+            stamped=fmt_time(record.times.event_time),
+        )
+        for record in (risks_tile.shown or ())
+    )
+    grc = GrcView(
+        governance_tile, governance_rows, controls_tile, control_rows, risks_tile, risk_rows
+    )
     overall, reasons = _overall(program, repos, aureon, agents)
     decisions: tuple[DecisionView, ...] = ()
     if program.current and program.value is not None:
@@ -1185,6 +1277,7 @@ def build_page(snapshot: Snapshot, now: datetime) -> PageView:
         breaks=breaks,
         cash_leg=cash_leg,
         exceptions=exceptions,
+        grc=grc,
         blind_spots=_blind_spots(snapshot, now),
     )
 

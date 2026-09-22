@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime, timedelta
+from decimal import Decimal
 
 from cannae_kernel.absence import AbsenceKind, Absent, Recorded
 from cannae_kernel.actor import ActorKind, ActorRef
@@ -40,6 +41,7 @@ from cop.exceptions import (
     TrailEntry,
 )
 from cop.github import Commit, Pull, PullDetail, PullHead, Tag, WorkflowRun
+from cop.grc import ControlRecord, GovernanceEvent, GovernanceKind, RiskLimit
 from cop.lifecycle import Checkpoint, Layer, LayerReading, LifecycleRow, build_row
 from cop.observation import SourceTimeoutError
 
@@ -662,4 +664,144 @@ class DemoExceptions:
             synthetic=True,
             records=tuple(records),
             trend=(9, 8, 8, 7),
+        )
+
+
+class DemoGrc:
+    """Illustrative GRC records; production never constructs this source."""
+
+    def __init__(self, clock: Callable[[], datetime]) -> None:
+        self._clock = clock
+
+    @staticmethod
+    def _bill() -> ActorRef:
+        return ActorRef(
+            actor_id=ActorId("act_01K5T7DT000000000000000002"),
+            actor_kind=ActorKind.HUMAN,
+            role="Single operator under CAOM-001",
+            entitlement_refs=("CAOM-001",),
+            authenticated=True,
+        )
+
+    @staticmethod
+    def _times(at: datetime, *, decided: bool = False) -> EventTimes:
+        processed = at + timedelta(seconds=12)
+        return EventTimes(
+            event_time=at,
+            observation_time=at + timedelta(seconds=5),
+            processing_time=processed,
+            decision_time=processed + timedelta(seconds=8) if decided else None,
+        )
+
+    def governance(self) -> tuple[GovernanceEvent, ...]:
+        now = self._clock()
+        specs = (
+            ("GOV-104", GovernanceKind.DECISION, "Release funding hold", 18, Disposition.PASS),
+            (
+                "GOV-103",
+                GovernanceKind.OVERRIDE,
+                "Manual release after stale stress reading",
+                74,
+                Disposition.HOLD,
+            ),
+            (
+                "GOV-102",
+                GovernanceKind.HALT_RELEASED,
+                "Operating halt released",
+                180,
+                Disposition.PASS,
+            ),
+            (
+                "GOV-101",
+                GovernanceKind.DOCTRINE_CHANGE,
+                "CATO doctrine v1.1 adopted",
+                420,
+                Disposition.PASS,
+            ),
+            ("GOV-100", GovernanceKind.DEPLOY, "COP deployment recorded", 510, Disposition.PASS),
+        )
+        return tuple(
+            GovernanceEvent(
+                event_id=event_id,
+                kind=kind,
+                summary=summary,
+                actor=self._bill(),
+                times=self._times(now - timedelta(minutes=minutes), decided=True),
+                doctrine_version="CATO-1.1",
+                evidence=(f"demo://dsor/{event_id}", "CAOM-001"),
+                disposition=disposition,
+                provenance=Provenance.FACT_SYNTHETIC,
+                source_uri=f"https://example.invalid/dsor/{event_id}",
+            )
+            for event_id, kind, summary, minutes, disposition in specs
+        )
+
+    def controls(self) -> tuple[ControlRecord, ...]:
+        now = self._clock()
+        return (
+            ControlRecord(
+                "CTL-OFAC",
+                "OFAC sanctions screening",
+                "Sanctions",
+                Disposition.PASS,
+                "Screened",
+                self._times(now - timedelta(minutes=8)),
+                ("demo://verana/ofac/104",),
+                ("OFAC",),
+                Provenance.FACT_SYNTHETIC,
+            ),
+            ControlRecord(
+                "CTL-ELIG",
+                "Security eligibility",
+                "Eligibility",
+                Disposition.PASS,
+                "Eligible",
+                self._times(now - timedelta(minutes=12)),
+                ("demo://aureon/eligibility/104",),
+                ("SEC-ELIG-01",),
+                Provenance.FACT_SYNTHETIC,
+            ),
+            ControlRecord(
+                "CTL-AML",
+                "AML monitoring coverage",
+                "AML",
+                Disposition.HOLD,
+                "Coverage review due",
+                self._times(now - timedelta(hours=3)),
+                ("demo://verana/aml/coverage",),
+                ("BSA/AML",),
+                Provenance.FACT_SYNTHETIC,
+            ),
+            ControlRecord(
+                "CTL-MAP",
+                "Regulatory mapping",
+                "Mapping",
+                Disposition.PASS,
+                "No test evidence",
+                None,
+                (),
+                ("OFAC", "BSA/AML"),
+                Provenance.FACT_SYNTHETIC,
+            ),
+        )
+
+    def risks(self) -> tuple[RiskLimit, ...]:
+        now = self._clock()
+        specs = (
+            ("RSK-FUND", "Funding exposure", "820000", "1000000", "USD", 6),
+            ("RSK-FAIL", "Settlement-fail rate", "1.8", "2.0", "%", 14),
+            ("RSK-CONC", "Issuer concentration", "26", "25", "%", 20),
+        )
+        return tuple(
+            RiskLimit(
+                risk_id=risk_id,
+                name=name,
+                exposure=Decimal(exposure),
+                limit=Decimal(limit_),
+                unit=unit,
+                times=self._times(now - timedelta(minutes=minutes)),
+                provenance=Provenance.FACT_SYNTHETIC,
+                source_uri=f"https://example.invalid/limits/{risk_id}",
+            )
+            for risk_id, name, exposure, limit_, unit, minutes in specs
         )

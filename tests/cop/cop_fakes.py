@@ -21,7 +21,7 @@ from cop.agents import HttpxAgentsClient
 from cop.app import create_app
 from cop.aureon import HttpxAureonClient
 from cop.cash_leg import HttpxCashLegClient
-from cop.demo import DemoBreaks, DemoEscalations, DemoExceptions, DemoLifecycles
+from cop.demo import DemoBreaks, DemoEscalations, DemoExceptions, DemoGrc, DemoLifecycles
 from cop.github import HttpxGitHubClient
 from cop.refresher import Refresher, RefresherOptions, Sources
 from cop.settings import AUREON_CASH_LEG_URL, AUREON_SNAPSHOT_URL, PROGRAM_FILE, load_settings
@@ -424,6 +424,7 @@ class Rig:
         lifecycles_configured: bool = True,
         escalations_configured: bool = True,
         exceptions_configured: bool = False,
+        grc_configured: bool = False,
     ) -> None:
         self.clock = FakeClock()
         self.github = FakeGitHub()
@@ -433,6 +434,7 @@ class Rig:
         self.github_client = HttpxGitHubClient(
             token, http=httpx.Client(transport=httpx.MockTransport(self.github.handler))
         )
+        grc = DemoGrc(self.clock) if grc_configured else None
         self.refresher = Refresher(
             sources=Sources(
                 github=self.github_client,
@@ -454,6 +456,9 @@ class Rig:
                     http=httpx.Client(transport=httpx.MockTransport(self.cash_leg.handler))
                 ),
                 exceptions=DemoExceptions(self.clock) if exceptions_configured else None,
+                governance=grc,
+                controls=grc,
+                risks=grc,
             ),
             clock=self.clock,
             options=RefresherOptions(

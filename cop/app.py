@@ -40,6 +40,7 @@ from cop.demo import (
     DemoEscalations,
     DemoExceptions,
     DemoGitHub,
+    DemoGrc,
     DemoLifecycles,
 )
 from cop.escalations import HttpxEscalationClient
@@ -83,6 +84,9 @@ PANELS: dict[str, str] = {
     "scheduled": "Nightly and scheduled checks",
     "decisions": "Open decisions",
     "exceptions": "Exception register and health",
+    "governance": "Governance trail",
+    "controls": "Controls and compliance",
+    "risk": "Risk limits",
 }
 
 SECTIONS: dict[str, tuple[str, ...]] = {
@@ -90,9 +94,9 @@ SECTIONS: dict[str, tuple[str, ...]] = {
     "trades": ("lifecycles", "breaks"),
     "exceptions": ("exceptions",),
     "cash": ("cashleg",),
-    "decisions": ("escalations", "decisions"),
-    "controls": (),
-    "risk": (),
+    "decisions": ("escalations", "governance", "decisions"),
+    "controls": ("controls",),
+    "risk": ("risk",),
     "agents": ("agents",),
     "programme": ("waves", "repositories", "aureon", "scheduled"),
     "blind": ("blindspots",),
@@ -134,6 +138,7 @@ class CopState:
 
 def build_refresher(settings: Settings, clock: Clock = utc_now) -> Refresher:
     if settings.demo:
+        grc = DemoGrc(clock)
         return Refresher(
             sources=Sources(
                 github=DemoGitHub(clock),
@@ -144,6 +149,9 @@ def build_refresher(settings: Settings, clock: Clock = utc_now) -> Refresher:
                 breaks=DemoBreaks(clock),
                 cash_leg=DemoCashLeg(),
                 exceptions=DemoExceptions(clock),
+                governance=grc,
+                controls=grc,
+                risks=grc,
             ),
             clock=clock,
             options=RefresherOptions(
@@ -178,6 +186,9 @@ def build_refresher(settings: Settings, clock: Clock = utc_now) -> Refresher:
             breaks=None,
             cash_leg=None,
             exceptions=None,
+            governance=None,
+            controls=None,
+            risks=None,
         ),
         clock=clock,
         options=RefresherOptions(
