@@ -26,6 +26,7 @@ from cannae_kernel.provenance import Provenance
 
 from cop.agents import AgentsSnapshot, AgentView, RefusalView
 from cop.aureon import AureonSnapshot
+from cop.escalations import EscalationPacket, EscalationQueue, Unknown
 from cop.github import Commit, Pull, PullDetail, PullHead, Tag, WorkflowRun
 from cop.lifecycle import Checkpoint, Layer, LayerReading, LifecycleRow, build_row
 from cop.observation import SourceTimeoutError
@@ -368,4 +369,71 @@ class DemoLifecycles:
         return tuple(
             build_row(f"lif_01M2P20SY0000000000000{i:04d}", readings, _BUILT_LAYERS)
             for i, readings in enumerate((clean, held, stale, intent_only), start=1)
+        )
+
+
+class DemoEscalations:
+    """Three escalations, the oldest deliberately old.
+
+    The queue exists to make the forgotten one visible, so the demonstration data
+    includes one that has been waiting nine hours. A demo where everything is
+    fresh would show the panel working and not show what it is for.
+
+    No packet carries a recommendation, a resolution or a recipient, because the
+    harness cannot produce one and this reader refuses one.
+    """
+
+    def __init__(self, clock: Callable[[], datetime]) -> None:
+        self._clock = clock
+
+    def queue(self) -> EscalationQueue:
+        now = self._clock()
+        return EscalationQueue(
+            schema_version=1,
+            taken_at=now,
+            packets=(
+                EscalationPacket(
+                    packet_id="ESC-0003",
+                    lifecycle_id="lif_01M2P20SY0000000000000003",
+                    trigger="LINEAGE_HOLE",
+                    raised_at=now - timedelta(minutes=20),
+                    disposition=Disposition.BLOCK,
+                    summary="the clearing transformation that formed this obligation is missing",
+                    findings=(
+                        "CLEARING — MISSING: a later stage exists, so CLEARING must too, "
+                        "and no record was supplied",
+                    ),
+                    unknowns=(),
+                ),
+                EscalationPacket(
+                    packet_id="ESC-0002",
+                    lifecycle_id="lif_01M2P20SY0000000000000002",
+                    trigger="DOCTRINE_AMBIGUITY",
+                    raised_at=now - timedelta(hours=2, minutes=40),
+                    disposition=Disposition.HOLD,
+                    summary="doctrine does not determine which rail applies to this leg",
+                    findings=(),
+                    unknowns=(
+                        Unknown(
+                            what="SETTLEMENT_OBLIGATION outcome",
+                            why="the executions have not been cleared yet",
+                        ),
+                    ),
+                ),
+                EscalationPacket(
+                    packet_id="ESC-0001",
+                    lifecycle_id="lif_01M2P20SY0000000000000001",
+                    trigger="HANDOFF_REFUSED",
+                    raised_at=now - timedelta(hours=9, minutes=12),
+                    disposition=Disposition.BLOCK,
+                    summary=("a lateral agent-to-agent input was refused and the work stopped"),
+                    findings=("EXECUTION — BROKEN_LINK: no recorded C2 handoff authorization",),
+                    unknowns=(
+                        Unknown(
+                            what="who would authorize this handoff",
+                            why="no C2_HANDOFF authority record exists for this lifecycle",
+                        ),
+                    ),
+                ),
+            ),
         )
