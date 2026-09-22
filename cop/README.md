@@ -1,5 +1,7 @@
 # Legate: COP-0 program picture
 
+**Live deployment:** [lc-production-373f.up.railway.app](https://lc-production-373f.up.railway.app) · health: [`/healthz`](https://lc-production-373f.up.railway.app/healthz)
+
 Legate is a private, read-only web page: a COP (Common Operating Picture) for Project Cannae Legion. It shows the state of the build program, of the live Aureon service and of the Atreides agent family on one URL. "Legate" is a working name (decision JUM-D-27); in code it lives only in `cop/settings.py` as `PRODUCT_NAME`.
 
 It has no write routes and no controls. The halt control arrives in COP-1. The COP shows; the domains decide.
@@ -82,7 +84,9 @@ COP_EXTRA_REQUIRED=1 pytest -q
 
 No test reaches the network: GitHub, Aureon and the Atreides activation snapshot are faked behind `httpx.MockTransport`.
 
-## Deploy to Railway (prepared, not performed)
+## Deploy to Railway
+
+**Deployed**, at the address above. The steps below are what was done and what to repeat if the service is ever rebuilt.
 
 Legate runs as its **own Railway service**, separate from Aureon's. Deploying or restarting Legate never restarts Aureon.
 
@@ -104,8 +108,10 @@ Legate runs as its **own Railway service**, separate from Aureon's. Deploying or
    - `GITHUB_TOKEN`: the fine-grained read-only token below.
    - `ATREIDES_AGENTS_URL` (optional): where the Atreides Phase A activation snapshot is published. Leave it unset until that document is actually served; the Agents panel then reports "not configured" rather than failing against a guessed address.
    - Do **not** set `LEGATE_DEMO` or `LEGATE_INSECURE_LOCAL`. If either is set, the service refuses to serve.
-4. Under **Networking**, generate a Railway domain. Railway serves it over HTTPS (encrypted HTTP), which the `Secure` session cookie requires.
-5. Check: `https://<domain>/healthz` returns `{"status": "ok", ...}`. If it returns `{"status": "misconfigured"}` with HTTP 503, a variable is missing or too short; the deploy logs name which one. Railway's health check will fail in that state, which stops a misconfigured deploy from going live.
+4. Under **Networking**, generate a Railway domain. Railway serves it over HTTPS (encrypted HTTP), which the `Secure` session cookie requires. **The generated domain is `lc-production-373f.up.railway.app`** — recorded here because a service whose address lives only in somebody's memory cannot be checked by anybody else.
+5. Check `https://<domain>/healthz`, and **check what it returns rather than that it answers.** A healthy Legate replies `200` with `Content-Type: application/json` and a body of `{"refresher": "running", "status": "ok"}`. `{"status": "misconfigured"}` with HTTP 503 means a variable is missing or too short; the deploy logs name which one, and Railway's health check fails in that state, which stops a misconfigured deploy from going live.
+
+   **A 200 on its own proves nothing** (workspace working rule 13). The sibling service is the illustration: `aureon-production.up.railway.app/healthz` also returns 200, because aureon serves its dashboard as a catch-all for any unmatched path — `/healthz`, `/nonsense` and `/` all return the same 287,180 bytes. A health check pointed there would report healthy for ever. Legate does not behave that way: `/healthz` is JSON and an unknown path redirects, so assert on the **content type and the body**, not the status code.
 
 **One worker only.** The refresher runs inside the web process and the snapshot lives in that process's memory. With more than one worker, each worker would run its own refresher (multiplying GitHub calls) and could serve a different snapshot on each request, and failed-login counting would be split across workers. `--threads=4` gives concurrency within the single worker. Do not raise `--workers`.
 
