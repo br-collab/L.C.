@@ -7,7 +7,7 @@
 {% macro provenance(t) -%}
 <p class="prov">
   <span class="prov-kind">{{ t.provenance.kind }}</span> ({{ t.provenance.kind_label }})
-  · observed {{ t.provenance.observed_at }}
+  · COP observation clock: {{ t.provenance.observed_at }}
   · source:
   {% if t.provenance.is_link %}<a href="{{ t.provenance.source_url }}" rel="noreferrer">{{ t.provenance.source_url }}</a>{% else %}{{ t.provenance.source_url }}{% endif %}
 </p>

@@ -34,9 +34,9 @@
   </div>
 
   <dl class="facts">
-    <div><dt>Last refresh with every source answering</dt><dd>{{ b.last_clean_refresh_at }}</dd></div>
-    <div><dt>Last refresh attempt</dt><dd>{{ b.last_refresh_at }}</dd></div>
-    <div><dt>Page rendered</dt><dd>{{ b.now }}</dd></div>
+    <div><dt>Last refresh with every source answering</dt><dd>COP clock · {{ b.last_clean_refresh_at }}</dd></div>
+    <div><dt>Last refresh attempt</dt><dd>COP clock · {{ b.last_refresh_at }}</dd></div>
+    <div><dt>Page rendered</dt><dd>COP clock · {{ b.now }}</dd></div>
     <div><dt>Refresh interval</dt><dd>every {{ b.refresh_seconds }} s</dd></div>
   </dl>
 
@@ -155,7 +155,7 @@
             {% for pr in pulls %}
             <li>
               <a href="{{ pr.html_url }}" rel="noreferrer">#{{ pr.number }} {{ pr.title }}</a>{% if pr.draft %} (draft){% endif %}
-              <span class="muted">opened {{ pr.opened }}, {{ pr.age }} old</span>
+              <span class="muted">GitHub clock · opened {{ pr.opened }}, {{ pr.age }} old</span>
               <div class="pr-status">Checks: {{ badge(pr.checks.badge) }}</div>
               <div class="pr-status">Branch: {{ badge(pr.merge.badge) }}</div>
             </li>
@@ -214,7 +214,7 @@
       {% if p is not none %}
       <div class="{{ '' if a.pending_drop.current else 'stale-value' }}">
         {% if p.last_event %}
-        <p>Detected {{ p.last_event.detected_at.strftime('%d %b %Y %H:%M UTC') }}: {{ p.last_event.pending_before }} pending → 0 while the deployed commit changed <code>{{ short_sha(p.last_event.deploy_sha_before) }}</code> → <code>{{ short_sha(p.last_event.deploy_sha_after) }}</code>.</p>
+        <p>COP detection clock · {{ p.last_event.detected_at.strftime('%d %b %Y %H:%M UTC') }}: {{ p.last_event.pending_before }} pending → 0 while the deployed commit changed <code>{{ short_sha(p.last_event.deploy_sha_before) }}</code> → <code>{{ short_sha(p.last_event.deploy_sha_after) }}</code>.</p>
         {% else %}
         <p>No drop seen in {{ p.comparisons }} comparison{{ 's' if p.comparisons != 1 }} since this page's server started.</p>
         {% endif %}
@@ -254,7 +254,7 @@
       <p class="muted">{{ row.tier }} · {{ row.role }}{% if row.expects_refusal %} · <strong>standing probe</strong>: healthy when refused{% endif %}</p>
       <dl class="fields">
         <div class="field"><dt>Last output</dt><dd><span class="field-value">{{ row.summary }}</span></dd></div>
-        <div class="field"><dt>Observed</dt><dd><span class="field-value">{{ row.observed_at }}</span></dd></div>
+        <div class="field"><dt>Observed</dt><dd><span class="field-value">Atreides clock · {{ row.observed_at }}</span></dd></div>
         <div class="field"><dt>Claim kind</dt><dd><span class="field-value">{{ row.provenance }}</span></dd></div>
         <div class="field"><dt>C2 handoff basis</dt><dd><span class="field-value">{{ row.handoff_basis }}</span> {{ badge(row.handoff_badge) }}</dd></div>
         <div class="field"><dt>Last refusal</dt><dd><span class="field-value">{{ row.refusal }}</span> {{ badge(row.refusal_badge) }}</dd></div>
@@ -412,7 +412,7 @@
         {% if runs %}
         <ul class="runs {{ '' if repo.scheduled.current else 'stale-value' }}">
           {% for run in runs %}
-          <li><a href="{{ run.html_url }}" rel="noreferrer">{{ run.workflow }}</a>: {% if repo.scheduled.current %}{{ badge(run_badge(run)) }}{% else %}{{ run.conclusion or run.status }} (stale){% endif %} <span class="muted">run {{ run.created_at.strftime('%d %b %Y %H:%M UTC') }}</span></li>
+          <li><a href="{{ run.html_url }}" rel="noreferrer">{{ run.workflow }}</a>: {% if repo.scheduled.current %}{{ badge(run_badge(run)) }}{% else %}{{ run.conclusion or run.status }} (stale){% endif %} <span class="muted">GitHub clock · run {{ run.created_at.strftime('%d %b %Y %H:%M UTC') }}</span></li>
           {% endfor %}
         </ul>
         {% else %}
