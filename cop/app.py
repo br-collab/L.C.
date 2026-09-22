@@ -32,7 +32,6 @@ from werkzeug.wrappers.response import Response as BaseResponse
 from cop.agents import HttpxAgentsClient
 from cop.aureon import HttpxAureonClient
 from cop.auth import LoginLimiter, key_fingerprint, keys_match
-from cop.cash_leg import HttpxCashLegClient
 from cop.demo import (
     DemoAgents,
     DemoAureon,
@@ -58,7 +57,7 @@ from cop.settings import (
     Settings,
     load_settings,
 )
-from cop.view import WORK_STATUS_BADGES, build_page, fmt_age, run_badge, short_sha
+from cop.view import WORK_STATUS_BADGES, build_page, build_rail, fmt_age, run_badge, short_sha
 
 log = logging.getLogger(__name__)
 
@@ -75,6 +74,25 @@ PANELS: dict[str, str] = {
     "scheduled": "Nightly and scheduled checks",
     "decisions": "Open decisions",
 }
+
+SECTIONS: dict[str, tuple[str, ...]] = {
+    "now": (),
+    "trades": ("lifecycles", "breaks"),
+    "exceptions": (),
+    "cash": ("cashleg",),
+    "decisions": ("escalations", "decisions"),
+    "controls": (),
+    "risk": (),
+    "agents": ("agents",),
+    "programme": ("waves", "repositories", "aureon", "scheduled"),
+    "blind": ("blindspots",),
+}
+
+SECTION_GROUPS = (
+    ("OPERATE", ("now", "trades", "exceptions", "cash")),
+    ("GOVERN", ("decisions", "controls", "risk", "agents")),
+    ("BUILD", ("programme",)),
+)
 
 CONTENT_SECURITY_POLICY = "; ".join(
     (
@@ -144,8 +162,10 @@ def build_refresher(settings: Settings, clock: Clock = utc_now) -> Refresher:
                 if settings.escalations_url is not None
                 else None
             ),
-            breaks=DemoBreaks(clock),
-            cash_leg=HttpxCashLegClient(),
+            # COP-2 AMD1: missing producers are Absent in production. The
+            # synthetic break and /api/cashleg/demo values are demo-mode only.
+            breaks=None,
+            cash_leg=None,
         ),
         clock=clock,
         options=RefresherOptions(
@@ -223,6 +243,8 @@ def create_app(  # noqa: PLR0915 - route definitions read best in one place
     app.jinja_env.globals.update(
         product_name=PRODUCT_NAME,
         panels=PANELS,
+        sections=SECTIONS,
+        section_groups=SECTION_GROUPS,
         short_sha=short_sha,
         run_badge=run_badge,
         work_badges=WORK_STATUS_BADGES,
@@ -303,22 +325,35 @@ def create_app(  # noqa: PLR0915 - route definitions read best in one place
         session.clear()
         return redirect(url_for("login_form"))
 
-    def render_panels(selected: tuple[str, ...]) -> str:
+    def render_panels(selected: tuple[str, ...], active_section: str) -> str:
         state = _state()
         if state.refresher is None:  # guard() already refuses; kept so this fails closed
             raise RuntimeError("refresher missing")
         page = build_page(state.refresher.snapshot, state.clock())
-        return render_template("dashboard.html", page=page, selected=selected)
+        return render_template(
+            "dashboard.html",
+            page=page,
+            rail=build_rail(page),
+            selected=selected,
+            active_section=active_section,
+        )
 
     @app.get("/")
     def dashboard() -> str:
-        return render_panels(tuple(PANELS))
+        return render_panels(SECTIONS["now"], "now")
+
+    @app.get("/section/<name>")
+    def section(name: str) -> str | tuple[str, int]:
+        if name not in SECTIONS:
+            return "No such section", 404
+        return render_panels(SECTIONS[name], name)
 
     @app.get("/panel/<name>")
     def panel(name: str) -> str | tuple[str, int]:
         if name not in PANELS:
             return "No such panel", 404
-        return render_panels((name,))
+        active = next((key for key, names in SECTIONS.items() if name in names), "now")
+        return render_panels((name,), active)
 
     return app
 

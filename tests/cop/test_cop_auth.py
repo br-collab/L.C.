@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from cop_fakes import GOOD_ENV, OPERATOR_KEY, SESSION_SECRET, Rig, login
 
-from cop.app import CONTENT_SECURITY_POLICY, PANELS, create_app
+from cop.app import CONTENT_SECURITY_POLICY, PANELS, SECTIONS, create_app
 from cop.settings import (
     LOGIN_FAILURE_WINDOW,
     LOGIN_MAX_FAILURES_GLOBAL,
@@ -17,7 +17,11 @@ from cop.settings import (
     load_settings,
 )
 
-PAGE_PATHS = ["/", *(f"/panel/{name}" for name in PANELS)]
+PAGE_PATHS = [
+    "/",
+    *(f"/panel/{name}" for name in PANELS),
+    *(f"/section/{name}" for name in SECTIONS),
+]
 TEMPLATES = Path(__file__).resolve().parents[2] / "cop" / "templates"
 
 

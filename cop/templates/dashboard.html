@@ -4,6 +4,34 @@
 {% block scripts %}<script src="{{ url_for('static', filename='refresh.js') }}" defer></script>{% endblock %}
 {% block body %}
 {% set b = page.banner %}
+<div class="cop-shell">
+<nav class="side-rail" aria-label="Sections">
+  <div class="rail-brand"><span class="rail-mark" aria-hidden="true"></span><span><strong>{{ product_name }}</strong><small>OPERATING PICTURE</small></span></div>
+  {% for group, keys in section_groups %}
+  <div class="rail-group">
+    <p>{{ group }}</p>
+    {% for key in keys %}
+    {% set item = rail[key] %}
+    <a href="{{ url_for('section', name=key) }}"{% if active_section == key %} aria-current="page"{% endif %}><span>{{ item.label }}</span>{{ badge(item.badge) }}</a>
+    {% endfor %}
+  </div>
+  {% endfor %}
+  {% set blind = rail['blind'] %}
+  <a class="rail-blind" href="{{ url_for('section', name='blind') }}"{% if active_section == 'blind' %} aria-current="page"{% endif %}><span><strong>Blind spots</strong><small>Pinned. Never zero.</small></span>{{ badge(blind.badge) }}</a>
+</nav>
+
+<div class="cop-column">
+<div class="clock-strip" role="status" aria-label="Clocks from records">
+  <strong>CLOCKS · FROM RECORDS</strong>
+  <span>Aureon <b class="clock-absent">Absent</b></span>
+  <span>L.C. <b class="clock-absent">Absent</b></span>
+  <span>Atreides <b class="clock-absent">Absent</b></span>
+  <span>Session <b class="clock-absent">Absent</b></span>
+  <span>Fedwire <b class="clock-absent">Absent</b></span>
+  <span>NSCC <b class="clock-absent">Absent</b></span>
+  <span class="clock-refresh">COP clock · last full refresh {{ b.last_clean_refresh_at }}</span>
+</div>
+<div class="single-operator" role="note"><strong>Single operator: no separation of duties.</strong><span>Every authority tier is held by one person (CAOM-001).</span>{% if b.demo %}<b>DEMO MODE</b>{% endif %}</div>
 
 {# 1 · Banner ------------------------------------------------------------------------ #}
 <header class="panel banner" id="banner" data-panel="banner">
@@ -50,13 +78,26 @@
   <p class="warning" role="alert"><strong>GITHUB RATE LIMIT WARNING.</strong> No <code>GITHUB_TOKEN</code> is set, so GitHub is read without authentication (60 requests an hour) and the refresh slows to every {{ b.refresh_seconds // 60 }} minutes. Expect RateLimited errors.</p>
   {% endif %}
 
-  <nav class="panel-nav" aria-label="Panels">
-    <a href="{{ url_for('dashboard') }}">All panels</a>
-    {% for slug, title in panels.items() %}<a href="{{ url_for('panel', name=slug) }}">{{ title }}</a>{% endfor %}
-  </nav>
 </header>
 
 <main>
+{% if active_section == 'now' %}
+<section class="panel now-panel" data-panel="now">
+  <p class="section-kicker">NOW</p>
+  <h2>{{ b.overall.label }}</h2>
+  <div class="now-grid">
+    <article class="card"><h3>What needs you</h3>{% if b.reasons %}<ul class="reasons">{% for reason in b.reasons %}<li>{{ badge(reason.badge) }} {{ reason.text }}</li>{% endfor %}</ul>{% else %}<p>No current item requires attention.</p>{% endif %}</article>
+    <article class="card"><h3>What changed</h3><p>{{ badge(rail['exceptions'].badge) }} Change history has no published producer yet. This is absent, not “nothing changed”.</p></article>
+    <article class="card"><h3>Stale clocks and feeds</h3>{% if b.stale_sources %}<ul>{% for source in b.stale_sources %}<li>{{ source }}</li>{% endfor %}</ul>{% else %}<p>No configured feed is stale. Record clocks without producers remain Absent in the strip above.</p>{% endif %}</article>
+  </div>
+  <p><a href="{{ url_for('section', name='exceptions') }}">Exceptions is the workbench →</a></p>
+</section>
+{% elif active_section in ('exceptions', 'controls', 'risk') %}
+<section class="panel absent-section" data-panel="{{ active_section }}">
+  <h2>{{ rail[active_section].label }} {{ badge(rail[active_section].badge) }}</h2>
+  <p class="warning"><strong>Absent in production.</strong> The data dictionary records the missing producer. No zero or empty register is shown in its place.</p>
+</section>
+{% endif %}
 {# 2 · Wave board -------------------------------------------------------------------- #}
 {% if 'waves' in selected %}
 {% set t = page.program %}
@@ -449,4 +490,6 @@
 </section>
 {% endif %}
 </main>
+</div>
+</div>
 {% endblock %}

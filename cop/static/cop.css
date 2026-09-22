@@ -1,4 +1,4 @@
-/* COP-0 program picture. One stylesheet, no framework. Light and dark follow the system. */
+/* Common operating picture. One stylesheet, no framework. */
 
 :root {
   color-scheme: light dark;
@@ -20,6 +20,9 @@
   --progress-bg: #e1ecfa;
   --neutral: #4a5160;
   --neutral-bg: #eceef1;
+  --navy: #002b5c;
+  --columbia-blue: #b9d9eb;
+  --mid-blue: #1d4f91;
   --stale-bg: repeating-linear-gradient(135deg, transparent 0 10px, rgba(91, 74, 138, 0.08) 10px 20px);
 }
 
@@ -67,11 +70,68 @@ h3 { font-size: 1.2rem; margin: 0 0 0.5rem; display: flex; flex-wrap: wrap; gap:
 h4 { font-size: 1rem; margin: 0 0 0.3rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
 
 .panel {
-  min-height: 100vh;
+  min-height: auto;
   padding: 1.5rem 2rem 2rem;
   border-bottom: 2px solid var(--border);
   scroll-snap-align: start;
 }
+
+/* COP-2 side rail and clock frame. */
+.cop-shell { min-height: 100vh; display: grid; grid-template-columns: 15rem minmax(0, 1fr); }
+.cop-column { min-width: 0; }
+.side-rail {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.1rem 0.7rem 0.8rem;
+  overflow-y: auto;
+  background: var(--navy);
+  color: #fff;
+}
+.rail-brand { display: flex; align-items: center; gap: 0.6rem; padding: 0 0.45rem; }
+.rail-brand strong { font-size: 1.15rem; }
+.rail-brand small, .rail-blind small { display: block; color: var(--columbia-blue); font-size: 0.6rem; letter-spacing: 0.05em; }
+.rail-mark { width: 1.6rem; height: 1.6rem; border: 3px double var(--columbia-blue); border-radius: 50%; flex: none; }
+.rail-group { display: grid; gap: 0.15rem; }
+.rail-group > p { margin: 0 0 0.1rem; padding: 0 0.5rem; color: #8fb4d4; font-size: 0.6rem; font-weight: 700; letter-spacing: 0.09em; }
+.rail-group a, .rail-blind {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  min-height: 2.25rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.5rem;
+  color: #ddebf5;
+  text-decoration: none;
+  font-size: 0.75rem;
+}
+.rail-group a[aria-current="page"], .rail-blind[aria-current="page"] { background: var(--mid-blue); color: #fff; font-weight: 700; }
+.side-rail .badge { padding: 0.05rem 0.3rem; border-width: 1px; font-size: 0.55rem; }
+.side-rail .badge-label, .side-rail .swatch { display: none; }
+.rail-blind { margin-top: auto; background: #0b3a70; border: 1px solid #3d6a99; }
+.clock-strip {
+  min-height: 3rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 1.2rem;
+  overflow-x: auto;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 0.7rem;
+}
+.clock-strip > strong { color: var(--mid-blue); letter-spacing: 0.04em; }
+.clock-absent { padding: 0.05rem 0.35rem; border: 1px dashed var(--neutral); border-radius: 1rem; color: var(--neutral); }
+.clock-refresh { margin-left: auto; }
+.single-operator { display: flex; gap: 0.9rem; align-items: center; padding: 0.35rem 1.2rem; background: var(--attention-bg); font-size: 0.72rem; }
+.single-operator b:last-child { margin-left: auto; }
+.section-kicker { color: var(--mid-blue); font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; }
+.now-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.8rem; }
 
 .lede { max-width: 70rem; margin: 0 0 0.6rem; }
 .muted { color: var(--muted); font-size: 0.85rem; }
@@ -100,7 +160,9 @@ h4 { font-size: 1rem; margin: 0 0 0.3rem; color: var(--muted); text-transform: u
 .tone-unknown { color: var(--unknown); background: var(--unknown-bg); border-style: dashed; }
 .tone-progress { color: var(--progress); background: var(--progress-bg); }
 .tone-neutral { color: var(--neutral); background: var(--neutral-bg); }
+.tone-absent { color: var(--neutral); background: var(--stale-bg), var(--neutral-bg); border-style: dashed; }
 .tone-unknown .swatch { background: transparent; border: 2px dashed currentColor; }
+.tone-absent .swatch { background: transparent; border: 2px dashed currentColor; }
 
 .overall-badge .badge { font-size: 1.25rem; padding: 0.35rem 0.8rem; }
 
@@ -187,4 +249,21 @@ table.waves td:nth-child(3) { width: 55%; }
   .panel { padding: 1rem; }
   .repo-grid, .tile-row { grid-template-columns: 1fr; }
   table.waves tbody th { white-space: normal; }
+}
+
+@media (max-width: 1280px) {
+  .cop-shell { grid-template-columns: 11rem minmax(0, 1fr); }
+  .clock-strip { flex-wrap: nowrap; }
+  .now-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 48rem) {
+  .cop-shell { display: block; }
+  .side-rail { position: static; width: 100%; height: auto; }
+  .rail-group { display: flex; flex-wrap: wrap; }
+  .rail-group > p { width: 100%; }
+  .rail-group a { flex: 1 1 8rem; }
+  .rail-blind { margin-top: 0; }
+  .single-operator { align-items: flex-start; flex-direction: column; gap: 0.2rem; }
+  .single-operator b:last-child { margin-left: 0; }
 }
