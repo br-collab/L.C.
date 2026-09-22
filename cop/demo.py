@@ -27,6 +27,7 @@ from cannae_kernel.provenance import Provenance
 from cop.agents import AgentsSnapshot, AgentView, RefusalView
 from cop.aureon import AureonSnapshot
 from cop.github import Commit, Pull, PullDetail, PullHead, Tag, WorkflowRun
+from cop.lifecycle import Checkpoint, Layer, LayerReading, LifecycleRow, build_row
 from cop.observation import SourceTimeoutError
 
 _NIGHTLY = (9, "Nightly")
@@ -271,4 +272,100 @@ class DemoAgents:
                     refusals=42,
                 ),
             ),
+        )
+
+
+#: The layers that exist. The middle one is Wave 4, and the board says so rather
+#: than leaving three columns blank.
+_BUILT_LAYERS = frozenset({Layer.AUREON, Layer.ATREIDES})
+
+
+class DemoLifecycles:
+    """Four synthetic lifecycle objects, covering every state the board can show.
+
+    Deliberately includes the two a demonstration would rather skip: a row held
+    at acceptance with nothing written to the Decision System of Record, and a
+    row whose Atreides reading is stale. A board that only ever showed clean rows
+    would not tell anyone whether the unhappy ones render at all.
+
+    Every value is invented, and three of the six columns are absent on every row
+    because the layer that would fill them does not exist yet. **That is the
+    picture, not a gap in it.**
+    """
+
+    def __init__(self, clock: Callable[[], datetime]) -> None:
+        self._clock = clock
+
+    def _aureon(self, at: datetime, detail: str) -> LayerReading:
+        return LayerReading(
+            layer=Layer.AUREON,
+            built=True,
+            current=True,
+            detail=detail,
+            disposition=Disposition.PASS,
+            stamped_at=at,
+            provenance=Provenance.HUMAN_JUDGMENT.value,
+        )
+
+    def rows(self) -> tuple[LifecycleRow, ...]:
+        now = self._clock()
+        approved = now - timedelta(minutes=45)
+        answered = now - timedelta(minutes=12)
+
+        clean = {
+            Checkpoint.APPROVED_INTENT: self._aureon(approved, "approved by operator-bill"),
+            Checkpoint.OBLIGATION_ACCEPTANCE: LayerReading(
+                layer=Layer.ATREIDES,
+                built=True,
+                current=True,
+                detail="accepted; DSOR-2026-09-21-0001",
+                disposition=Disposition.PASS,
+                stamped_at=answered,
+                provenance=Provenance.POLICY_RESULT.value,
+            ),
+            Checkpoint.SETTLED: LayerReading(
+                layer=Layer.ATREIDES,
+                built=True,
+                current=True,
+                detail="settled, gross-final on fedwire",
+                disposition=Disposition.PASS,
+                stamped_at=answered,
+                provenance=Provenance.FACT_SYNTHETIC.value,
+            ),
+        }
+        held = {
+            Checkpoint.APPROVED_INTENT: self._aureon(approved, "approved by operator-bill"),
+            Checkpoint.OBLIGATION_ACCEPTANCE: LayerReading(
+                layer=Layer.ATREIDES,
+                built=True,
+                current=True,
+                # W2B7-V-01, in the column it belongs in: nothing was written,
+                # because no instruction was issued, and the reason is the record.
+                detail="quorum hold — nothing recorded: no instruction was issued",
+                disposition=Disposition.HOLD,
+                stamped_at=answered,
+                provenance=Provenance.POLICY_RESULT.value,
+            ),
+        }
+        stale = {
+            Checkpoint.APPROVED_INTENT: self._aureon(approved, "approved by operator-bill"),
+            Checkpoint.OBLIGATION_ACCEPTANCE: LayerReading(
+                layer=Layer.ATREIDES,
+                built=True,
+                current=False,
+                detail="accepted",
+                disposition=Disposition.PASS,
+                stamped_at=answered,
+                provenance=Provenance.POLICY_RESULT.value,
+                stale_reason="the Atreides activation snapshot did not answer",
+            ),
+        }
+        intent_only = {
+            Checkpoint.APPROVED_INTENT: self._aureon(
+                now - timedelta(minutes=3), "approved by operator-bill"
+            )
+        }
+        return tuple(
+            build_row(f"lif_01M2P20SY0000000000000{i:04d}", readings, _BUILT_LAYERS)
+            for i, readings in enumerate((clean, held, stale, intent_only), start=1)
         )

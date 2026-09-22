@@ -23,6 +23,7 @@ from cannae_kernel.provenance import Provenance
 from cop.agents import AgentsSnapshot
 from cop.agents import AgentView as AgentRecord
 from cop.aureon import AureonSnapshot
+from cop.lifecycle import CHECKPOINT_ORDER, LifecycleRow
 from cop.observation import NOT_CONFIGURED, Observation
 from cop.program import Program, WorkStatus
 from cop.settings import (
@@ -36,6 +37,7 @@ from cop.state import (
     AgentsState,
     CiResult,
     DriftResult,
+    LifecycleState,
     MergeInfo,
     PendingDropResult,
     PullState,
@@ -391,6 +393,35 @@ class AgentsView:
 
 
 @dataclass(frozen=True)
+class LifecycleCellView:
+    """One cell, rendered. Every string final; the template chooses nothing."""
+
+    checkpoint: str
+    layer: str
+    badge: Badge
+    detail: str
+    stamped: str
+    """The **layer's** clock, labelled with whose it is. COP-0 shows when this
+    page saw a value, which is a different fact and not the one a break needs."""
+    provenance: str
+
+
+@dataclass(frozen=True)
+class LifecycleRowView:
+    lifecycle_id: str
+    badge: Badge
+    cells: tuple[LifecycleCellView, ...]
+    unknown_count: int
+
+
+@dataclass(frozen=True)
+class LifecycleView:
+    tile: TileView[tuple[LifecycleRow, ...]]
+    rows: tuple[LifecycleRowView, ...]
+    columns: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class Reason:
     badge: Badge
     text: str
@@ -427,6 +458,7 @@ class PageView:
     repos: tuple[RepoView, ...]
     aureon: AureonView
     agents: AgentsView
+    lifecycles: LifecycleView
     work_status_badges: dict[WorkStatus, Badge] = field(
         default_factory=lambda: dict(WORK_STATUS_BADGES)
     )
@@ -524,6 +556,68 @@ def _agent_row(agent: AgentRecord) -> AgentRowView:
         recommendations=agent.recommendations,
         refusals=agent.refusals,
     )
+
+
+_ROW_LABELS = {
+    Disposition.PASS: "Complete",
+    Disposition.HOLD: "Held",
+    Disposition.BLOCK: "Broken",
+    Disposition.INDETERMINATE: "Not confirmed",
+}
+
+
+def _cell_view(cell: object) -> LifecycleCellView:
+    c = cell  # typed below by the caller's tuple
+    stamped = (
+        f"{c.layer.value} clock · {fmt_time(c.stamped_at)}"  # type: ignore[attr-defined]
+        if c.stamped_at is not None  # type: ignore[attr-defined]
+        else "no layer has stamped this"
+    )
+    return LifecycleCellView(
+        checkpoint=c.checkpoint.value,  # type: ignore[attr-defined]
+        layer=c.layer.value,  # type: ignore[attr-defined]
+        badge=disposition_badge(c.disposition, c.detail),  # type: ignore[attr-defined]
+        detail=c.detail,  # type: ignore[attr-defined]
+        stamped=stamped,
+        provenance=c.provenance,  # type: ignore[attr-defined]
+    )
+
+
+def _lifecycle_view(state: LifecycleState, now: datetime) -> LifecycleView:
+    """The board. Rows come only from a current source.
+
+    A stale board yields no rows at all rather than rows from a value that is no
+    longer true - the same rule the Agents panel follows. The tile carries the
+    reason, and there is nothing else for a reader to mistake for live state.
+    """
+    tile_view = tile(
+        state.rows,
+        now,
+        lambda rows: disposition_badge(_worst_row(rows), f"{len(rows)} lifecycle object(s)"),
+    )
+    rows = tile_view.value if tile_view.current else None
+    columns = tuple(c.value for c in CHECKPOINT_ORDER)
+    if rows is None:
+        return LifecycleView(tile=tile_view, rows=(), columns=columns)
+    return LifecycleView(
+        tile=tile_view,
+        rows=tuple(
+            LifecycleRowView(
+                lifecycle_id=row.lifecycle_id,
+                badge=disposition_badge(row.disposition, _ROW_LABELS[row.disposition]),
+                cells=tuple(_cell_view(c) for c in row.cells),
+                unknown_count=len(row.unknown_cells),
+            )
+            for row in rows
+        ),
+        columns=columns,
+    )
+
+
+def _worst_row(rows: tuple[LifecycleRow, ...]) -> Disposition:
+    if not rows:
+        return Disposition.INDETERMINATE
+    return max((r.disposition for r in rows), key=lambda d: _SEVERITY[d])
 
 
 def _agents_view(state: AgentsState, now: datetime) -> AgentsView:
@@ -712,6 +806,7 @@ def build_page(snapshot: Snapshot, now: datetime) -> PageView:
         pending_drop=tile(snapshot.aureon.pending_drop, now, pending_drop_badge),
     )
     agents = _agents_view(snapshot.agents, now)
+    lifecycles = _lifecycle_view(snapshot.lifecycles, now)
     overall, reasons = _overall(program, repos, aureon, agents)
     decisions: tuple[DecisionView, ...] = ()
     if program.current and program.value is not None:
@@ -744,6 +839,7 @@ def build_page(snapshot: Snapshot, now: datetime) -> PageView:
         repos=repos,
         aureon=aureon,
         agents=agents,
+        lifecycles=lifecycles,
     )
 
 

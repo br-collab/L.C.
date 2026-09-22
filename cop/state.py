@@ -16,6 +16,7 @@ from cannae_kernel.disposition import Disposition
 from cop.agents import AgentsSnapshot
 from cop.aureon import DEPLOY_SHA_UNSET, AureonSnapshot
 from cop.github import Tag, WorkflowRun
+from cop.lifecycle import LifecycleRow
 from cop.observation import (
     InputUnavailableError,
     Observation,
@@ -150,6 +151,18 @@ class AgentsState:
 
 
 @dataclass(frozen=True)
+class LifecycleState:
+    """The lifecycle board, as one observation.
+
+    One observation rather than one per row: the board is read whole, so a
+    half-read one is not a partial board but a source that failed. The same
+    reasoning as the Aureon snapshot and the Atreides activation document.
+    """
+
+    rows: Observation[tuple[LifecycleRow, ...]]
+
+
+@dataclass(frozen=True)
 class Snapshot:
     started_at: datetime
     last_refresh_at: datetime | None
@@ -161,6 +174,7 @@ class Snapshot:
     repos: tuple[RepoState, ...]
     aureon: AureonState
     agents: AgentsState
+    lifecycles: LifecycleState
 
 
 # Rules -----------------------------------------------------------------------------------

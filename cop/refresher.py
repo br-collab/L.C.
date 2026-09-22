@@ -18,13 +18,14 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, TypeVar, cast
+from typing import Any, Protocol, TypeVar, cast
 
 from cannae_kernel.provenance import Provenance
 
 from cop import github as gh
 from cop.agents import AgentsSnapshot, AgentsSource
 from cop.aureon import AureonSnapshot, AureonSource
+from cop.lifecycle import LifecycleRow
 from cop.observation import (
     UNEXPECTED_ERROR,
     InputUnavailableError,
@@ -41,6 +42,8 @@ from cop.settings import (
     AUREON_SNAPSHOT_URL,
     GITHUB_OWNER,
     GITHUB_WEB_URL,
+    LIFECYCLE_SOURCE,
+    LIFECYCLE_SOURCE_UNSET,
     MAIN_BRANCH,
     REPOSITORIES,
     STALE_AFTER,
@@ -50,6 +53,7 @@ from cop.state import (
     AureonState,
     CiResult,
     DriftResult,
+    LifecycleState,
     MergeInfo,
     PendingDropResult,
     PullState,
@@ -67,6 +71,13 @@ from cop.state import (
 
 T = TypeVar("T")
 Clock = Callable[[], datetime]
+
+
+class LifecycleSource(Protocol):
+    """Supplies the lifecycle board. Demo-mode only until Wave 4."""
+
+    def rows(self) -> tuple[LifecycleRow, ...]: ...
+
 
 log = logging.getLogger(__name__)
 
@@ -86,6 +97,21 @@ def _pending_drop_source() -> str:
 
 
 @dataclass(frozen=True)
+class Sources:
+    """Everything the refresher reads. ``None`` means *not connected*.
+
+    Grouped because there are four now and a fifth is Wave 4. A constructor
+    taking them loose invites a caller to pass three and silently lose a panel;
+    a missing field here is a name that does not exist.
+    """
+
+    github: gh.GitHubSource
+    aureon: AureonSource
+    agents: AgentsSource | None = None
+    lifecycles: LifecycleSource | None = None
+
+
+@dataclass(frozen=True)
 class RefresherOptions:
     program_path: Path
     refresh_seconds: int
@@ -97,17 +123,18 @@ class Refresher:
     def __init__(
         self,
         *,
-        github: gh.GitHubSource,
-        aureon: AureonSource,
+        sources: Sources,
         options: RefresherOptions,
         clock: Clock = utc_now,
-        agents: AgentsSource | None = None,
     ) -> None:
-        self._github = github
-        self._aureon = aureon
+        self._github = sources.github
+        self._aureon = sources.aureon
         # ``None`` means no activation snapshot is configured. That is a state the
         # panel reports, not an error it hides: see ``_refresh_agents``.
-        self._agents = agents
+        self._agents = sources.agents
+        # ``None`` means no lifecycle source is connected, which is the state
+        # outside demo mode until Wave 4 builds the layer that would supply one.
+        self._lifecycles = sources.lifecycles
         self._clock = clock
         self._program_path = options.program_path
         self._refresh_seconds = options.refresh_seconds
@@ -162,6 +189,9 @@ class Refresher:
             repos=repos,
             agents=AgentsState(
                 snapshot=pending("agents:snapshot", AGENTS_SNAPSHOT_SOURCE, fact, STALE_AFTER)
+            ),
+            lifecycles=LifecycleState(
+                rows=pending("lifecycles", LIFECYCLE_SOURCE, fact, STALE_AFTER)
             ),
             aureon=AureonState(
                 snapshot=pending("aureon:snapshot", AUREON_SNAPSHOT_URL, fact, STALE_AFTER),
@@ -351,6 +381,27 @@ class Refresher:
             )
         )
 
+    def _refresh_lifecycles(self) -> LifecycleState:
+        """Read the lifecycle board, or record that nothing supplies one.
+
+        Unconfigured is reported, not hidden. An empty table would read as "no
+        lifecycles"; this reads as "no source", and those are different facts.
+        """
+        if self._lifecycles is None:
+            rows: Observation[tuple[LifecycleRow, ...]] = not_configured(
+                "lifecycles",
+                LIFECYCLE_SOURCE,
+                Provenance.FACT_SYNTHETIC,
+                LIFECYCLE_SOURCE_UNSET,
+                STALE_AFTER,
+            )
+            return LifecycleState(rows=rows)
+        return LifecycleState(
+            rows=self._observe(
+                "lifecycles", LIFECYCLE_SOURCE, Provenance.FACT_SYNTHETIC, self._lifecycles.rows
+            )
+        )
+
     # Refresh -----------------------------------------------------------------------------
 
     def refresh_once(self) -> Snapshot:
@@ -368,6 +419,7 @@ class Refresher:
             aureon_repo = next((r for r in repos if r.name == AUREON_REPOSITORY), None)
             aureon = self._refresh_aureon(aureon_repo)
             agents = self._refresh_agents()
+            lifecycles = self._refresh_lifecycles()
             now = self._clock()
             if not self._source_failed:
                 self._last_clean_refresh_at = now
@@ -383,6 +435,7 @@ class Refresher:
                 repos=repos,
                 aureon=aureon,
                 agents=agents,
+                lifecycles=lifecycles,
             )
             with self._snapshot_lock:
                 self._snapshot = new
@@ -412,6 +465,7 @@ class Refresher:
                     repos=old.repos,
                     aureon=old.aureon,
                     agents=old.agents,
+                    lifecycles=old.lifecycles,
                 )
             if not program.ok:
                 log.error("Program file is invalid: %s", program.error_detail)

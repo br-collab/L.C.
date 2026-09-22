@@ -269,7 +269,45 @@
 </section>
 {% endif %}
 
-{# 6 · Scheduled checks -------------------------------------------------------------- #}
+{# 6 · Lifecycle board ---------------------------------------------------------------- #}
+{% if 'lifecycles' in selected %}
+{% set lc = page.lifecycles %}
+<section class="panel" id="lifecycles" data-panel="lifecycles">
+  <h2>Lifecycle board {{ badge(lc.tile.badge) }}</h2>
+  <p class="lede">One row per lifecycle object, one cell per contract checkpoint, then settled. The columns are the five frozen cross-domain contracts and are not a design choice: <code>ApprovedIntentEnvelope</code> &rarr; <code>ExecutionEvent</code> &rarr; <code>ClearingTransformation</code> &rarr; <code>SettlementObligationEnvelope</code> &rarr; <code>ObligationAcceptanceRecord</code>, then settled.</p>
+
+  <p class="warning" role="alert"><strong>MOST OF THIS BOARD IS ABSENT, AND THAT IS CORRECT.</strong> The three columns Legiones Cannenses owns &mdash; execution, clearing and the settlement obligation &mdash; read <em>absent &mdash; layer not built</em>, because that layer is Wave 4. They are not blank and they are not passes. A row is never greener than its weakest cell, so a row with one unknown cell cannot read complete.</p>
+
+  {{ provenance(lc.tile) }}
+  {{ failure(lc.tile) }}
+
+  {% if lc.rows %}
+  <div class="repo-grid">
+    {% for row in lc.rows %}
+    <article class="card tile" data-lifecycle="{{ row.lifecycle_id }}">
+      <h3><code>{{ row.lifecycle_id }}</code> {{ badge(row.badge) }}</h3>
+      {% if row.unknown_count %}<p class="muted">{{ row.unknown_count }} of {{ row.cells | length }} cells not confirmed.</p>{% endif %}
+      <dl class="fields">
+        {% for cell in row.cells %}
+        <div class="field">
+          <dt>{{ cell.checkpoint }} <span class="muted">({{ cell.layer }})</span></dt>
+          <dd>
+            <span class="field-value">{{ cell.detail }}</span> {{ badge(cell.badge) }}
+            <p class="prov"><span class="prov-kind">{{ cell.provenance }}</span> &middot; {{ cell.stamped }}</p>
+          </dd>
+        </div>
+        {% endfor %}
+      </dl>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="value">No rows are shown, because no current lifecycle source was read. The badge above carries the reason. <strong>Nothing on this panel is a claim about what any lifecycle is doing.</strong></p>
+  {% endif %}
+</section>
+{% endif %}
+
+{# 7 · Scheduled checks -------------------------------------------------------------- #}
 {% if 'scheduled' in selected %}
 <section class="panel" id="scheduled" data-panel="scheduled">
   <h2>Nightly and scheduled checks</h2>
@@ -298,7 +336,7 @@
 </section>
 {% endif %}
 
-{# 7 · Open decisions ---------------------------------------------------------------- #}
+{# 8 · Open decisions ---------------------------------------------------------------- #}
 {% if 'decisions' in selected %}
 {% set t = page.program %}
 <section class="panel" id="decisions" data-panel="decisions">

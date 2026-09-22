@@ -32,9 +32,9 @@ from werkzeug.wrappers.response import Response as BaseResponse
 from cop.agents import HttpxAgentsClient
 from cop.aureon import HttpxAureonClient
 from cop.auth import LoginLimiter, key_fingerprint, keys_match
-from cop.demo import DemoAgents, DemoAureon, DemoGitHub
+from cop.demo import DemoAgents, DemoAureon, DemoGitHub, DemoLifecycles
 from cop.github import HttpxGitHubClient
-from cop.refresher import Clock, Refresher, RefresherOptions, utc_now
+from cop.refresher import Clock, Refresher, RefresherOptions, Sources, utc_now
 from cop.settings import (
     LOGIN_FAILURE_WINDOW,
     LOGIN_MAX_FAILURES_GLOBAL,
@@ -57,6 +57,7 @@ PANELS: dict[str, str] = {
     "repositories": "Repositories",
     "aureon": "Live Aureon",
     "agents": "Atreides agents",
+    "lifecycles": "Lifecycle board",
     "scheduled": "Nightly and scheduled checks",
     "decisions": "Open decisions",
 }
@@ -92,9 +93,12 @@ class CopState:
 def build_refresher(settings: Settings, clock: Clock = utc_now) -> Refresher:
     if settings.demo:
         return Refresher(
-            github=DemoGitHub(clock),
-            aureon=DemoAureon(),
-            agents=DemoAgents(clock),
+            sources=Sources(
+                github=DemoGitHub(clock),
+                aureon=DemoAureon(),
+                agents=DemoAgents(clock),
+                lifecycles=DemoLifecycles(clock),
+            ),
             clock=clock,
             options=RefresherOptions(
                 program_path=PROGRAM_FILE,
@@ -104,12 +108,17 @@ def build_refresher(settings: Settings, clock: Clock = utc_now) -> Refresher:
             ),
         )
     return Refresher(
-        github=HttpxGitHubClient(settings.github_token),
-        aureon=HttpxAureonClient(),
-        # None when ATREIDES_AGENTS_URL is unset. The Agents panel then reports
-        # "not configured" rather than inventing an address to fail against.
-        agents=(
-            HttpxAgentsClient(settings.agents_url) if settings.agents_url is not None else None
+        sources=Sources(
+            github=HttpxGitHubClient(settings.github_token),
+            aureon=HttpxAureonClient(),
+            # None when ATREIDES_AGENTS_URL is unset. The Agents panel then reports
+            # "not configured" rather than inventing an address to fail against.
+            agents=(
+                HttpxAgentsClient(settings.agents_url) if settings.agents_url is not None else None
+            ),
+            # No live lifecycle source exists: the middle layer is Wave 4. Outside
+            # demo mode the board says so rather than rendering an empty table.
+            lifecycles=None,
         ),
         clock=clock,
         options=RefresherOptions(
