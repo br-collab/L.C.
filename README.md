@@ -14,14 +14,35 @@ The synthetic middle layer of Project Cannae Legion — a deliberately bounded O
 Aureon (pre-trade, approved intent)  →  L.C. (orders, fills, allocations, clearing, netting)  →  Atreides (settlement, finality, reconciliation)
 ```
 
-## Status: pre-implementation (gated)
+## Status
 
-No middle-layer code is written until Research Charter §18.7 steps 1–4 are complete:
+The `lc` order, fill, allocation, clearing and netting layer remains
+pre-implementation; its package currently exposes only `__version__ = "0.0.0"`.
+The prerequisites that originally gated it now exist: the joint upgrade map was
+written and the first cross-domain contracts were frozen in `cannae-kernel`.
 
-1. Aureon inventory — done (15 Sep 2026)
-2. Atreides inventory — done (15 Sep 2026)
-3. Joint upgrade map — pending
-4. First cross-domain contracts frozen — pending
+This repository is not otherwise empty. It also contains three bounded supporting
+surfaces: the deployed read-only COP, the deterministic C2 lineage/handoff harness,
+and the Thifur-H condition-A recommendation baseline and evaluation harness. None of
+those surfaces is an implementation of the L.C. middle layer, and none submits an
+order or settlement instruction.
+
+## Public API
+
+The repository does not yet have one aggregate Python facade. Its supported
+surfaces are explicit and separate today:
+
+| Surface | Supported entrypoint | Contract |
+|---|---|---|
+| L.C. middle layer | `import lc` | Version marker only. No order, fill, allocation, clearing or netting API exists yet. |
+| Common Operating Picture (COP) | `cop.app:create_app` for application construction; `cop.app:app` as the Web Server Gateway Interface (WSGI) deployment target | Read-only HTTP surface documented in [`cop/README.md`](cop/README.md). Other `cop.*` modules are implementation details unless they declare `__all__`. |
+| Command and Control (C2) harness | `harness_c2.lineage`, `harness_c2.handoff`, `harness_c2.escalation` | Only names declared in each module's `__all__` are public. The package root is not a facade. |
+| Thifur-H experiment | `thifur_h.projection`, `thifur_h.baseline`, `thifur_h.evaluation` | Only names declared in each module's `__all__` are public. It recommends and scores; it never authorizes or submits. |
+
+Consumers must not import underscored names, tests, fixtures, or internal COP
+readers and view models. This table records the current surface before the later
+work to consolidate each repository behind one public API; it does not pretend that
+consolidation has already happened.
 
 ## Scope rules
 
