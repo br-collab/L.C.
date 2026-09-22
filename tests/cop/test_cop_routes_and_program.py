@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from cop_fakes import MAIN_SHA, Rig, login, section
 
-from cop.app import create_app
+from cop.app import SECTIONS, create_app
 from cop.observation import ProgramFileError
 from cop.program import load_program
 from cop.settings import PRODUCT_NAME, PROGRAM_FILE, load_settings
@@ -38,8 +38,53 @@ def test_every_route_is_get_except_login_and_logout() -> None:
         "/logout",
         "/",
         "/panel/<name>",
+        "/section/<name>",
         "/static/<path:filename>",
     }
+
+
+def test_side_rail_routes_every_existing_panel_once_and_keeps_blind_spots_pinned() -> None:
+    assigned = [panel for panels in SECTIONS.values() for panel in panels]
+    assert len(assigned) == len(set(assigned))
+    assert set(assigned) == {
+        "waves",
+        "repositories",
+        "aureon",
+        "agents",
+        "lifecycles",
+        "escalations",
+        "breaks",
+        "cashleg",
+        "blindspots",
+        "scheduled",
+        "decisions",
+    }
+    assert SECTIONS["blind"] == ("blindspots",)
+
+
+def test_side_rail_clock_strip_and_single_operator_banner_render_on_every_section() -> None:
+    rig = Rig()
+    rig.refresher.refresh_once()
+    client = rig.app_client()
+    login(client)
+    for name in SECTIONS:
+        html = client.get(f"/section/{name}").get_data(as_text=True)
+        assert html.count('aria-current="page"') == 1
+        assert "CLOCKS · FROM RECORDS" in html
+        assert "Single operator: no separation of duties." in html
+        assert "COP clock · last full refresh" in html
+
+
+def test_sections_without_producers_are_hatched_absent_not_empty_or_zero() -> None:
+    rig = Rig()
+    rig.refresher.refresh_once()
+    client = rig.app_client()
+    login(client)
+    for name in ("exceptions", "controls", "risk"):
+        html = client.get(f"/section/{name}").get_data(as_text=True)
+        assert "ABSENT" in html
+        assert "tone-absent" in html
+        assert "Absent in production" in html
 
 
 def test_packaged_program_file_is_valid() -> None:
@@ -87,21 +132,22 @@ def test_invalid_program_file_makes_panels_2_and_6_indeterminate_only(tmp_path: 
     rig.refresher.refresh_once()
     client = rig.app_client()
     login(client)
-    html = client.get("/").get_data(as_text=True)
+    programme_html = client.get("/section/programme").get_data(as_text=True)
+    decisions_html = client.get("/section/decisions").get_data(as_text=True)
 
-    waves = section(html, "waves")
-    decisions = section(html, "decisions")
+    waves = section(programme_html, "waves")
+    decisions = section(decisions_html, "decisions")
     for panel in (waves, decisions):
         assert "INDETERMINATE" in panel
         assert "InvalidProgramFile" in panel
     assert "<table" not in waves and "<table" not in decisions
     assert "JUM-D-06" not in decisions
 
-    repos = section(html, "repositories")
+    repos = section(programme_html, "repositories")
     assert MAIN_SHA["aureon"][:7] in repos and "INDETERMINATE" not in repos
-    aureon = section(html, "aureon")
+    aureon = section(programme_html, "aureon")
     assert "Positions" in aureon and ">12<" in aureon
-    assert "Nightly" in section(html, "scheduled")
+    assert "Nightly" in section(programme_html, "scheduled")
 
 
 def test_program_validated_at_startup_before_any_refresh(tmp_path: Path) -> None:
@@ -117,11 +163,12 @@ def test_valid_program_renders_waves_and_decisions() -> None:
     rig.refresher.refresh_once()
     client = rig.app_client()
     login(client)
-    html = client.get("/").get_data(as_text=True)
-    waves = section(html, "waves")
+    programme_html = client.get("/section/programme").get_data(as_text=True)
+    decisions_html = client.get("/section/decisions").get_data(as_text=True)
+    waves = section(programme_html, "waves")
     assert "HUMAN_JUDGMENT" in waves and "INDETERMINATE" not in waves
     assert "Project-Atreides#12" in waves
-    assert "JUM-D-06" in section(html, "decisions")
+    assert "JUM-D-06" in section(decisions_html, "decisions")
 
 
 # Packaging -------------------------------------------------------------------------------

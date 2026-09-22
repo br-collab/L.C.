@@ -89,8 +89,9 @@ def test_happy_path() -> None:
 
     client = rig.app_client()
     login(client)
-    page = client.get("/").get_data(as_text=True)
-    repos_html = section(page, "repositories")
+    now_page = client.get("/").get_data(as_text=True)
+    programme_page = client.get("/section/programme").get_data(as_text=True)
+    repos_html = section(programme_page, "repositories")
     assert "aaaaaaa" in repos_html and "INDETERMINATE" not in repos_html
     assert "Needs update branch" in repos_html
     assert (
@@ -99,11 +100,12 @@ def test_happy_path() -> None:
     )
     assert "https://api.github.com/repos/br-collab/aureon/commits/main" in repos_html
     assert "GitHub clock · opened 17 Sep 2026" in repos_html
-    scheduled_html = section(page, "scheduled")
+    scheduled_html = section(programme_page, "scheduled")
     assert "Nightly" in scheduled_html
     assert "GitHub clock · run 17 Sep 2026" in scheduled_html
-    assert "Atreides clock · 17 Sep 2026 14:59:30 UTC" in section(page, "agents")
-    banner_html = section(page, "banner")
+    agents_page = client.get("/section/agents").get_data(as_text=True)
+    assert "Atreides clock · 17 Sep 2026 14:59:30 UTC" in section(agents_page, "agents")
+    banner_html = section(now_page, "banner")
     assert banner_html.count("COP clock · 17 Sep 2026 15:00:00 UTC") == 3
     # A failing nightly makes the overall state BLOCK, not green.
     assert "BLOCK" in banner_html
@@ -136,7 +138,7 @@ def test_github_failure_shows_indeterminate_with_stale_last_good(mode: str) -> N
 
     client = rig.app_client()
     login(client)
-    html = section(client.get("/").get_data(as_text=True), "repositories")
+    html = section(client.get("/section/programme").get_data(as_text=True), "repositories")
     assert EXPECTED_ERROR_CLASS[mode] in html
     assert "last good value, from 17 Sep 2026 15:00:00 UTC" in html
     assert "It is stale and is not current" in html
@@ -160,7 +162,7 @@ def test_aureon_failure_shows_indeterminate_with_stale_last_good(mode: str) -> N
 
     client = rig.app_client()
     login(client)
-    html = section(client.get("/").get_data(as_text=True), "aureon")
+    html = section(client.get("/section/programme").get_data(as_text=True), "aureon")
     assert EXPECTED_ERROR_CLASS[mode] in html
     assert "Last good snapshot (17 Sep 2026 15:00:00 UTC)" in html
     assert "INDETERMINATE" in html
@@ -281,6 +283,13 @@ def test_demo_mode_uses_only_invented_data_and_shows_every_state() -> None:
     assert page.aureon.pending_drop.value.last_event is not None
     lc_repo = next(r for r in page.repos if r.name == "L.C.")
     assert lc_repo.scheduled.error_class == "Timeout"
+
+
+def test_missing_break_and_cash_producers_are_absent_outside_demo_mode() -> None:
+    settings = load_settings(GOOD_ENV)
+    refresher = build_refresher(settings, FakeClock())
+    assert refresher._breaks is None
+    assert refresher._cash_leg is None
 
 
 def test_refresh_interval_slows_without_a_token() -> None:

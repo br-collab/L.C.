@@ -72,6 +72,7 @@ class Tone(StrEnum):
     UNKNOWN = "unknown"
     PROGRESS = "progress"
     NEUTRAL = "neutral"
+    ABSENT = "absent"
 
 
 @dataclass(frozen=True)
@@ -526,6 +527,74 @@ class PageView:
     work_status_badges: dict[WorkStatus, Badge] = field(
         default_factory=lambda: dict(WORK_STATUS_BADGES)
     )
+
+
+@dataclass(frozen=True)
+class RailItemView:
+    key: str
+    label: str
+    badge: Badge
+
+
+def _worst_badge(badges: Sequence[Badge], label: str) -> Badge:
+    dispositions = [Disposition(b.code) for b in badges if b.code in _SEVERITY_CODES]
+    if not dispositions:
+        return unknown_badge(label)
+    worst = max(dispositions, key=lambda d: _SEVERITY[d])
+    return disposition_badge(worst, label)
+
+
+def build_rail(page: PageView) -> dict[str, RailItemView]:
+    """Section badges use only kernel dispositions plus explicit Absent."""
+    absent = Badge("ABSENT", "Absent", Tone.ABSENT)
+
+    def source_badge(tile_view: TileView[Any]) -> Badge:
+        return absent if tile_view.error_class == NOT_CONFIGURED else tile_view.badge
+
+    lifecycle_badge = source_badge(page.lifecycles.tile)
+    breaks_badge = source_badge(page.breaks.tile)
+    trade_badge = (
+        absent
+        if absent in (lifecycle_badge, breaks_badge)
+        else _worst_badge((lifecycle_badge, breaks_badge), "Trade state")
+    )
+    decision_badge = (
+        disposition_badge(Disposition.HOLD, f"{len(page.decisions)} open")
+        if page.decisions
+        else page.program.badge
+    )
+    programme_badges = [page.program.badge]
+    for repo in page.repos:
+        programme_badges.extend((repo.main_ci.badge, repo.scheduled.badge))
+    programme_badges.extend(
+        (page.aureon.snapshot.badge, page.aureon.drift.badge, page.aureon.pending_drop.badge)
+    )
+    return {
+        "now": RailItemView("now", "Now", page.banner.overall),
+        "trades": RailItemView(
+            "trades",
+            "Trades",
+            trade_badge,
+        ),
+        "exceptions": RailItemView("exceptions", "Exceptions", absent),
+        "cash": RailItemView("cash", "Cash & liquidity", source_badge(page.cash_leg.tile)),
+        "decisions": RailItemView(
+            "decisions",
+            "Decisions",
+            _worst_badge((page.escalations.tile.badge, decision_badge), "Decision state"),
+        ),
+        "controls": RailItemView("controls", "Controls & compliance", absent),
+        "risk": RailItemView("risk", "Risk limits", absent),
+        "agents": RailItemView("agents", "Agents", source_badge(page.agents.tile)),
+        "programme": RailItemView(
+            "programme", "Programme", _worst_badge(programme_badges, "Programme state")
+        ),
+        "blind": RailItemView(
+            "blind",
+            "Blind spots",
+            disposition_badge(Disposition.INDETERMINATE, str(len(page.blind_spots))),
+        ),
+    }
 
 
 def _pull_view(pull: PullState, now: datetime) -> PullView:
