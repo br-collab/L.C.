@@ -1,5 +1,13 @@
 # Legiones Cannenses (L.C.)
 
+> **Claim label: research.**
+> This repository is research code. It is not audited, not production-qualified, and
+> has never been used to move real money. Every surface that could reach a payment
+> rail refuses to by construction. The four labels this programme uses are *research*,
+> *experimental*, *validated* and *production-qualified*; all five repositories are at
+> the first, and this label changes only when evidence changes it.
+
+
 The synthetic middle layer of Project Cannae Legion — a deliberately bounded OMS/EMS (Order Management System / Execution Management System) and clearing layer that turns Aureon's approved intent into executions, allocations and settlement obligations that Atreides can accept.
 
 ```
