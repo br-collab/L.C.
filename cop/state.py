@@ -15,6 +15,8 @@ from cannae_kernel.disposition import Disposition
 
 from cop.agents import AgentsSnapshot
 from cop.aureon import DEPLOY_SHA_UNSET, AureonSnapshot
+from cop.breaks import BreakRecord
+from cop.cash_leg import CashLeg
 from cop.escalations import EscalationQueue
 from cop.github import Tag, WorkflowRun
 from cop.lifecycle import LifecycleRow
@@ -169,6 +171,16 @@ class EscalationState:
 
 
 @dataclass(frozen=True)
+class BreaksState:
+    records: Observation[tuple[BreakRecord, ...]]
+
+
+@dataclass(frozen=True)
+class CashLegState:
+    cash_leg: Observation[CashLeg]
+
+
+@dataclass(frozen=True)
 class Snapshot:
     started_at: datetime
     last_refresh_at: datetime | None
@@ -182,6 +194,8 @@ class Snapshot:
     agents: AgentsState
     lifecycles: LifecycleState
     escalations: EscalationState
+    breaks: BreaksState
+    cash_leg: CashLegState
 
 
 # Rules -----------------------------------------------------------------------------------

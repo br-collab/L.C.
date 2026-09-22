@@ -24,6 +24,8 @@ from cop.agents import AgentsSnapshot
 from cop.agents import AgentView as AgentRecord
 from cop.aureon import AureonSnapshot
 from cop.blindspots import BlindSpot, LayerStatus, SourceStatus, blind_spots
+from cop.breaks import BreakRecord
+from cop.cash_leg import CashLeg
 from cop.escalations import EscalationQueue
 from cop.lifecycle import CHECKPOINT_ORDER, LifecycleRow
 from cop.observation import NOT_CONFIGURED, Observation
@@ -37,6 +39,8 @@ from cop.settings import (
 )
 from cop.state import (
     AgentsState,
+    BreaksState,
+    CashLegState,
     CiResult,
     DriftResult,
     EscalationState,
@@ -445,6 +449,30 @@ class EscalationView:
 
 
 @dataclass(frozen=True)
+class BreakRowView:
+    object_id: str
+    badge: Badge
+    left: str
+    left_clock: str
+    right: str
+    right_clock: str
+
+
+@dataclass(frozen=True)
+class BreaksView:
+    tile: TileView[tuple[BreakRecord, ...]]
+    rows: tuple[BreakRowView, ...]
+
+
+@dataclass(frozen=True)
+class CashLegView:
+    tile: TileView[CashLeg]
+    scenario: str
+    boundary: str
+    fields: tuple[FieldView, ...]
+
+
+@dataclass(frozen=True)
 class BlindSpotView:
     kind: str
     name: str
@@ -492,6 +520,8 @@ class PageView:
     agents: AgentsView
     lifecycles: LifecycleView
     escalations: EscalationView
+    breaks: BreaksView
+    cash_leg: CashLegView
     blind_spots: tuple[BlindSpotView, ...]
     work_status_badges: dict[WorkStatus, Badge] = field(
         default_factory=lambda: dict(WORK_STATUS_BADGES)
@@ -648,6 +678,67 @@ def _escalation_view(state: EscalationState, now: datetime) -> EscalationView:
     )
 
 
+def _breaks_view(state: BreaksState, now: datetime) -> BreaksView:
+    tile_view = tile(
+        state.records,
+        now,
+        lambda rows: disposition_badge(
+            Disposition.HOLD if rows else Disposition.PASS,
+            f"{len(rows)} synthetic break(s)" if rows else "no synthetic breaks",
+        ),
+    )
+    records = tile_view.value if tile_view.current else None
+    return BreaksView(
+        tile=tile_view,
+        rows=tuple(
+            BreakRowView(
+                object_id=row.object_id,
+                badge=disposition_badge(row.disposition, "Layers disagree"),
+                left=f"{row.left_layer}: {row.left_claim}",
+                left_clock=f"{row.left_layer} clock · {fmt_time(row.left_stamped_at)}",
+                right=f"{row.right_layer}: {row.right_claim}",
+                right_clock=f"{row.right_layer} clock · {fmt_time(row.right_stamped_at)}",
+            )
+            for row in (records or ())
+        ),
+    )
+
+
+def _cash_leg_view(state: CashLegState, now: datetime) -> CashLegView:
+    tile_view = tile(
+        state.cash_leg,
+        now,
+        lambda leg: disposition_badge(
+            Disposition.HOLD if leg.funding_disposition == "will_queue" else Disposition.PASS,
+            leg.funding_disposition.replace("_", " "),
+        ),
+    )
+    leg = tile_view.value if tile_view.current else None
+    absent = unknown_badge("the endpoint does not publish this field")
+    if leg is None:
+        return CashLegView(tile_view, "—", "—", ())
+    return CashLegView(
+        tile=tile_view,
+        scenario=leg.scenario,
+        boundary=leg.boundary,
+        fields=(
+            FieldView("Funding disposition", leg.funding_headline, tile_view.badge),
+            FieldView("Rail", leg.rail, OBSERVED),
+            FieldView(
+                "Cutoff headroom", "absent — endpoint does not publish cutoff headroom", absent
+            ),
+            FieldView("Finality class", leg.finality_class, OBSERVED),
+            FieldView("Net debit cap headroom", leg.net_debit_cap_headroom, OBSERVED),
+            FieldView("Rail clock", "absent — endpoint does not publish a rail clock", absent),
+            FieldView(
+                "Trading-session clock",
+                "absent — endpoint does not publish a trading-session clock",
+                absent,
+            ),
+        ),
+    )
+
+
 def _blind_spots(snapshot: Snapshot, now: datetime) -> tuple[BlindSpotView, ...]:
     """Panel 12, computed from the snapshot rather than written down."""
 
@@ -664,6 +755,7 @@ def _blind_spots(snapshot: Snapshot, now: datetime) -> tuple[BlindSpotView, ...]
         status("Atreides activation snapshot", snapshot.agents.snapshot),
         status("C2 escalation queue", snapshot.escalations.queue),
         status("Lifecycle board", snapshot.lifecycles.rows),
+        status("Aureon cash-leg demonstration", snapshot.cash_leg.cash_leg),
     )
     layers = (
         LayerStatus("Aureon", True, "approved intent"),
@@ -927,6 +1019,8 @@ def build_page(snapshot: Snapshot, now: datetime) -> PageView:
     agents = _agents_view(snapshot.agents, now)
     lifecycles = _lifecycle_view(snapshot.lifecycles, now)
     escalations = _escalation_view(snapshot.escalations, now)
+    breaks = _breaks_view(snapshot.breaks, now)
+    cash_leg = _cash_leg_view(snapshot.cash_leg, now)
     overall, reasons = _overall(program, repos, aureon, agents)
     decisions: tuple[DecisionView, ...] = ()
     if program.current and program.value is not None:
@@ -961,6 +1055,8 @@ def build_page(snapshot: Snapshot, now: datetime) -> PageView:
         agents=agents,
         lifecycles=lifecycles,
         escalations=escalations,
+        breaks=breaks,
+        cash_leg=cash_leg,
         blind_spots=_blind_spots(snapshot, now),
     )
 

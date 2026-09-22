@@ -86,6 +86,15 @@ class BlindSpot:
 CONTRACT_BLIND_SPOTS: tuple[BlindSpot, ...] = (
     BlindSpot(
         kind=BlindSpotKind.CONTRACT_CANNOT_EXPRESS,
+        name="Break records across layers",
+        detail=(
+            "No domain publishes break records yet. Panel 10 is a labelled synthetic "
+            "demonstration, not evidence that a live cross-layer break was observed."
+        ),
+        remedy="change a contract / add a producer",
+    ),
+    BlindSpot(
+        kind=BlindSpotKind.CONTRACT_CANNOT_EXPRESS,
         name="Partial fills against one approved intent",
         detail=(
             "ExecutionEvent references one intent and one revision. A sequence of fills "

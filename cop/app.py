@@ -32,7 +32,16 @@ from werkzeug.wrappers.response import Response as BaseResponse
 from cop.agents import HttpxAgentsClient
 from cop.aureon import HttpxAureonClient
 from cop.auth import LoginLimiter, key_fingerprint, keys_match
-from cop.demo import DemoAgents, DemoAureon, DemoEscalations, DemoGitHub, DemoLifecycles
+from cop.cash_leg import HttpxCashLegClient
+from cop.demo import (
+    DemoAgents,
+    DemoAureon,
+    DemoBreaks,
+    DemoCashLeg,
+    DemoEscalations,
+    DemoGitHub,
+    DemoLifecycles,
+)
 from cop.escalations import HttpxEscalationClient
 from cop.github import HttpxGitHubClient
 from cop.refresher import Clock, Refresher, RefresherOptions, Sources, utc_now
@@ -60,6 +69,8 @@ PANELS: dict[str, str] = {
     "agents": "Atreides agents",
     "lifecycles": "Lifecycle board",
     "escalations": "Escalation queue",
+    "breaks": "Breaks across layers",
+    "cashleg": "Cash leg",
     "blindspots": "What this picture cannot see",
     "scheduled": "Nightly and scheduled checks",
     "decisions": "Open decisions",
@@ -102,6 +113,8 @@ def build_refresher(settings: Settings, clock: Clock = utc_now) -> Refresher:
                 agents=DemoAgents(clock),
                 lifecycles=DemoLifecycles(clock),
                 escalations=DemoEscalations(clock),
+                breaks=DemoBreaks(clock),
+                cash_leg=DemoCashLeg(),
             ),
             clock=clock,
             options=RefresherOptions(
@@ -131,6 +144,8 @@ def build_refresher(settings: Settings, clock: Clock = utc_now) -> Refresher:
                 if settings.escalations_url is not None
                 else None
             ),
+            breaks=DemoBreaks(clock),
+            cash_leg=HttpxCashLegClient(),
         ),
         clock=clock,
         options=RefresherOptions(

@@ -337,7 +337,49 @@
 </section>
 {% endif %}
 
-{# 8 · What this picture cannot see -------------------------------------------------- #}
+{# 8 · Breaks across layers ---------------------------------------------------------- #}
+{% if 'breaks' in selected %}
+{% set br = page.breaks %}
+<section class="panel" id="breaks" data-panel="breaks">
+  <h2>Breaks across layers {{ badge(br.tile.badge) }}</h2>
+  <p class="warning" role="alert"><strong>demo source: no break producer is published yet</strong></p>
+  <p class="lede">Two layers making different claims about the same object. These rows demonstrate the display contract only; they are not live break evidence.</p>
+  {{ provenance(br.tile) }}
+  {{ failure(br.tile) }}
+  {% for row in br.rows %}
+  <article class="card tile" data-break="{{ row.object_id }}">
+    <h3><code>{{ row.object_id }}</code> {{ badge(row.badge) }}</h3>
+    <dl class="fields">
+      <div class="field"><dt>First claim</dt><dd><span class="field-value">{{ row.left }}</span><p class="prov">{{ row.left_clock }}</p></dd></div>
+      <div class="field"><dt>Second claim</dt><dd><span class="field-value">{{ row.right }}</span><p class="prov">{{ row.right_clock }}</p></dd></div>
+    </dl>
+  </article>
+  {% endfor %}
+</section>
+{% endif %}
+
+{# 9 · Cash leg --------------------------------------------------------------------- #}
+{% if 'cashleg' in selected %}
+{% set cash = page.cash_leg %}
+<section class="panel" id="cashleg" data-panel="cashleg">
+  <h2>Cash leg {{ badge(cash.tile.badge) }}</h2>
+  <p class="lede">{{ cash.scenario }}</p>
+  <p class="muted">{{ cash.boundary }}</p>
+  {{ provenance(cash.tile) }}
+  {{ failure(cash.tile) }}
+  {% if cash.fields %}
+  <dl class="fields">
+    {% for field in cash.fields %}
+    <div class="field"><dt>{{ field.label }}</dt><dd><span class="field-value">{{ field.text }}</span> {{ badge(field.badge) }}</dd></div>
+    {% endfor %}
+  </dl>
+  {% else %}
+  <p class="value">No current cash-leg document was read. Nothing here is a claim about funding or settlement.</p>
+  {% endif %}
+</section>
+{% endif %}
+
+{# 10 · What this picture cannot see -------------------------------------------------- #}
 {% if 'blindspots' in selected %}
 <section class="panel" id="blindspots" data-panel="blindspots">
   <h2>What this picture cannot see</h2>

@@ -26,6 +26,8 @@ from cannae_kernel.provenance import Provenance
 
 from cop.agents import AgentsSnapshot, AgentView, RefusalView
 from cop.aureon import AureonSnapshot
+from cop.breaks import BreakRecord
+from cop.cash_leg import CashLeg
 from cop.escalations import EscalationPacket, EscalationQueue, Unknown
 from cop.github import Commit, Pull, PullDetail, PullHead, Tag, WorkflowRun
 from cop.lifecycle import Checkpoint, Layer, LayerReading, LifecycleRow, build_row
@@ -149,6 +151,22 @@ class DemoAureon:
             positions=12,
             pending=3 if first else 0,
             market_open=False,
+        )
+
+
+class DemoCashLeg:
+    """An invented cash leg for offline demo mode; production reads Aureon live."""
+
+    def cash_leg(self) -> CashLeg:
+        return CashLeg(
+            scenario="Demo USD 1,000,000 cash leg against a Treasury purchase",
+            boundary="Demo only: the entitled member submits",
+            funding_disposition="will_queue",
+            funding_headline="will_queue — demo shortfall 750000, clears at +5400s",
+            rail="fedwire",
+            finality_class="GROSS_FINAL",
+            decision="PROCEED",
+            net_debit_cap_headroom="49250000",
         )
 
 
@@ -435,5 +453,27 @@ class DemoEscalations:
                         ),
                     ),
                 ),
+            ),
+        )
+
+
+class DemoBreaks:
+    """The flat-position disagreement, until a domain publishes break records."""
+
+    def __init__(self, clock: Callable[[], datetime]) -> None:
+        self._clock = clock
+
+    def breaks(self) -> tuple[BreakRecord, ...]:
+        now = self._clock()
+        return (
+            BreakRecord(
+                object_id="position:UST-10Y:demo",
+                left_layer="Aureon",
+                left_claim="flat position",
+                left_stamped_at=now - timedelta(minutes=4),
+                right_layer="Atreides",
+                right_claim="USD 1,000,000 cash obligation remains",
+                right_stamped_at=now - timedelta(minutes=2),
+                disposition=Disposition.HOLD,
             ),
         )
