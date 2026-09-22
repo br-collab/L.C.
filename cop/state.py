@@ -18,6 +18,7 @@ from cop.aureon import DEPLOY_SHA_UNSET, AureonSnapshot
 from cop.breaks import BreakRecord
 from cop.cash_leg import CashLeg
 from cop.escalations import EscalationQueue
+from cop.exceptions import ExceptionRegister
 from cop.github import Tag, WorkflowRun
 from cop.lifecycle import LifecycleRow
 from cop.observation import (
@@ -181,6 +182,11 @@ class CashLegState:
 
 
 @dataclass(frozen=True)
+class ExceptionsState:
+    register: Observation[ExceptionRegister]
+
+
+@dataclass(frozen=True)
 class Snapshot:
     started_at: datetime
     last_refresh_at: datetime | None
@@ -196,6 +202,7 @@ class Snapshot:
     escalations: EscalationState
     breaks: BreaksState
     cash_leg: CashLegState
+    exceptions: ExceptionsState
 
 
 # Rules -----------------------------------------------------------------------------------

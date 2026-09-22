@@ -21,7 +21,10 @@ from collections.abc import Callable
 from datetime import datetime, timedelta
 
 from cannae_kernel.absence import AbsenceKind, Absent, Recorded
+from cannae_kernel.actor import ActorKind, ActorRef
+from cannae_kernel.clocks import EventTimes
 from cannae_kernel.disposition import Disposition
+from cannae_kernel.ids import ActorId
 from cannae_kernel.provenance import Provenance
 
 from cop.agents import AgentsSnapshot, AgentView, RefusalView
@@ -29,6 +32,13 @@ from cop.aureon import AureonSnapshot
 from cop.breaks import BreakRecord
 from cop.cash_leg import CashLeg
 from cop.escalations import EscalationPacket, EscalationQueue, Unknown
+from cop.exceptions import (
+    ExceptionKind,
+    ExceptionRecord,
+    ExceptionRegister,
+    ExceptionStatus,
+    TrailEntry,
+)
 from cop.github import Commit, Pull, PullDetail, PullHead, Tag, WorkflowRun
 from cop.lifecycle import Checkpoint, Layer, LayerReading, LifecycleRow, build_row
 from cop.observation import SourceTimeoutError
@@ -476,4 +486,180 @@ class DemoBreaks:
                 right_stamped_at=now - timedelta(minutes=2),
                 disposition=Disposition.HOLD,
             ),
+        )
+
+
+class DemoExceptions:
+    """Illustrative panel-13 records, admitted only under ``LEGATE_DEMO=1``."""
+
+    def __init__(self, clock: Callable[[], datetime]) -> None:
+        self._clock = clock
+
+    @staticmethod
+    def _actor(name: str) -> ActorRef:
+        actor_ids = {
+            "Ops desk": "act_01K5T7DT000000000000000001",
+            "Bill": "act_01K5T7DT000000000000000002",
+        }
+        return ActorRef(
+            actor_id=ActorId(actor_ids[name]),
+            actor_kind=ActorKind.HUMAN,
+            role=name,
+            entitlement_refs=("CAOM-001",),
+            authenticated=True,
+        )
+
+    def register(self) -> ExceptionRegister:
+        now = self._clock()
+        specs = (
+            (
+                "E-101",
+                ExceptionKind.BREAK,
+                "Break record mismatch",
+                "Record mismatch",
+                190,
+                240,
+                "Ops desk",
+                Disposition.HOLD,
+                ExceptionStatus.INVESTIGATING,
+                "Investigating",
+                False,
+            ),
+            (
+                "E-102",
+                ExceptionKind.ESCALATION,
+                "Escalation authority required",
+                "Authority gap",
+                42,
+                60,
+                "Bill",
+                Disposition.HOLD,
+                ExceptionStatus.OPEN,
+                "Awaiting decision",
+                False,
+            ),
+            (
+                "E-104",
+                ExceptionKind.HOLD,
+                "Hold has no message format",
+                "Message format",
+                26,
+                120,
+                None,
+                Disposition.HOLD,
+                ExceptionStatus.OPEN,
+                "No owner",
+                False,
+            ),
+            (
+                "E-105",
+                ExceptionKind.BREAK,
+                "Break CNS allocation",
+                "Allocation",
+                1560,
+                1440,
+                "Ops desk",
+                Disposition.BLOCK,
+                ExceptionStatus.OPEN,
+                "Past SLA",
+                False,
+            ),
+            (
+                "E-103",
+                ExceptionKind.HOLD,
+                "Hold funding timing",
+                "Funding timing",
+                18,
+                90,
+                "Ops desk",
+                Disposition.HOLD,
+                ExceptionStatus.OPEN,
+                "Monitoring",
+                False,
+            ),
+            (
+                "E-106",
+                ExceptionKind.OVERRIDE,
+                "Override manual release",
+                "Authority gap",
+                298,
+                480,
+                "Bill",
+                Disposition.HOLD,
+                ExceptionStatus.OPEN,
+                "Review due",
+                False,
+            ),
+            (
+                "E-099",
+                ExceptionKind.BREAK,
+                "Break rounding",
+                "Rounding",
+                2900,
+                1440,
+                "Ops desk",
+                Disposition.PASS,
+                ExceptionStatus.WRITTEN_OFF,
+                "Written off",
+                True,
+            ),
+        )
+        records = []
+        for (
+            exception_id,
+            kind,
+            title,
+            cause,
+            minutes,
+            sla,
+            owner,
+            disposition,
+            status,
+            status_text,
+            written_off,
+        ) in specs:
+            event_time = now - timedelta(minutes=minutes)
+            times = EventTimes(
+                event_time=event_time,
+                observation_time=event_time + timedelta(seconds=8),
+                processing_time=event_time + timedelta(seconds=15),
+            )
+            records.append(
+                ExceptionRecord(
+                    exception_id=exception_id,
+                    kind=kind,
+                    lifecycle_id=f"lif_demo_{exception_id[2:]}",
+                    title=title,
+                    root_cause=cause,
+                    disposition=disposition,
+                    status=status,
+                    status_text=status_text,
+                    first_layer="Atreides" if kind is ExceptionKind.BREAK else "Aureon",
+                    first_times=times,
+                    sla_target=timedelta(minutes=sla),
+                    owner=self._actor(owner) if owner else None,
+                    detail=f"Demo detail for {title.lower()}.",
+                    close_condition=(
+                        f"A published closure record resolves {exception_id} with evidence."
+                    ),
+                    authority_uri=f"https://example.invalid/dsor/{exception_id}",
+                    written_off=written_off,
+                    resolved_at=None,
+                    trail=(
+                        TrailEntry(
+                            layer="Atreides" if kind is ExceptionKind.BREAK else "Aureon",
+                            times=times,
+                            disposition=Disposition.BLOCK if owner is None else disposition,
+                            status_text=status_text,
+                            evidence=f"demo://exceptions/{exception_id}",
+                            provenance=Provenance.FACT_SYNTHETIC,
+                        ),
+                    ),
+                )
+            )
+        return ExceptionRegister(
+            taken_at=now,
+            synthetic=True,
+            records=tuple(records),
+            trend=(9, 8, 8, 7),
         )

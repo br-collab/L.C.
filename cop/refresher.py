@@ -28,6 +28,7 @@ from cop.aureon import AureonSnapshot, AureonSource
 from cop.breaks import BREAKS_SOURCE_LABEL, BreakRecord, BreakSource
 from cop.cash_leg import CashLeg, CashLegSource
 from cop.escalations import EscalationQueue, EscalationSource
+from cop.exceptions import EXCEPTIONS_SOURCE, ExceptionRegister, ExceptionSource
 from cop.lifecycle import LifecycleRow
 from cop.observation import (
     UNEXPECTED_ERROR,
@@ -63,6 +64,7 @@ from cop.state import (
     CiResult,
     DriftResult,
     EscalationState,
+    ExceptionsState,
     LifecycleState,
     MergeInfo,
     PendingDropResult,
@@ -122,6 +124,7 @@ class Sources:
     escalations: EscalationSource | None = None
     breaks: BreakSource | None = None
     cash_leg: CashLegSource | None = None
+    exceptions: ExceptionSource | None = None
 
 
 @dataclass(frozen=True)
@@ -151,6 +154,7 @@ class Refresher:
         self._escalations = sources.escalations
         self._breaks = sources.breaks
         self._cash_leg = sources.cash_leg
+        self._exceptions = sources.exceptions
         self._clock = clock
         self._program_path = options.program_path
         self._refresh_seconds = options.refresh_seconds
@@ -219,6 +223,11 @@ class Refresher:
             ),
             cash_leg=CashLegState(
                 cash_leg=pending("cash_leg", AUREON_CASH_LEG_URL, fact, STALE_AFTER)
+            ),
+            exceptions=ExceptionsState(
+                register=pending(
+                    "exceptions", EXCEPTIONS_SOURCE, Provenance.FACT_SYNTHETIC, STALE_AFTER
+                )
             ),
             aureon=AureonState(
                 snapshot=pending("aureon:snapshot", AUREON_SNAPSHOT_URL, fact, STALE_AFTER),
@@ -484,6 +493,25 @@ class Refresher:
             )
         )
 
+    def _refresh_exceptions(self) -> ExceptionsState:
+        if self._exceptions is None:
+            value: Observation[ExceptionRegister] = not_configured(
+                "exceptions",
+                EXCEPTIONS_SOURCE,
+                Provenance.FACT_SYNTHETIC,
+                "break, escalation, hold and override producers are not connected",
+                STALE_AFTER,
+            )
+            return ExceptionsState(register=value)
+        return ExceptionsState(
+            register=self._observe(
+                "exceptions",
+                EXCEPTIONS_SOURCE,
+                Provenance.FACT_SYNTHETIC,
+                self._exceptions.register,
+            )
+        )
+
     # Refresh -----------------------------------------------------------------------------
 
     def refresh_once(self) -> Snapshot:
@@ -505,6 +533,7 @@ class Refresher:
             escalations = self._refresh_escalations()
             breaks = self._refresh_breaks()
             cash_leg = self._refresh_cash_leg()
+            exceptions = self._refresh_exceptions()
             now = self._clock()
             if not self._source_failed:
                 self._last_clean_refresh_at = now
@@ -524,6 +553,7 @@ class Refresher:
                 escalations=escalations,
                 breaks=breaks,
                 cash_leg=cash_leg,
+                exceptions=exceptions,
             )
             with self._snapshot_lock:
                 self._snapshot = new
@@ -557,6 +587,7 @@ class Refresher:
                     escalations=old.escalations,
                     breaks=old.breaks,
                     cash_leg=old.cash_leg,
+                    exceptions=old.exceptions,
                 )
             if not program.ok:
                 log.error("Program file is invalid: %s", program.error_detail)
