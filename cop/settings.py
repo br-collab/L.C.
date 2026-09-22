@@ -33,6 +33,16 @@ AUREON_SNAPSHOT_URL = "https://aureon-production.up.railway.app/api/snapshot"
 # variable to set — the same rule the panel exists to enforce, applied to the
 # panel's own source.
 AGENTS_SNAPSHOT_SOURCE = "Atreides activation snapshot (ATREIDES_AGENTS_URL)"
+
+# COP-1 panel 8. In demo mode the rows are invented (cop/demo.py). There is no live
+# source yet: the middle layer is Wave 4, and two of the three layers a row needs
+# publish nothing a board could read. Unconfigured, the panel reports that rather
+# than rendering an empty table, which would read as "no lifecycles" instead of
+# "no source".
+LIFECYCLE_SOURCE = "Lifecycle board (synthetic; no live source until Wave 4)"
+LIFECYCLE_SOURCE_UNSET = (
+    "no lifecycle source is connected; the middle layer that would supply one is Wave 4"
+)
 AGENTS_SOURCE_UNSET = "ATREIDES_AGENTS_URL is not set, so no activation snapshot is being read"
 PROGRAM_FILE = Path(__file__).with_name("program.yaml")
 

@@ -20,8 +20,9 @@ from werkzeug.test import TestResponse
 from cop.agents import HttpxAgentsClient
 from cop.app import create_app
 from cop.aureon import HttpxAureonClient
+from cop.demo import DemoLifecycles
 from cop.github import HttpxGitHubClient
-from cop.refresher import Refresher, RefresherOptions
+from cop.refresher import Refresher, RefresherOptions, Sources
 from cop.settings import AUREON_SNAPSHOT_URL, PROGRAM_FILE, load_settings
 
 AGENTS_URL = "https://atreides.example.invalid/api/activation"
@@ -381,6 +382,7 @@ class Rig:
         token: str | None = "test-token",
         *,
         agents_configured: bool = True,
+        lifecycles_configured: bool = True,
     ) -> None:
         self.clock = FakeClock()
         self.github = FakeGitHub()
@@ -390,17 +392,20 @@ class Rig:
             token, http=httpx.Client(transport=httpx.MockTransport(self.github.handler))
         )
         self.refresher = Refresher(
-            github=self.github_client,
-            aureon=HttpxAureonClient(
-                http=httpx.Client(transport=httpx.MockTransport(self.aureon.handler))
-            ),
-            agents=(
-                HttpxAgentsClient(
-                    AGENTS_URL,
-                    http=httpx.Client(transport=httpx.MockTransport(self.atreides.handler)),
-                )
-                if agents_configured
-                else None
+            sources=Sources(
+                github=self.github_client,
+                aureon=HttpxAureonClient(
+                    http=httpx.Client(transport=httpx.MockTransport(self.aureon.handler))
+                ),
+                agents=(
+                    HttpxAgentsClient(
+                        AGENTS_URL,
+                        http=httpx.Client(transport=httpx.MockTransport(self.atreides.handler)),
+                    )
+                    if agents_configured
+                    else None
+                ),
+                lifecycles=DemoLifecycles(self.clock) if lifecycles_configured else None,
             ),
             clock=self.clock,
             options=RefresherOptions(
