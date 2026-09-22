@@ -39,6 +39,8 @@ AGENTS_SNAPSHOT_SOURCE = "Atreides activation snapshot (ATREIDES_AGENTS_URL)"
 # publish nothing a board could read. Unconfigured, the panel reports that rather
 # than rendering an empty table, which would read as "no lifecycles" instead of
 # "no source".
+ESCALATION_SOURCE = "C2 escalation queue (C2_ESCALATIONS_URL)"
+ESCALATION_SOURCE_UNSET = "C2_ESCALATIONS_URL is not set, so no escalation queue is being read"
 LIFECYCLE_SOURCE = "Lifecycle board (synthetic; no live source until Wave 4)"
 LIFECYCLE_SOURCE_UNSET = (
     "no lifecycle source is connected; the middle layer that would supply one is Wave 4"
@@ -83,6 +85,7 @@ ENV_GITHUB_TOKEN = "GITHUB_TOKEN"
 ENV_INSECURE_LOCAL = "LEGATE_INSECURE_LOCAL"
 ENV_DEMO = "LEGATE_DEMO"
 ENV_AGENTS_URL = "ATREIDES_AGENTS_URL"
+ENV_ESCALATIONS_URL = "C2_ESCALATIONS_URL"
 
 
 @dataclass(frozen=True)
@@ -93,6 +96,9 @@ class Settings:
     session_secret: str | None = field(repr=False)
     github_token: str | None = field(repr=False)
     agents_url: str | None
+    escalations_url: str | None
+    """Where the C2 escalation queue is published. ``None`` when unset, which
+    panel 12 reports by name rather than the page hiding."""
     """Where the Atreides activation snapshot is published. ``None`` when unset,
     which the Agents panel reports as INDETERMINATE rather than as a failure."""
     insecure_local: bool
@@ -130,6 +136,7 @@ def load_settings(env: Mapping[str, str]) -> Settings:
     session_secret = _non_empty(env, ENV_SESSION_SECRET)
     github_token = _non_empty(env, ENV_GITHUB_TOKEN)
     agents_url = _non_empty(env, ENV_AGENTS_URL)
+    escalations_url = _non_empty(env, ENV_ESCALATIONS_URL)
     insecure_local = _flag(env, ENV_INSECURE_LOCAL)
     demo = _flag(env, ENV_DEMO)
     production = any(name in env for name in PRODUCTION_MARKERS)
@@ -162,6 +169,7 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         session_secret=session_secret,
         github_token=github_token,
         agents_url=agents_url,
+        escalations_url=escalations_url,
         insecure_local=insecure_local,
         demo=demo,
         production=production,

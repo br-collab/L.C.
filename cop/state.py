@@ -15,6 +15,7 @@ from cannae_kernel.disposition import Disposition
 
 from cop.agents import AgentsSnapshot
 from cop.aureon import DEPLOY_SHA_UNSET, AureonSnapshot
+from cop.escalations import EscalationQueue
 from cop.github import Tag, WorkflowRun
 from cop.lifecycle import LifecycleRow
 from cop.observation import (
@@ -163,6 +164,11 @@ class LifecycleState:
 
 
 @dataclass(frozen=True)
+class EscalationState:
+    queue: Observation[EscalationQueue]
+
+
+@dataclass(frozen=True)
 class Snapshot:
     started_at: datetime
     last_refresh_at: datetime | None
@@ -175,6 +181,7 @@ class Snapshot:
     aureon: AureonState
     agents: AgentsState
     lifecycles: LifecycleState
+    escalations: EscalationState
 
 
 # Rules -----------------------------------------------------------------------------------

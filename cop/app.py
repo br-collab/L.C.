@@ -32,7 +32,8 @@ from werkzeug.wrappers.response import Response as BaseResponse
 from cop.agents import HttpxAgentsClient
 from cop.aureon import HttpxAureonClient
 from cop.auth import LoginLimiter, key_fingerprint, keys_match
-from cop.demo import DemoAgents, DemoAureon, DemoGitHub, DemoLifecycles
+from cop.demo import DemoAgents, DemoAureon, DemoEscalations, DemoGitHub, DemoLifecycles
+from cop.escalations import HttpxEscalationClient
 from cop.github import HttpxGitHubClient
 from cop.refresher import Clock, Refresher, RefresherOptions, Sources, utc_now
 from cop.settings import (
@@ -58,6 +59,8 @@ PANELS: dict[str, str] = {
     "aureon": "Live Aureon",
     "agents": "Atreides agents",
     "lifecycles": "Lifecycle board",
+    "escalations": "Escalation queue",
+    "blindspots": "What this picture cannot see",
     "scheduled": "Nightly and scheduled checks",
     "decisions": "Open decisions",
 }
@@ -98,6 +101,7 @@ def build_refresher(settings: Settings, clock: Clock = utc_now) -> Refresher:
                 aureon=DemoAureon(),
                 agents=DemoAgents(clock),
                 lifecycles=DemoLifecycles(clock),
+                escalations=DemoEscalations(clock),
             ),
             clock=clock,
             options=RefresherOptions(
@@ -119,6 +123,14 @@ def build_refresher(settings: Settings, clock: Clock = utc_now) -> Refresher:
             # No live lifecycle source exists: the middle layer is Wave 4. Outside
             # demo mode the board says so rather than rendering an empty table.
             lifecycles=None,
+            # None when C2_ESCALATIONS_URL is unset. Panel 12 names it as an
+            # unconnected source rather than the queue rendering empty, which
+            # would read as "nothing is waiting".
+            escalations=(
+                HttpxEscalationClient(settings.escalations_url)
+                if settings.escalations_url is not None
+                else None
+            ),
         ),
         clock=clock,
         options=RefresherOptions(

@@ -307,7 +307,55 @@
 </section>
 {% endif %}
 
-{# 7 · Scheduled checks -------------------------------------------------------------- #}
+{# 7 · Escalation queue -------------------------------------------------------------- #}
+{% if 'escalations' in selected %}
+{% set esc = page.escalations %}
+<section class="panel" id="escalations" data-panel="escalations">
+  <h2>Escalation queue {{ badge(esc.tile.badge) }}</h2>
+  <p class="lede">Thifur-C2 escalation packages awaiting human authority, <strong>oldest first</strong>. A queue sorted newest-first hides its own worst case: the one that has waited longest is the one most likely to have been forgotten.</p>
+  <p class="muted">This panel <strong>displays</strong>. There is no acknowledge, assign or dismiss control &mdash; acting on an escalation happens where authority lives. C2 does not interpret doctrine, so no packet carries a recommendation, a resolution, a severity or a recipient, and this page refuses a document that does.</p>
+  {{ provenance(esc.tile) }}
+  {{ failure(esc.tile) }}
+  {% if esc.rows %}
+  <div class="repo-grid">
+    {% for row in esc.rows %}
+    <article class="card tile" data-escalation="{{ row.packet_id }}">
+      <h3><code>{{ row.packet_id }}</code> {{ badge(row.badge) }}</h3>
+      <p class="value">{{ row.summary }}</p>
+      <dl class="fields">
+        <div class="field"><dt>Waiting</dt><dd><span class="field-value">{{ row.waiting }}</span> <span class="muted">(raised {{ row.raised }})</span></dd></div>
+        <div class="field"><dt>Lifecycle</dt><dd><span class="field-value"><code>{{ row.lifecycle_id }}</code></span></dd></div>
+      </dl>
+      {% if row.findings %}<p class="muted">Findings:</p><ul class="runs">{% for f in row.findings %}<li>{{ f }}</li>{% endfor %}</ul>{% endif %}
+      {% if row.unknowns %}<p class="muted">Not known:</p><ul class="runs">{% for u in row.unknowns %}<li>{{ u }}</li>{% endfor %}</ul>{% endif %}
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="value">No escalations are shown. If the badge above reads INDETERMINATE this is a source that did not answer, <strong>not</strong> an empty queue &mdash; and the two are different facts.</p>
+  {% endif %}
+</section>
+{% endif %}
+
+{# 8 · What this picture cannot see -------------------------------------------------- #}
+{% if 'blindspots' in selected %}
+<section class="panel" id="blindspots" data-panel="blindspots">
+  <h2>What this picture cannot see</h2>
+  <p class="lede">Every other panel answers <em>what is happening</em>. This one answers <em>what would not show up here if it were happening</em>, and it is the only panel whose absence would make the others misleading.</p>
+  <p class="warning" role="alert"><strong>This panel is mandatory and is never empty.</strong> It is computed from the snapshot rather than maintained by hand, because a written list is accurate on the day somebody writes it and silently wrong afterwards. An operating picture with no statement of its own limits invites the reading that its panels are the whole picture. They are not.</p>
+  <div class="repo-grid">
+    {% for spot in page.blind_spots %}
+    <article class="card tile" data-blindspot="{{ spot.name }}">
+      <h3>{{ spot.name }} {{ badge(spot.badge) }}</h3>
+      <p class="value">{{ spot.detail }}</p>
+      <p class="prov"><strong>What would change it:</strong> {{ spot.remedy }}</p>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{# 9 · Scheduled checks -------------------------------------------------------------- #}
 {% if 'scheduled' in selected %}
 <section class="panel" id="scheduled" data-panel="scheduled">
   <h2>Nightly and scheduled checks</h2>
@@ -336,7 +384,7 @@
 </section>
 {% endif %}
 
-{# 8 · Open decisions ---------------------------------------------------------------- #}
+{# 10 · Open decisions --------------------------------------------------------------- #}
 {% if 'decisions' in selected %}
 {% set t = page.program %}
 <section class="panel" id="decisions" data-panel="decisions">

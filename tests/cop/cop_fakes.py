@@ -20,7 +20,7 @@ from werkzeug.test import TestResponse
 from cop.agents import HttpxAgentsClient
 from cop.app import create_app
 from cop.aureon import HttpxAureonClient
-from cop.demo import DemoLifecycles
+from cop.demo import DemoEscalations, DemoLifecycles
 from cop.github import HttpxGitHubClient
 from cop.refresher import Refresher, RefresherOptions, Sources
 from cop.settings import AUREON_SNAPSHOT_URL, PROGRAM_FILE, load_settings
@@ -383,6 +383,7 @@ class Rig:
         *,
         agents_configured: bool = True,
         lifecycles_configured: bool = True,
+        escalations_configured: bool = True,
     ) -> None:
         self.clock = FakeClock()
         self.github = FakeGitHub()
@@ -406,6 +407,7 @@ class Rig:
                     else None
                 ),
                 lifecycles=DemoLifecycles(self.clock) if lifecycles_configured else None,
+                escalations=(DemoEscalations(self.clock) if escalations_configured else None),
             ),
             clock=self.clock,
             options=RefresherOptions(

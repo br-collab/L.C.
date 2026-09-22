@@ -23,6 +23,8 @@ from cannae_kernel.provenance import Provenance
 from cop.agents import AgentsSnapshot
 from cop.agents import AgentView as AgentRecord
 from cop.aureon import AureonSnapshot
+from cop.blindspots import BlindSpot, LayerStatus, SourceStatus, blind_spots
+from cop.escalations import EscalationQueue
 from cop.lifecycle import CHECKPOINT_ORDER, LifecycleRow
 from cop.observation import NOT_CONFIGURED, Observation
 from cop.program import Program, WorkStatus
@@ -37,6 +39,7 @@ from cop.state import (
     AgentsState,
     CiResult,
     DriftResult,
+    EscalationState,
     LifecycleState,
     MergeInfo,
     PendingDropResult,
@@ -422,6 +425,35 @@ class LifecycleView:
 
 
 @dataclass(frozen=True)
+class EscalationRowView:
+    packet_id: str
+    lifecycle_id: str
+    trigger: str
+    badge: Badge
+    summary: str
+    raised: str
+    waiting: str
+    """How long it has been waiting. The oldest is the one most likely forgotten."""
+    findings: tuple[str, ...]
+    unknowns: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class EscalationView:
+    tile: TileView[EscalationQueue]
+    rows: tuple[EscalationRowView, ...]
+
+
+@dataclass(frozen=True)
+class BlindSpotView:
+    kind: str
+    name: str
+    detail: str
+    remedy: str
+    badge: Badge
+
+
+@dataclass(frozen=True)
 class Reason:
     badge: Badge
     text: str
@@ -459,6 +491,8 @@ class PageView:
     aureon: AureonView
     agents: AgentsView
     lifecycles: LifecycleView
+    escalations: EscalationView
+    blind_spots: tuple[BlindSpotView, ...]
     work_status_badges: dict[WorkStatus, Badge] = field(
         default_factory=lambda: dict(WORK_STATUS_BADGES)
     )
@@ -556,6 +590,91 @@ def _agent_row(agent: AgentRecord) -> AgentRowView:
         recommendations=agent.recommendations,
         refusals=agent.refusals,
     )
+
+
+_BLIND_TONES = {
+    "SOURCE_NOT_CONNECTED": Tone.UNKNOWN,
+    "SOURCE_NOT_ANSWERING": Tone.ATTENTION,
+    "LAYER_NOT_BUILT": Tone.NEUTRAL,
+    "CONTRACT_CANNOT_EXPRESS": Tone.NEUTRAL,
+}
+
+
+def _blind_view(spot: BlindSpot) -> BlindSpotView:
+    return BlindSpotView(
+        kind=spot.kind.value,
+        name=spot.name,
+        detail=spot.detail,
+        remedy=spot.remedy,
+        badge=Badge(
+            spot.kind.value,
+            spot.kind.value.replace("_", " ").title(),
+            _BLIND_TONES[spot.kind.value],
+        ),
+    )
+
+
+def _escalation_view(state: EscalationState, now: datetime) -> EscalationView:
+    """The queue, oldest first. Rows only from a current source."""
+    tile_view = tile(
+        state.queue,
+        now,
+        lambda q: disposition_badge(
+            Disposition.HOLD if q.packets else Disposition.PASS,
+            f"{len(q.packets)} awaiting human authority"
+            if q.packets
+            else "nothing awaiting human authority",
+        ),
+    )
+    queue = tile_view.value if tile_view.current else None
+    if queue is None:
+        return EscalationView(tile=tile_view, rows=())
+    return EscalationView(
+        tile=tile_view,
+        rows=tuple(
+            EscalationRowView(
+                packet_id=p.packet_id,
+                lifecycle_id=p.lifecycle_id,
+                trigger=p.trigger,
+                badge=disposition_badge(p.disposition, p.trigger.replace("_", " ").title()),
+                summary=p.summary,
+                raised=fmt_time(p.raised_at),
+                waiting=fmt_age(now - p.raised_at),
+                findings=p.findings,
+                unknowns=tuple(f"{u.what} — {u.why}" for u in p.unknowns),
+            )
+            for p in queue.oldest_first
+        ),
+    )
+
+
+def _blind_spots(snapshot: Snapshot, now: datetime) -> tuple[BlindSpotView, ...]:
+    """Panel 12, computed from the snapshot rather than written down."""
+
+    def status(name: str, obs: Observation[Any]) -> SourceStatus:
+        return SourceStatus(
+            name=name,
+            configured=obs.error_class != NOT_CONFIGURED,
+            current=obs.is_current(now),
+            error=obs.error_detail,
+        )
+
+    sources = (
+        status("Aureon snapshot", snapshot.aureon.snapshot),
+        status("Atreides activation snapshot", snapshot.agents.snapshot),
+        status("C2 escalation queue", snapshot.escalations.queue),
+        status("Lifecycle board", snapshot.lifecycles.rows),
+    )
+    layers = (
+        LayerStatus("Aureon", True, "approved intent"),
+        LayerStatus(
+            "Legiones Cannenses",
+            False,
+            "execution, clearing and settlement-obligation formation",
+        ),
+        LayerStatus("Atreides", True, "acceptance, settlement and finality"),
+    )
+    return tuple(_blind_view(s) for s in blind_spots(sources, layers))
 
 
 _ROW_LABELS = {
@@ -807,6 +926,7 @@ def build_page(snapshot: Snapshot, now: datetime) -> PageView:
     )
     agents = _agents_view(snapshot.agents, now)
     lifecycles = _lifecycle_view(snapshot.lifecycles, now)
+    escalations = _escalation_view(snapshot.escalations, now)
     overall, reasons = _overall(program, repos, aureon, agents)
     decisions: tuple[DecisionView, ...] = ()
     if program.current and program.value is not None:
@@ -840,6 +960,8 @@ def build_page(snapshot: Snapshot, now: datetime) -> PageView:
         aureon=aureon,
         agents=agents,
         lifecycles=lifecycles,
+        escalations=escalations,
+        blind_spots=_blind_spots(snapshot, now),
     )
 
 

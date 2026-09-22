@@ -25,6 +25,7 @@ from cannae_kernel.provenance import Provenance
 from cop import github as gh
 from cop.agents import AgentsSnapshot, AgentsSource
 from cop.aureon import AureonSnapshot, AureonSource
+from cop.escalations import EscalationQueue, EscalationSource
 from cop.lifecycle import LifecycleRow
 from cop.observation import (
     UNEXPECTED_ERROR,
@@ -40,6 +41,8 @@ from cop.settings import (
     AGENTS_SOURCE_UNSET,
     AUREON_REPOSITORY,
     AUREON_SNAPSHOT_URL,
+    ESCALATION_SOURCE,
+    ESCALATION_SOURCE_UNSET,
     GITHUB_OWNER,
     GITHUB_WEB_URL,
     LIFECYCLE_SOURCE,
@@ -53,6 +56,7 @@ from cop.state import (
     AureonState,
     CiResult,
     DriftResult,
+    EscalationState,
     LifecycleState,
     MergeInfo,
     PendingDropResult,
@@ -109,6 +113,7 @@ class Sources:
     aureon: AureonSource
     agents: AgentsSource | None = None
     lifecycles: LifecycleSource | None = None
+    escalations: EscalationSource | None = None
 
 
 @dataclass(frozen=True)
@@ -135,6 +140,7 @@ class Refresher:
         # ``None`` means no lifecycle source is connected, which is the state
         # outside demo mode until Wave 4 builds the layer that would supply one.
         self._lifecycles = sources.lifecycles
+        self._escalations = sources.escalations
         self._clock = clock
         self._program_path = options.program_path
         self._refresh_seconds = options.refresh_seconds
@@ -192,6 +198,9 @@ class Refresher:
             ),
             lifecycles=LifecycleState(
                 rows=pending("lifecycles", LIFECYCLE_SOURCE, fact, STALE_AFTER)
+            ),
+            escalations=EscalationState(
+                queue=pending("escalations", ESCALATION_SOURCE, fact, STALE_AFTER)
             ),
             aureon=AureonState(
                 snapshot=pending("aureon:snapshot", AUREON_SNAPSHOT_URL, fact, STALE_AFTER),
@@ -402,6 +411,26 @@ class Refresher:
             )
         )
 
+    def _refresh_escalations(self) -> EscalationState:
+        """Read the escalation queue, or record that nothing publishes one."""
+        if self._escalations is None:
+            queue: Observation[EscalationQueue] = not_configured(
+                "escalations",
+                ESCALATION_SOURCE,
+                Provenance.FACT_EXTERNAL,
+                ESCALATION_SOURCE_UNSET,
+                STALE_AFTER,
+            )
+            return EscalationState(queue=queue)
+        return EscalationState(
+            queue=self._observe(
+                "escalations",
+                ESCALATION_SOURCE,
+                Provenance.FACT_EXTERNAL,
+                self._escalations.queue,
+            )
+        )
+
     # Refresh -----------------------------------------------------------------------------
 
     def refresh_once(self) -> Snapshot:
@@ -420,6 +449,7 @@ class Refresher:
             aureon = self._refresh_aureon(aureon_repo)
             agents = self._refresh_agents()
             lifecycles = self._refresh_lifecycles()
+            escalations = self._refresh_escalations()
             now = self._clock()
             if not self._source_failed:
                 self._last_clean_refresh_at = now
@@ -436,6 +466,7 @@ class Refresher:
                 aureon=aureon,
                 agents=agents,
                 lifecycles=lifecycles,
+                escalations=escalations,
             )
             with self._snapshot_lock:
                 self._snapshot = new
@@ -466,6 +497,7 @@ class Refresher:
                     aureon=old.aureon,
                     agents=old.agents,
                     lifecycles=old.lifecycles,
+                    escalations=old.escalations,
                 )
             if not program.ok:
                 log.error("Program file is invalid: %s", program.error_detail)
