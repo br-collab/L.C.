@@ -11,9 +11,8 @@ shows; it holds no authority. So `lc` never imports `cop`, and `cop` never impor
 the harness, the emulators or a domain package. `cop` may import `cannae_kernel` and its
 own web and parsing dependencies, and nothing else outside the standard library.
 
-`emulators` does not exist yet, so that check passes trivially today. It exists so the
-rule is enforced from the first commit that adds one, rather than written down and
-discovered broken later.
+`emulators` exists from Wave 4 WP-3. Its check is live: an emulator cannot import
+`lc` or any candidate model, and `lc` still cannot import the emulator.
 
 `harness_c2` (Thifur-C2, the top-level command and control harness) arrived with the
 Phase B lineage assembler, so its checks are live. It has a rule of its own and in the
@@ -62,6 +61,9 @@ HARNESS_DIR = REPO_ROOT / "harness_c2"
 H_FORBIDDEN = ("lc", "cop", "harness_c2", "emulators", "aureon", "atreides")
 H_ALLOWED_THIRD_PARTY = frozenset({"cannae_kernel", "pydantic"})
 H_DIR = REPO_ROOT / "thifur_h"
+EMULATORS_DIR = REPO_ROOT / "emulators"
+EMULATORS_FORBIDDEN = ("lc", "cop", "harness_c2", "thifur_h", "aureon", "atreides")
+EMULATORS_ALLOWED_THIRD_PARTY = frozenset({"cannae_kernel", "pydantic"})
 COP_ALLOWED_THIRD_PARTY = frozenset(
     {"cannae_kernel", "flask", "werkzeug", "httpx", "yaml", "pydantic"}
 )
@@ -116,6 +118,25 @@ def test_lc_source_names_no_forbidden_package() -> None:
             if _is_forbidden(name)
         ]
     assert offenders == []
+
+
+def test_emulator_source_imports_only_kernel_and_its_own_code() -> None:
+    assert EMULATORS_DIR.is_dir()
+    forbidden, unexpected = [], []
+    for path in sorted(EMULATORS_DIR.rglob("*.py")):
+        for line, name in _absolute_imports(path):
+            root = name.split(".", 1)[0]
+            where = f"{path.relative_to(REPO_ROOT)}:{line} {name}"
+            if root in EMULATORS_FORBIDDEN:
+                forbidden.append(where)
+            elif (
+                root != "emulators"
+                and root not in sys.stdlib_module_names
+                and root not in EMULATORS_ALLOWED_THIRD_PARTY
+            ):
+                unexpected.append(where)
+    assert forbidden == []
+    assert unexpected == []
 
 
 def test_walk_covers_every_lc_module() -> None:
