@@ -5,8 +5,9 @@
 # every push rather than remembered.
 #
 # Three jobs, and the split is the point: each proves what a package actually needs.
-# - `check` installs only the `dev` extra and checks `lc`. It proves `lc` still needs no
-#   runtime dependency at all. The COP-0 tests (tests/cop) and the harness tests
+# - `check` installs the middle layer and the `dev` extra and checks `lc`. Its only
+#   runtime dependencies at M2 are Pydantic and the frozen kernel contracts. The COP-0 tests
+#   (tests/cop) and the harness tests
 #   (tests/harness_c2) both need dependencies, so they are left to the jobs below.
 # - `harness` installs only `harness` and `dev`: the frozen contracts and pydantic. It
 #   proves Thifur-C2 needs the kernel and nothing else — no web stack, no HTTP client,
@@ -57,8 +58,8 @@ jobs:
       # install.
       #
       # `uv lock --check` resolves metadata and installs nothing, so it does not
-      # weaken what this job exists to prove: that `lc` needs no runtime
-      # dependency. It runs first so a drifted lock fails in seconds.
+      # weaken what this job exists to prove: that `lc` has only its declared
+      # dependencies. It runs first so a drifted lock fails in seconds.
       - name: Lock matches pyproject
         run: uv lock --check
 
