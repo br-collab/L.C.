@@ -127,6 +127,48 @@ above. If the register is `Absent` or unreadable, every health value is `Absent`
 While CAOM-001 applies, every page displays exactly: **“Single operator: no separation of
 duties.”** This is policy text, not a disposition and not evidence that a second reviewer exists.
 
+## Rendered-panel reconciliation
+
+This register closes the display-to-source audit for the fields outside the exception and
+governance/risk registers above. “Absent” is a real source result: it means that production has
+no qualifying producer, not that the value is zero or passing.
+
+| Panel and rendered field or badge | Type or rule | Real source, or Absent |
+|---|---|---|
+| **Banner — overall program state badge and reasons** | Worst current kernel `Disposition` across main CI, scheduled checks, Aureon snapshot/drift/pending-drop evidence, blocked work, agent activation and source freshness | `program`, `github`, `aureon-snapshot`, `agents`; `INDETERMINATE` when any required input is unreadable |
+| **Banner — last clean refresh, last attempt, page rendered, refresh interval** | COP observation datetimes and configured interval; never domain `EventTimes` | Legate refresher and settings; last clean refresh is `Absent` until one clean refresh completes |
+| **Now — needs you, changed, stale clocks/feeds** | Overall reasons; exception-source badge; source freshness | Same inputs as Banner, plus `breaks`, `c2-escalations`, `holds`, `dsor`; change history is `Absent` without a producer |
+| **Wave board — wave/work identifier, name, status, packages, evidence, next action and owner** | Versioned programme records; status badge uses the declared work status, not a domain disposition | `program` (`cop/program.yaml`) |
+| **Repositories — main commit** | Recorded Git commit Secure Hash Algorithm identifier | `github`; `Absent` when unreadable |
+| **Repositories — CI on main and workflow rows** | Worst recorded workflow `Disposition`, workflow name, status/conclusion and link | `github`; `INDETERMINATE` when checks cannot be read |
+| **Repositories — latest tag** | Recorded tag name or recorded no-tags result | `github`; `Absent` when unreadable |
+| **Repositories — pull request number/title/draft, opened time, age, checks and merge state** | GitHub pull-request record; age derives from its GitHub creation clock | `github`; `Absent` when unreadable, never an invented empty list |
+| **Live Aureon — snapshot badge** | Snapshot freshness and shape disposition | `aureon-snapshot`; `INDETERMINATE` when stale or malformed |
+| **Live Aureon — deployed commit, stack, positions, pending decisions, market open** | Recorded snapshot fields; each field has its own observed/absent badge | `aureon-snapshot`; any missing field is `Absent` and is not inferred |
+| **Live Aureon — deploy drift badge and compared commits** | Policy result comparing recorded deployed commit with GitHub `main` | `aureon-snapshot`, `github`; `Absent` if either commit is unavailable |
+| **Live Aureon — pending-drop badge, comparison count, before/after pending and commits, detection time** | Process-local AUR-I-17 observation; detection time is explicitly a COP clock | `aureon-snapshot` observations held by Legate; `Absent` before comparable observations exist |
+| **Agents — aggregate badge, phase, synthetic marker, halt state and activation tick** | `AgentsSnapshot` fields and disposition; tick is producer freshness, not a settlement clock | `agents`; `Absent` when the endpoint is not configured |
+| **Agents — identifier, tier, role, output, observation time, claim kind, handoff basis/refusal and counts** | Recorded activation-agent fields; optional handoff/refusal values are `Recorded \| Absent` | `agents`; missing optional evidence stays hatched `Absent` |
+| **Lifecycle — board/row badge, lifecycle identifier and unknown count** | Worst checkpoint `Disposition`; kernel lifecycle identifier | `lifecycle`; production is `Absent` until a document is published |
+| **Lifecycle — checkpoint, layer, detail, disposition, provenance and stamped time** | The five frozen envelopes plus settled state; source-layer `EventTimes` only | `lifecycle`; unbuilt L.C. checkpoints are `Absent`, never PASS |
+| **Escalations — queue/packet badge, packet and lifecycle identifiers, trigger, summary, raised/waiting, findings and unknowns** | Published `EscalationPacket`; waiting derives from packet `raised_at` | `c2-escalations`; production is `Absent` when unconfigured |
+| **Breaks — panel/row badge, object, left/right claims and layer clocks** | Cross-layer break record with producer dispositions and producer timestamps | `breaks`; no production producer, demo only |
+| **Cash leg — panel badge, scenario, boundary and funding disposition** | Demonstration document disposition and text | `cash-leg`; admitted only in `LEGATE_DEMO=1`, otherwise `Absent` |
+| **Cash leg — rail, finality class and net-debit-cap headroom** | Recorded demonstration-document fields | `cash-leg`; demo only, otherwise `Absent` |
+| **Cash leg — cutoff headroom, rail clock and trading-session clock** | `Recorded \| Absent`; no wall-clock calculation | `cutoffs` and future cash-leg producer; currently `Absent` even in the demo response because the endpoint does not publish them |
+| **Blind spots — kind badge, name, detail and remedy** | Computed source/layer/contract limitation; count cannot be zero | Every registered source plus maintained layer/contract gaps |
+| **Scheduled checks — repository, workflow, run badge and run time** | Latest scheduled GitHub Actions run and its GitHub clock | `github`; `Absent` when unreadable |
+| **Open decisions — panel badge, identifier, title, owner, opened date and age** | Versioned programme decision; age derives from its recorded opened date | `program`; an unreadable programme file is `Absent`, not “no decisions” |
+
+### Reconciliation result
+
+- **Rendered panel without a dictionary row:** none after this reconciliation.
+- **Dictionary row without a rendered panel:** none. Source-register entries such as `holds`,
+  `dsor`, `controls`, `limits`, `cutoffs`, and `ofr` feed rendered composite panels or Blind
+  spots; they are not promised as standalone panels.
+- **Known absent producers:** lifecycle, breaks, holds, DSOR, controls, limits, cutoffs, the
+  production cash leg, and a COP OFR feed remain Absent as stated in the source register.
+
 ## Governance, controls and risk panels
 
 These panels admit demo records only under `LEGATE_DEMO=1`. Production remains `Absent` until

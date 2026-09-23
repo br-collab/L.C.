@@ -28,7 +28,7 @@ dev = [
 # fail there rather than pass because `cop` happened to bring it along.
 harness = [
     "pydantic>=2.6,<3.0",
-    "cannae-kernel @ git+https://github.com/br-collab/cannae-kernel.git@v1.1.0",
+    "cannae-kernel @ git+https://github.com/br-collab/cannae-kernel.git@v1.1.1",
 ]
 # Thifur-H, the adaptive intelligence class (thifur_h/). Phase C.
 #
@@ -42,7 +42,7 @@ harness = [
 # how a reader will know conditions B, C and D arrived.
 h = [
     "pydantic>=2.6,<3.0",
-    "cannae-kernel @ git+https://github.com/br-collab/cannae-kernel.git@v1.1.0",
+    "cannae-kernel @ git+https://github.com/br-collab/cannae-kernel.git@v1.1.1",
 ]
 # COP-0 (Common Operating Picture) program picture (cop/). Not needed by `lc`, which keeps
 # zero runtime dependencies. Install with: pip install -e ".[cop,dev]"
@@ -52,7 +52,7 @@ cop = [
     "httpx>=0.27,<1.0",
     "PyYAML>=6.0",
     "pydantic>=2.6,<3.0",
-    "cannae-kernel @ git+https://github.com/br-collab/cannae-kernel.git@v1.1.0",
+    "cannae-kernel @ git+https://github.com/br-collab/cannae-kernel.git@v1.1.1",
 ]
 
 [build-system]

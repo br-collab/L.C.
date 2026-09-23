@@ -16,16 +16,14 @@ Aureon (pre-trade, approved intent)  →  L.C. (orders, fills, allocations, clea
 
 ## Status
 
-The `lc` order, fill, allocation, clearing and netting layer remains
-pre-implementation; its package currently exposes only `__version__ = "0.0.0"`.
-The prerequisites that originally gated it now exist: the joint upgrade map was
-written and the first cross-domain contracts were frozen in `cannae-kernel`.
-
-This repository is not otherwise empty. It also contains three bounded supporting
-surfaces: the deployed read-only COP, the deterministic C2 lineage/handoff harness,
-and the Thifur-H condition-A recommendation baseline and evaluation harness. None of
-those surfaces is an implementation of the L.C. middle layer, and none submits an
-order or settlement instruction.
+This research repository has **353 passing tests** and four defined public surfaces: the `lc`
+package version marker, the deployed read-only Common Operating Picture (COP), the deterministic
+Command and Control (C2) lineage/handoff harness, and the Thifur-H condition-A recommendation and
+evaluation harness. The joint upgrade map exists and all five first cross-domain contracts are
+frozen in `cannae-kernel`; they are not pending. The order, fill, allocation, clearing, and netting
+middle layer itself is still not built, `lc` still exposes only `__version__ = "0.0.0"`, and no
+surface submits an order or settlement instruction. Whole-repository line coverage measures
+**98%** across `lc`, `cop`, `harness_c2`, and `thifur_h`.
 
 ## Public API
 
