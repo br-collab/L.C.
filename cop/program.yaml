@@ -10,7 +10,7 @@
 # Owners: Bill, Claude Code, Cowork.
 
 schema_version: 1
-as_of: 2026-09-17
+as_of: 2026-09-23
 
 waves:
   - number: 0
@@ -51,36 +51,35 @@ waves:
   - number: 2
     id: W2
     name: Contract-critical fixes
-    status: IN_PROGRESS
-    evidence: [W2A-report, W2B-report]
-    next_action: {action: 'Review and merge the W2A pull requests in order, Project-Atreides#12 to Project-Atreides#17', owner: Bill}
+    status: DONE
+    evidence: [W2A-report, W2B-report, W2B7-AMD1-report]
     packages:
-      - {id: W2A-1, name: Atreides T1 integrity, status: IN_PROGRESS, evidence: [Project-Atreides#12]}
+      - {id: W2A-1, name: Atreides T1 integrity, status: DONE, evidence: [Project-Atreides#12]}
       - {id: W2A-K, name: Kernel CHANGELOG heading for 0.1.0, status: DONE, evidence: [cannae-kernel#1]}
-      - {id: W2A-2, name: Atreides T2 pure validation, status: IN_PROGRESS, evidence: [Project-Atreides#13]}
-      - {id: W2A-3, name: Atreides T4 gate binding and halt, status: IN_PROGRESS, evidence: [Project-Atreides#14]}
-      - {id: W2A-4, name: Atreides T3 acceptance draft, status: IN_PROGRESS, evidence: [Project-Atreides#15]}
-      - {id: W2A-5, name: Atreides T7 minimal journal, status: IN_PROGRESS, evidence: [Project-Atreides#16]}
-      - {id: W2A-6, name: Atreides stress regressions, status: IN_PROGRESS, evidence: [Project-Atreides#17]}
-      - {id: W2B-1, name: Aureon kernel pin and test truth, status: NOT_STARTED}
-      - {id: W2B-2, name: Aureon A1 authority authentication, status: NOT_STARTED}
-      - {id: W2B-3, name: Aureon A3 and A9 binding policy, status: NOT_STARTED}
-      - {id: W2B-4, name: Aureon A4 approval without side effects, status: NOT_STARTED}
-      - {id: W2B-5, name: Aureon A2 and A7 envelope draft, status: NOT_STARTED}
-      - {id: W2B-6, name: Aureon runtime SR 26-2 strings, status: NOT_STARTED}
-      - {id: W2B-7, name: Aureon pins Atreides v0.4.0, status: NOT_STARTED}
+      - {id: W2A-2, name: Atreides T2 pure validation, status: DONE, evidence: [Project-Atreides#13]}
+      - {id: W2A-3, name: Atreides T4 gate binding and halt, status: DONE, evidence: [Project-Atreides#14]}
+      - {id: W2A-4, name: Atreides T3 acceptance draft, status: DONE, evidence: [Project-Atreides#15]}
+      - {id: W2A-5, name: Atreides T7 minimal journal, status: DONE, evidence: [Project-Atreides#16]}
+      - {id: W2A-6, name: Atreides stress regressions, status: DONE, evidence: [Project-Atreides#17]}
+      - {id: W2B-1, name: Aureon kernel pin and test truth, status: DONE, evidence: [aureon#20]}
+      - {id: W2B-2, name: Aureon A1 authority authentication, status: DONE, evidence: [aureon#21]}
+      - {id: W2B-3, name: Aureon A3 and A9 binding policy, status: DONE, evidence: [aureon#22]}
+      - {id: W2B-4, name: Aureon A4 approval without side effects, status: DONE, evidence: [aureon#23]}
+      - {id: W2B-5, name: Aureon A2 and A7 envelope draft, status: DONE, evidence: [aureon#24]}
+      - {id: W2B-6, name: Aureon runtime SR 26-2 strings, status: DONE, evidence: [aureon#25]}
+      - {id: W2B-7, name: Aureon pins Atreides v0.4.0, status: DONE, evidence: [aureon#26]}
 
   - number: 3
     id: W3
     name: Contract freeze
-    status: NOT_STARTED
-    next_action: {action: Issue the Wave 3 order after Wave 2 closes, owner: Cowork}
+    status: DONE
+    evidence: [W3-report, W3-agent-activation-report, cannae-kernel@v1.1.1]
 
   - number: 4
     id: W4
     name: L.C. build
     status: NOT_STARTED
-    next_action: {action: Waits for Wave 3, owner: Cowork}
+    next_action: {action: Execute the issued Wave 4 order after ONE-SHOT-2 closes, owner: Claude Code}
 
   - number: 5
     id: W5
@@ -109,11 +108,8 @@ waves:
 other_work:
   - id: COP-0
     name: COP-0 program picture
-    status: IN_PROGRESS
-    evidence: [L.C.#1]
-    next_action: {action: 'Review and merge L.C.#1, then create the Railway service', owner: Bill}
+    status: DONE
+    evidence: [L.C.#1, L.C.#23, ONE-SHOT-2026-09-23-report]
 
 decisions:
-  - {id: JUM-D-05, title: Where the shared kernel lives (built on the default), owner: Bill, opened: 2026-09-16}
-  - {id: JUM-D-06, title: Where the command and control (C2) harness and emulators live, owner: Bill, opened: 2026-09-16}
   - {id: JUM-D-27, title: Final product name (the current name is a working name), owner: Bill, opened: 2026-09-17}

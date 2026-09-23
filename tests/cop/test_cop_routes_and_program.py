@@ -5,6 +5,7 @@ from __future__ import annotations
 import fnmatch
 import re
 import tomllib
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -94,7 +95,28 @@ def test_sections_without_producers_are_hatched_absent_not_empty_or_zero() -> No
 def test_packaged_program_file_is_valid() -> None:
     program = load_program(PROGRAM_FILE)
     assert [w.number for w in program.waves] == list(range(9))
-    assert program.waves[0].status == "DONE" and program.waves[2].status == "IN_PROGRESS"
+    assert program.waves[0].status == "DONE" and program.waves[3].status == "DONE"
+
+
+def test_program_as_of_tracks_its_newest_dated_evidence() -> None:
+    program = load_program(PROGRAM_FILE)
+    evidence = [
+        identifier
+        for item in (*program.waves, *program.other_work)
+        for identifier in (
+            *item.evidence,
+            *(entry for package in item.packages for entry in package.evidence),
+        )
+    ]
+    evidence_dates = [
+        date.fromisoformat(match.group())
+        for identifier in evidence
+        if (match := re.search(r"\d{4}-\d{2}-\d{2}", identifier))
+    ]
+    assert evidence_dates, "at least one evidence identifier must carry its observation date"
+    newest_evidence = max(evidence_dates)
+    assert newest_evidence >= program.as_of
+    assert (newest_evidence - program.as_of).days <= 7
 
 
 def _write(tmp_path: Path, text: str) -> Path:
@@ -172,7 +194,10 @@ def test_valid_program_renders_waves_and_decisions() -> None:
     waves = section(programme_html, "waves")
     assert "HUMAN_JUDGMENT" in waves and "INDETERMINATE" not in waves
     assert "Project-Atreides#12" in waves
-    assert "JUM-D-06" in section(decisions_html, "decisions")
+    assert "W3" in waves and "DONE" in waves
+    decisions = section(decisions_html, "decisions")
+    assert "JUM-D-27" in decisions
+    assert "JUM-D-05" not in decisions and "JUM-D-06" not in decisions
 
 
 # Packaging -------------------------------------------------------------------------------
