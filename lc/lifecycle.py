@@ -328,6 +328,9 @@ _ALLOWED = {
     LifecycleState.TRADE_CAPTURED: {LifecycleState.ALLOCATED},
     LifecycleState.ALLOCATED: {LifecycleState.MATCHED, LifecycleState.EXCEPTION_OPEN},
     LifecycleState.MATCHED: {LifecycleState.AFFIRMED, LifecycleState.EXCEPTION_OPEN},
+    LifecycleState.AFFIRMED: {LifecycleState.CLEARING_TRANSFORMED},
+    LifecycleState.CLEARING_TRANSFORMED: {LifecycleState.OBLIGATION_READY},
+    LifecycleState.OBLIGATION_READY: {LifecycleState.SETTLEMENT_CANDIDATE_READY},
 }
 
 
