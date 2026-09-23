@@ -104,7 +104,7 @@ wheels = [
 [[package]]
 name = "cannae-kernel"
 version = "1.1.0"
-source = { git = "https://github.com/br-collab/cannae-kernel.git?rev=v1.1.0#299e52ddba6ce94483e6c70f2cc7e9abd532a4f0" }
+source = { git = "https://github.com/br-collab/cannae-kernel.git?rev=v1.1.1#3a0b5dfccc3d5ff9c2eebad02c6518664be72e75" }
 dependencies = [
     { name = "pydantic" },
 ]
@@ -269,9 +269,9 @@ harness = [
 
 [package.metadata]
 requires-dist = [
-    { name = "cannae-kernel", marker = "extra == 'cop'", git = "https://github.com/br-collab/cannae-kernel.git?rev=v1.1.0" },
-    { name = "cannae-kernel", marker = "extra == 'h'", git = "https://github.com/br-collab/cannae-kernel.git?rev=v1.1.0" },
-    { name = "cannae-kernel", marker = "extra == 'harness'", git = "https://github.com/br-collab/cannae-kernel.git?rev=v1.1.0" },
+    { name = "cannae-kernel", marker = "extra == 'cop'", git = "https://github.com/br-collab/cannae-kernel.git?rev=v1.1.1" },
+    { name = "cannae-kernel", marker = "extra == 'h'", git = "https://github.com/br-collab/cannae-kernel.git?rev=v1.1.1" },
+    { name = "cannae-kernel", marker = "extra == 'harness'", git = "https://github.com/br-collab/cannae-kernel.git?rev=v1.1.1" },
     { name = "flask", marker = "extra == 'cop'", specifier = ">=3.0,<4.0" },
     { name = "gunicorn", marker = "extra == 'cop'", specifier = ">=22.0" },
     { name = "httpx", marker = "extra == 'cop'", specifier = ">=0.27,<1.0" },
