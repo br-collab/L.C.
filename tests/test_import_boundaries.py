@@ -44,7 +44,10 @@ import lc
 REPO_ROOT = Path(__file__).resolve().parents[1]
 COP_DIR = REPO_ROOT / "cop"
 
-FORBIDDEN = ("harness_c2", "emulators", "cop")
+# W4 AMD1 keeps settlement-domain code out of L.C. for the whole wave. The
+# Atreides pin returns only in Wave 5 slice 2, after the Treasury/FICC question
+# attached to JUM-D-14 is resolved explicitly.
+FORBIDDEN = ("harness_c2", "emulators", "cop", "atreides")
 COP_FORBIDDEN = ("lc", "harness_c2", "emulators", "aureon", "atreides")
 #: The harness reads the frozen contracts, not a domain's implementation of them.
 HARNESS_FORBIDDEN = ("lc", "cop", "emulators", "aureon", "atreides")
