@@ -31,6 +31,7 @@ __all__ = [
     "accept_intent",
     "activate_parent",
     "authorize_strategy",
+    "record_not_reached",
     "replay",
     "split_parent",
     "transition",
@@ -125,6 +126,7 @@ class ChildOrder(_Record):
 class OrderSnapshot(_Record):
     state: LifecycleState
     quantity: Decimal
+    executed_quantity: Decimal = Decimal(0)
     parent_order_id: OrderId | None
 
 
@@ -322,6 +324,10 @@ _ALLOWED = {
         LifecycleState.PARTIALLY_EXECUTED,
         LifecycleState.EXECUTED,
     },
+    LifecycleState.EXECUTED: {LifecycleState.TRADE_CAPTURED},
+    LifecycleState.TRADE_CAPTURED: {LifecycleState.ALLOCATED},
+    LifecycleState.ALLOCATED: {LifecycleState.MATCHED, LifecycleState.EXCEPTION_OPEN},
+    LifecycleState.MATCHED: {LifecycleState.AFFIRMED, LifecycleState.EXCEPTION_OPEN},
 }
 
 
@@ -333,6 +339,7 @@ def transition(  # noqa: PLR0913 - transition evidence is explicit at the call s
     reason: str,
     actor: ActorRef,
     event: EventInput,
+    quantity: Decimal | None = None,
 ) -> LifecycleRegister:
     snapshot = replay(register.events)
     current = snapshot.orders[order_id]
@@ -353,6 +360,37 @@ def transition(  # noqa: PLR0913 - transition evidence is explicit at the call s
         intent_id=intent_id,
         state=recorded_target,
         reason=recorded_reason,
+        quantity=quantity if quantity is not None else current.quantity,
+        rule_version="lc-m3-lifecycle/1.0",
+    )
+
+
+def record_not_reached(  # noqa: PLR0913 - failed transition evidence stays explicit
+    register: LifecycleRegister,
+    *,
+    order_id: OrderId,
+    requested: LifecycleState,
+    reason: str,
+    actor: ActorRef,
+    event: EventInput,
+) -> LifecycleRegister:
+    """Record that a named state was not reached, without pretending to enter it."""
+    snapshot = replay(register.events)
+    current = snapshot.orders[order_id]
+    intent_id = next(
+        entry.payload.intent_id
+        for entry in reversed(register.events)
+        if entry.payload.order_id == order_id
+    )
+    return _append(
+        register,
+        event=event,
+        actor=actor,
+        order_id=order_id,
+        parent_order_id=current.parent_order_id,
+        intent_id=intent_id,
+        state=LifecycleState.NOT_REACHED,
+        reason=f"{requested.value} not reached: {reason}",
         quantity=current.quantity,
         rule_version="lc-m3-lifecycle/1.0",
     )
@@ -366,9 +404,20 @@ def replay(events: tuple[OrderEvent, ...]) -> RegisterSnapshot:
     for event in events:
         register = register.append(event)
         payload = event.payload
+        event_quantity = require_recorded(payload.quantity)
+        prior = orders.get(payload.order_id)
+        is_execution = payload.state in {
+            LifecycleState.PARTIALLY_EXECUTED,
+            LifecycleState.EXECUTED,
+        }
         orders[payload.order_id] = OrderSnapshot(
             state=payload.state,
-            quantity=require_recorded(payload.quantity),
+            quantity=prior.quantity if prior is not None else event_quantity,
+            executed_quantity=(
+                prior.executed_quantity + event_quantity
+                if prior is not None and is_execution
+                else (prior.executed_quantity if prior is not None else Decimal(0))
+            ),
             parent_order_id=payload.parent_order_id,
         )
     return RegisterSnapshot(
