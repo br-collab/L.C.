@@ -12,11 +12,15 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
 ]
 
-dependencies = []
+dependencies = [
+    "pydantic>=2.6,<3.0",
+    "cannae-kernel @ git+https://github.com/br-collab/cannae-kernel.git@v1.1.1",
+]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
+    "pytest-cov>=4.1",
     "ruff>=0.4",
     "mypy>=1.14",
     "types-PyYAML>=6.0",
