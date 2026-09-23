@@ -65,7 +65,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["lc*", "cop*", "harness_c2*", "thifur_h*"]
+include = ["lc*", "emulators*", "cop*", "harness_c2*", "thifur_h*"]
 
 [tool.setuptools.package-data]
 cop = ["program.yaml", "templates/*.html", "static/*.css", "static/*.js"]

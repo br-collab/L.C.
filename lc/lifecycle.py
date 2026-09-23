@@ -125,6 +125,7 @@ class ChildOrder(_Record):
 class OrderSnapshot(_Record):
     state: LifecycleState
     quantity: Decimal
+    executed_quantity: Decimal = Decimal(0)
     parent_order_id: OrderId | None
 
 
@@ -333,6 +334,7 @@ def transition(  # noqa: PLR0913 - transition evidence is explicit at the call s
     reason: str,
     actor: ActorRef,
     event: EventInput,
+    quantity: Decimal | None = None,
 ) -> LifecycleRegister:
     snapshot = replay(register.events)
     current = snapshot.orders[order_id]
@@ -353,7 +355,7 @@ def transition(  # noqa: PLR0913 - transition evidence is explicit at the call s
         intent_id=intent_id,
         state=recorded_target,
         reason=recorded_reason,
-        quantity=current.quantity,
+        quantity=quantity if quantity is not None else current.quantity,
         rule_version="lc-m3-lifecycle/1.0",
     )
 
@@ -366,9 +368,20 @@ def replay(events: tuple[OrderEvent, ...]) -> RegisterSnapshot:
     for event in events:
         register = register.append(event)
         payload = event.payload
+        event_quantity = require_recorded(payload.quantity)
+        prior = orders.get(payload.order_id)
+        is_execution = payload.state in {
+            LifecycleState.PARTIALLY_EXECUTED,
+            LifecycleState.EXECUTED,
+        }
         orders[payload.order_id] = OrderSnapshot(
             state=payload.state,
-            quantity=require_recorded(payload.quantity),
+            quantity=prior.quantity if prior is not None and is_execution else event_quantity,
+            executed_quantity=(
+                prior.executed_quantity + event_quantity
+                if prior is not None and is_execution
+                else (prior.executed_quantity if prior is not None else Decimal(0))
+            ),
             parent_order_id=payload.parent_order_id,
         )
     return RegisterSnapshot(
