@@ -24,7 +24,7 @@
 <div class="clock-strip" role="status" aria-label="Clocks from records">
   <strong>CLOCKS · FROM RECORDS</strong>
   <span>Aureon <b class="clock-absent">Absent</b></span>
-  <span>L.C. <b class="clock-absent">Absent</b></span>
+  <span>L.C. {% if b.lc_layer_clock_current %}<b>{{ b.lc_layer_clock }}</b>{% else %}<b class="clock-absent">Absent</b>{% endif %}</span>
   <span>Atreides <b class="clock-absent">Absent</b></span>
   <span>Session <b class="clock-absent">Absent</b></span>
   <span>Fedwire <b class="clock-absent">Absent</b></span>

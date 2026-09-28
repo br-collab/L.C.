@@ -21,6 +21,7 @@ from cop.escalations import EscalationQueue
 from cop.exceptions import ExceptionRegister
 from cop.github import Tag, WorkflowRun
 from cop.grc import ControlRecord, GovernanceEvent, RiskLimit
+from cop.layer_clock import LayerClock
 from cop.lifecycle import LifecycleRow
 from cop.observation import (
     InputUnavailableError,
@@ -156,6 +157,11 @@ class AgentsState:
 
 
 @dataclass(frozen=True)
+class LayerClockState:
+    clock: Observation[LayerClock]
+
+
+@dataclass(frozen=True)
 class LifecycleState:
     """The lifecycle board, as one observation.
 
@@ -206,6 +212,7 @@ class Snapshot:
     repos: tuple[RepoState, ...]
     aureon: AureonState
     agents: AgentsState
+    lc_layer_clock: LayerClockState
     lifecycles: LifecycleState
     escalations: EscalationState
     breaks: BreaksState

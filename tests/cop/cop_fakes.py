@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from cannae_kernel.provenance import Provenance
 from flask.testing import FlaskClient
 from werkzeug.test import TestResponse
 
@@ -23,6 +24,7 @@ from cop.aureon import HttpxAureonClient
 from cop.cash_leg import HttpxCashLegClient
 from cop.demo import DemoBreaks, DemoEscalations, DemoExceptions, DemoGrc, DemoLifecycles
 from cop.github import HttpxGitHubClient
+from cop.layer_clock import LayerClock
 from cop.refresher import Refresher, RefresherOptions, Sources
 from cop.settings import AUREON_CASH_LEG_URL, AUREON_SNAPSHOT_URL, PROGRAM_FILE, load_settings
 
@@ -58,6 +60,31 @@ class FakeClock:
 
     def advance(self, **delta: float) -> None:
         self.now += timedelta(**delta)
+
+
+class FakeLayerClock:
+    def __init__(self, clock: FakeClock) -> None:
+        self._clock = clock
+
+    def clock(self) -> LayerClock:
+        at = self._clock.now
+        return LayerClock.model_validate(
+            {
+                "schema_version": 1,
+                "layer": "LC",
+                "lifecycle_id": "lif_" + "1" * 26,
+                "event_id": "evt_" + "2" * 26,
+                "state": "HANDED_TO_ATREIDES",
+                "times": {
+                    "event_time": at,
+                    "observation_time": at,
+                    "processing_time": at,
+                    "decision_time": at,
+                },
+                "provenance": Provenance.POLICY_RESULT,
+                "event_digest": "sha256:" + "3" * 64,
+            }
+        )
 
 
 def failure_response(mode: str, request: httpx.Request) -> httpx.Response:
@@ -425,6 +452,7 @@ class Rig:
         escalations_configured: bool = True,
         exceptions_configured: bool = False,
         grc_configured: bool = False,
+        layer_clock_configured: bool = False,
     ) -> None:
         self.clock = FakeClock()
         self.github = FakeGitHub()
@@ -449,6 +477,7 @@ class Rig:
                     if agents_configured
                     else None
                 ),
+                lc_layer_clock=FakeLayerClock(self.clock) if layer_clock_configured else None,
                 lifecycles=DemoLifecycles(self.clock) if lifecycles_configured else None,
                 escalations=(DemoEscalations(self.clock) if escalations_configured else None),
                 breaks=DemoBreaks(self.clock),
