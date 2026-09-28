@@ -5,7 +5,7 @@ from __future__ import annotations
 import fnmatch
 import re
 import tomllib
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -13,7 +13,7 @@ from cop_fakes import MAIN_SHA, Rig, login, section
 
 from cop.app import SECTIONS, create_app
 from cop.observation import ProgramFileError
-from cop.program import load_program
+from cop.program import Program, load_program
 from cop.settings import PRODUCT_NAME, PROGRAM_FILE, load_settings
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -98,8 +98,7 @@ def test_packaged_program_file_is_valid() -> None:
     assert program.waves[0].status == "DONE" and program.waves[3].status == "DONE"
 
 
-def test_program_as_of_tracks_its_newest_dated_evidence() -> None:
-    program = load_program(PROGRAM_FILE)
+def _assert_program_as_of_is_current(program: Program) -> None:
     evidence = [
         identifier
         for item in (*program.waves, *program.other_work)
@@ -116,7 +115,18 @@ def test_program_as_of_tracks_its_newest_dated_evidence() -> None:
     assert evidence_dates, "at least one evidence identifier must carry its observation date"
     newest_evidence = max(evidence_dates)
     assert newest_evidence >= program.as_of
-    assert (newest_evidence - program.as_of).days <= 7
+    assert (newest_evidence - program.as_of).days <= 2
+
+
+def test_program_as_of_tracks_its_newest_dated_evidence() -> None:
+    _assert_program_as_of_is_current(load_program(PROGRAM_FILE))
+
+
+def test_program_as_of_backdated_three_days_fails_the_freshness_check() -> None:
+    program = load_program(PROGRAM_FILE)
+    backdated = program.model_copy(update={"as_of": program.as_of - timedelta(days=3)})
+    with pytest.raises(AssertionError):
+        _assert_program_as_of_is_current(backdated)
 
 
 def _write(tmp_path: Path, text: str) -> Path:
@@ -195,6 +205,8 @@ def test_valid_program_renders_waves_and_decisions() -> None:
     assert "HUMAN_JUDGMENT" in waves and "INDETERMINATE" not in waves
     assert "Project-Atreides#12" in waves
     assert "W3" in waves and "DONE" in waves
+    assert "W4-7" in waves and "L.C.#38" in waves
+    assert "W3-ADOPT-3" in waves and "Project-Atreides#41" in waves
     decisions = section(decisions_html, "decisions")
     assert "JUM-D-27" in decisions
     assert "JUM-D-05" not in decisions and "JUM-D-06" not in decisions

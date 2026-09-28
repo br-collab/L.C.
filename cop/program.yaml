@@ -10,7 +10,7 @@
 # Owners: Bill, Claude Code, Cowork.
 
 schema_version: 1
-as_of: 2026-09-23
+as_of: 2026-09-28
 
 waves:
   - number: 0
@@ -78,14 +78,23 @@ waves:
   - number: 4
     id: W4
     name: L.C. build
-    status: NOT_STARTED
-    next_action: {action: Execute the issued Wave 4 order after ONE-SHOT-2 closes, owner: Claude Code}
+    status: DONE
+    evidence: [W4-report, ONE-SHOT-3-2026-09-28-report]
+    packages:
+      - {id: W4-1, name: Order and execution event vocabulary, status: DONE, evidence: [L.C.#25]}
+      - {id: W4-2, name: Deterministic lifecycle register, status: DONE, evidence: [L.C.#30]}
+      - {id: W4-3, name: Policy gate and venue emulator, status: DONE, evidence: [L.C.#31]}
+      - {id: W4-4, name: Capture allocation match and affirmation, status: DONE, evidence: [L.C.#32]}
+      - {id: W4-5, name: Gross clearing transformation, status: DONE, evidence: [L.C.#33]}
+      - {id: W4-6a, name: Frozen settlement obligation, status: DONE, evidence: [L.C.#34]}
+      - {id: W4-6b, name: Atreides handoff, status: DONE, evidence: [L.C.#37]}
+      - {id: W4-7, name: L.C. layer clock, status: DONE, evidence: [L.C.#38]}
 
   - number: 5
     id: W5
     name: Vertical slices
     status: NOT_STARTED
-    next_action: {action: Waits for Wave 4, owner: Cowork}
+    next_action: {action: Await an issued Wave 5 order, owner: Cowork}
 
   - number: 6
     id: W6
@@ -106,6 +115,14 @@ waves:
     next_action: {action: Waits for Wave 7, owner: Cowork}
 
 other_work:
+  - id: W3-ADOPT
+    name: Frozen contract adoption in Atreides
+    status: DONE
+    evidence: [W3-ADOPT-report]
+    packages:
+      - {id: W3-ADOPT-1, name: Frozen acceptance service boundary, status: DONE, evidence: [Project-Atreides#39]}
+      - {id: W3-ADOPT-2, name: Frozen instruction preparation boundary, status: DONE, evidence: [Project-Atreides#40]}
+      - {id: W3-ADOPT-3, name: Real frozen contract test, status: DONE, evidence: [Project-Atreides#41]}
   - id: COP-0
     name: COP-0 program picture
     status: DONE
