@@ -8,7 +8,7 @@ from typing import Self
 
 from cannae_kernel.absence import Recorded, require_recorded
 from cannae_kernel.actor import ActorRef
-from cannae_kernel.canonical import canonical_bytes_of, digest
+from cannae_kernel.canonical import canonical_bytes_of, digest, digest_bytes
 from cannae_kernel.clocks import EventTimes
 from cannae_kernel.envelopes import ApprovedIntentEnvelope
 from cannae_kernel.events import verify
@@ -172,15 +172,17 @@ def _append(  # noqa: PLR0913 - every sealed-event field remains explicit
 
 def accept_intent(
     envelope: ApprovedIntentEnvelope,
-    payload: ApprovedIntentPayload,
+    payload_bytes: bytes,
     *,
     parent_order_id: OrderId,
     actor: ActorRef,
     event: EventInput,
 ) -> IntentOutcome:
-    """Verify the payload and both manifests before recording acceptance."""
+    """Verify exact received bytes before parsing and checking their manifests."""
+    received_digest = digest_bytes(payload_bytes)
+    payload = ApprovedIntentPayload.model_validate_json(payload_bytes)
     checks = (
-        ("payload_digest", envelope.payload_digest == digest(payload), "payload digest mismatch"),
+        ("payload_digest", envelope.payload_digest == received_digest, "payload digest mismatch"),
         ("intent_identity", payload.intent_id == envelope.envelope_id, "intent id mismatch"),
         ("policy_enabled", payload.policy_manifest.enabled, "policy manifest is disabled"),
         (

@@ -7,7 +7,7 @@ from decimal import Decimal
 
 import pytest
 from cannae_kernel.actor import ActorKind, ActorRef
-from cannae_kernel.canonical import digest
+from cannae_kernel.canonical import canonical_bytes_of, digest, digest_bytes
 from cannae_kernel.clocks import EventTimes
 from cannae_kernel.effects import OperationEffects
 from cannae_kernel.envelopes import ApprovedIntentEnvelope
@@ -107,7 +107,7 @@ def _envelope(payload: ApprovedIntentPayload | None = None) -> ApprovedIntentEnv
             effects=(),
             note="records approval inside Aureon; L.C. consumption is read-only",
         ),
-        payload_digest=digest(payload),
+        payload_digest=digest_bytes(canonical_bytes_of(payload)),
     )
 
 
@@ -115,7 +115,7 @@ def _accepted() -> IntentOutcome:
     payload = _payload()
     outcome = accept_intent(
         _envelope(payload),
-        payload,
+        canonical_bytes_of(payload),
         parent_order_id=OrderId(_id("ord_", 10)),
         actor=_actor(),
         event=_event(10),
@@ -129,10 +129,16 @@ def test_same_inputs_produce_a_byte_identical_register() -> None:
 
 
 def test_tampered_envelope_digest_is_a_first_class_refusal() -> None:
-    payload = _payload().model_copy(update={"quantity": Decimal("101")})
+    payload = _payload()
+    payload_bytes = canonical_bytes_of(payload)
+    tampered_bytes = payload_bytes.replace(b'"100"', b'"101"', 1)
+    assert len(tampered_bytes) == len(payload_bytes)
+    assert (
+        sum(left != right for left, right in zip(payload_bytes, tampered_bytes, strict=True)) == 1
+    )
     outcome = accept_intent(
-        _envelope(),
-        payload,
+        _envelope(payload),
+        tampered_bytes,
         parent_order_id=OrderId(_id("ord_", 10)),
         actor=_actor(),
         event=_event(10),
@@ -157,12 +163,32 @@ def test_policy_and_authority_manifests_are_verified(field: str) -> None:
         )
     outcome = accept_intent(
         _envelope(payload),
-        payload,
+        canonical_bytes_of(payload),
         parent_order_id=OrderId(_id("ord_", 10)),
         actor=_actor(),
         event=_event(10),
     )
     assert outcome.refusal is not None
+
+
+def test_authority_manifest_must_name_the_approving_actor() -> None:
+    payload = _payload()
+    payload = payload.model_copy(
+        update={
+            "authority_manifest": payload.authority_manifest.model_copy(
+                update={"authority_id": ActorId(_id("act_", 99))}
+            )
+        }
+    )
+    outcome = accept_intent(
+        _envelope(payload),
+        canonical_bytes_of(payload),
+        parent_order_id=OrderId(_id("ord_", 10)),
+        actor=_actor(),
+        event=_event(10),
+    )
+    assert outcome.refusal is not None
+    assert outcome.refusal.predicate == "authority_identity"
 
 
 def test_parent_to_child_split_conserves_quantity() -> None:
@@ -228,7 +254,7 @@ def test_refusal_records_later_states_as_not_reached() -> None:
     payload = _payload().model_copy(update={"quantity": Decimal("101")})
     outcome = accept_intent(
         _envelope(),
-        payload,
+        canonical_bytes_of(payload),
         parent_order_id=OrderId(_id("ord_", 10)),
         actor=_actor(),
         event=_event(10),
@@ -242,7 +268,7 @@ def test_parent_activation_cannot_skip_strategy_authorization() -> None:
     payload = _payload()
     outcome = accept_intent(
         _envelope(payload),
-        payload,
+        canonical_bytes_of(payload),
         parent_order_id=OrderId(_id("ord_", 10)),
         actor=_actor(),
         event=_event(10),
