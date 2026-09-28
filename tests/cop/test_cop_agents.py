@@ -13,6 +13,7 @@ printed as a value, no phase marked "recorded" when nothing was written.
 from __future__ import annotations
 
 import json
+from datetime import timedelta
 
 import pytest
 from cannae_kernel.absence import Absent, Recorded
@@ -86,6 +87,38 @@ class TestTheSourceFailsClosed:
         assert "the operator stopped this agent" in stopped.last_summary.reason
         running = next(a for a in snapshot.agents if a.agent_id == "settlement-operations-analyst")
         assert isinstance(running.last_summary, Recorded)
+
+
+class TestSnapshotAgeComesFromTheDocument:
+    def test_a_fresh_fetch_of_an_old_document_is_stale(self) -> None:
+        rig = Rig()
+        body = activation_body()
+        body["taken_at"] = (rig.clock.now - timedelta(minutes=6)).isoformat()
+        rig.atreides.body = body
+
+        page = _page(rig)
+
+        assert page.agents.tile.current is False
+        assert page.agents.tile.value is None
+        assert page.agents.tile.stale_value is not None
+        assert page.agents.tile.badge.code == Disposition.INDETERMINATE
+        assert page.agents.rows == ()
+        assert page.banner.overall.code != Disposition.PASS
+        assert page.banner.stale_sources
+
+    def test_a_current_document_keeps_its_taken_at_as_the_last_good_time(self) -> None:
+        rig = Rig()
+        taken_at = rig.clock.now - timedelta(minutes=1)
+        body = activation_body()
+        body["taken_at"] = taken_at.isoformat()
+        rig.atreides.body = body
+        rig.refresher.refresh_once()
+        rig.atreides.failure = "timeout"
+
+        rig.refresher.refresh_once()
+
+        observation = rig.refresher.snapshot.agents.snapshot
+        assert observation.last_good_at == taken_at
 
 
 # Not configured --------------------------------------------------------------------------
