@@ -263,13 +263,17 @@ class Refresher:
 
     # One observation ---------------------------------------------------------------------
 
-    def _observe(
+    # ``value_time`` is optional because most sources are observed when fetched;
+    # published readings such as the agent snapshot carry their own honest clock.
+    def _observe(  # noqa: PLR0913
         self,
         key: str,
         source_url: str,
         provenance: Provenance,
         fetch: Callable[[], T],
         stale_after: timedelta | None = STALE_AFTER,
+        *,
+        value_time: Callable[[T], datetime] | None = None,
     ) -> Observation[T]:
         now = self._clock()
         try:
@@ -281,14 +285,15 @@ class Refresher:
             log.exception("Unexpected error while refreshing %s", key)
             error_class, detail = UNEXPECTED_ERROR, type(exc).__name__
         else:
-            self._good[key] = (value, now)
+            observed_at = value_time(value) if value_time is not None else now
+            self._good[key] = (value, observed_at)
             return Observation(
                 key=key,
                 source_url=source_url,
                 provenance=provenance,
                 attempted_at=now,
                 value=value,
-                observed_at=now,
+                observed_at=observed_at,
                 stale_after=stale_after,
             )
         if provenance is not Provenance.POLICY_RESULT:
@@ -437,6 +442,7 @@ class Refresher:
                 AGENTS_SNAPSHOT_SOURCE,
                 Provenance.FACT_EXTERNAL,
                 self._agents.snapshot,
+                value_time=lambda value: value.taken_at,
             )
         )
 
