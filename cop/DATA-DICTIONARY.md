@@ -31,6 +31,7 @@ System of Record. SLA means service-level agreement.
 | `aureon-snapshot` | `br-collab/aureon`, public `/api/snapshot` | Live; no kernel `EventTimes` |
 | `cash-leg` | `br-collab/aureon`, public `/api/cashleg/demo` document prepared by Atreides | Reachable demonstration document; admitted only in `LEGATE_DEMO=1`. Production has no cash-leg producer, cutoff table or clocks |
 | `agents` | `br-collab/Project-Atreides`, activation snapshot configured by `ATREIDES_AGENTS_URL` | Producer exists; deployment URL may be absent |
+| `lc-layer-clock` | `br-collab/L.C.`, versioned layer-clock document configured by `LC_LAYER_CLOCK_URL` | Producer and reader exist; deployment URL may be absent; an empty register cannot publish |
 | `c2-escalations` | `br-collab/L.C.`, C2 escalation queue configured by `C2_ESCALATIONS_URL` | Reader and demo producer exist; live publication may be absent |
 | `lifecycle` | Published lifecycle document assembled from Aureon, L.C. and Atreides records | No production producer; demo only |
 | `breaks` | Atreides cross-layer break records | No producer |
@@ -40,6 +41,23 @@ System of Record. SLA means service-level agreement.
 | `limits` | Atreides cash exposure plus Aureon Kaladan limit definitions | No published limit definitions |
 | `cutoffs` | Published trading-session, Fedwire and NSCC cutoff table | No producer |
 | `ofr` | Published Office of Financial Research stress reading used in production | No COP feed; test and production series difference must remain visible |
+
+## L.C. production-module register
+
+A module existing is not evidence that its records are published. The table maps every
+production module under `lc/` to the composite that can render its output, or to the Blind
+spots entry that states why it cannot yet render. The module paths are literal and checked
+by the test suite so a new module cannot arrive without a dictionary decision.
+
+| Module | Owned record or rule | Rendered composite or Blind spots consumer | If unpublished |
+|---|---|---|---|
+| `lc/events.py` | `OrderEvent`, `OrderEventPayload` and the `LifecycleState` vocabulary | Lifecycle board through the future `lifecycle` aggregate; source absence is listed under Blind spots | No inferred state; lifecycle board is `Absent` |
+| `lc/lifecycle.py` | Append-only `LifecycleRegister`, transitions, explicit `NOT_REACHED`, and deterministic replay | Lifecycle board; newest recorded event also supplies the L.C. layer-clock projection | No empty row and no invented clock |
+| `lc/policy.py` | Versioned execution policy gate, market-evidence freshness, operator decision and execution application | Lifecycle board state and reason through the future `lifecycle` aggregate | No policy result is inferred from a later execution |
+| `lc/trade.py` | Capture, allocation, match/affirmation and `OpenException` records | Lifecycle board; exception output requires a future `breaks` or exception producer already listed under Blind spots | No exception is presented as a live break |
+| `lc/clearing.py` | Gross clearing output and computed conservation result; non-gross paths remain explicitly unbuilt | Lifecycle board clearing checkpoint through the future `lifecycle` aggregate | No clearing checkpoint is inferred from obligation existence |
+| `lc/obligation.py` | L.C.-owned obligation payload, frozen `SettlementObligationEnvelope` formation, and recorded Atreides handoff result | Lifecycle board obligation and handoff checkpoints through the future `lifecycle` aggregate | No acceptance or settlement state is inferred |
+| `lc/layer_clock.py` | Versioned `LayerClockDocument` projected from the newest event in a non-empty register | L.C. clock strip through `lc-layer-clock` | Hatched `Absent` under the clock-strip rule below |
 
 ## Side-rail badges
 
