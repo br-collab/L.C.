@@ -40,6 +40,7 @@ from cop.grc import (
     RiskLimit,
     RiskSource,
 )
+from cop.layer_clock import LayerClockSource
 from cop.lifecycle import LifecycleRow
 from cop.observation import (
     UNEXPECTED_ERROR,
@@ -61,6 +62,8 @@ from cop.settings import (
     ESCALATION_SOURCE_UNSET,
     GITHUB_OWNER,
     GITHUB_WEB_URL,
+    LC_LAYER_CLOCK_SOURCE,
+    LC_LAYER_CLOCK_SOURCE_UNSET,
     LIFECYCLE_SOURCE,
     LIFECYCLE_SOURCE_UNSET,
     MAIN_BRANCH,
@@ -77,6 +80,7 @@ from cop.state import (
     EscalationState,
     ExceptionsState,
     GrcState,
+    LayerClockState,
     LifecycleState,
     MergeInfo,
     PendingDropResult,
@@ -132,6 +136,7 @@ class Sources:
     github: gh.GitHubSource
     aureon: AureonSource
     agents: AgentsSource | None = None
+    lc_layer_clock: LayerClockSource | None = None
     lifecycles: LifecycleSource | None = None
     escalations: EscalationSource | None = None
     breaks: BreakSource | None = None
@@ -163,6 +168,7 @@ class Refresher:
         # ``None`` means no activation snapshot is configured. That is a state the
         # panel reports, not an error it hides: see ``_refresh_agents``.
         self._agents = sources.agents
+        self._lc_layer_clock = sources.lc_layer_clock
         # ``None`` means no lifecycle source is connected, which is the state
         # outside demo mode until Wave 4 builds the layer that would supply one.
         self._lifecycles = sources.lifecycles
@@ -227,6 +233,9 @@ class Refresher:
             repos=repos,
             agents=AgentsState(
                 snapshot=pending("agents:snapshot", AGENTS_SNAPSHOT_SOURCE, fact, STALE_AFTER)
+            ),
+            lc_layer_clock=LayerClockState(
+                clock=pending("lc:layer_clock", LC_LAYER_CLOCK_SOURCE, fact, STALE_AFTER)
             ),
             lifecycles=LifecycleState(
                 rows=pending("lifecycles", LIFECYCLE_SOURCE, fact, STALE_AFTER)
@@ -467,6 +476,27 @@ class Refresher:
             )
         )
 
+    def _refresh_lc_layer_clock(self) -> LayerClockState:
+        if self._lc_layer_clock is None:
+            return LayerClockState(
+                clock=not_configured(
+                    "lc:layer_clock",
+                    LC_LAYER_CLOCK_SOURCE,
+                    Provenance.FACT_EXTERNAL,
+                    LC_LAYER_CLOCK_SOURCE_UNSET,
+                    STALE_AFTER,
+                )
+            )
+        return LayerClockState(
+            clock=self._observe(
+                "lc:layer_clock",
+                LC_LAYER_CLOCK_SOURCE,
+                Provenance.FACT_EXTERNAL,
+                self._lc_layer_clock.clock,
+                value_time=lambda value: value.source_time,
+            )
+        )
+
     def _refresh_escalations(self) -> EscalationState:
         """Read the escalation queue, or record that nothing publishes one."""
         if self._escalations is None:
@@ -595,6 +625,7 @@ class Refresher:
             aureon_repo = next((r for r in repos if r.name == AUREON_REPOSITORY), None)
             aureon = self._refresh_aureon(aureon_repo)
             agents = self._refresh_agents()
+            lc_layer_clock = self._refresh_lc_layer_clock()
             lifecycles = self._refresh_lifecycles()
             escalations = self._refresh_escalations()
             breaks = self._refresh_breaks()
@@ -616,6 +647,7 @@ class Refresher:
                 repos=repos,
                 aureon=aureon,
                 agents=agents,
+                lc_layer_clock=lc_layer_clock,
                 lifecycles=lifecycles,
                 escalations=escalations,
                 breaks=breaks,
@@ -651,6 +683,7 @@ class Refresher:
                     repos=old.repos,
                     aureon=old.aureon,
                     agents=old.agents,
+                    lc_layer_clock=old.lc_layer_clock,
                     lifecycles=old.lifecycles,
                     escalations=old.escalations,
                     breaks=old.breaks,

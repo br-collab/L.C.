@@ -68,7 +68,7 @@ distinct meanings from kernel `EventTimes`. The strip displays the latest record
 | Clock | Kernel type | Repository and published document | If unread or absent |
 |---|---|---|---|
 | **Aureon** | `EventTimes` from the newest current `ApprovedIntentEnvelope` record | `aureon`; future `lifecycle` document | Hatched `Absent`. `/api/snapshot` has no `EventTimes` and may not substitute its fetch time |
-| **L.C.** | `EventTimes` from the newest current `ExecutionEvent`, `ClearingTransformation` or `SettlementObligationEnvelope` | `L.C.`; future `lifecycle` document | Hatched `Absent` while the Wave 4 layer or producer does not exist |
+| **L.C.** | `EventTimes` from the newest event in a non-empty `LifecycleRegister`; the strip displays `event_time` and freshness is aged from `processing_time` | `L.C.`; versioned layer-clock document configured by `LC_LAYER_CLOCK_URL` | Hatched `Absent` when the URL is unconfigured, the document is unreadable or malformed, or its `processing_time` is stale. An empty register cannot publish a clock |
 | **Atreides** | `EventTimes` from the newest current `ObligationAcceptanceRecord` or settlement record | `Project-Atreides`; future `lifecycle`/settlement document | Hatched `Absent`; activation `taken_at` is feed freshness, not the settlement-layer clock |
 | **Trading session** | `Recorded[MarketSession] \| Absent`, paired with the source record's `EventTimes` | Future published session document; not local time | Hatched `Absent` until published |
 | **Fedwire state and close** | `Recorded[str] \| Absent` state and `Recorded[datetime] \| Absent` close from a versioned cutoff table | `cutoffs` | Hatched `Absent`; do not calculate from wall time or copy a remembered schedule |

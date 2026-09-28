@@ -45,6 +45,7 @@ from cop.demo import (
 )
 from cop.escalations import HttpxEscalationClient
 from cop.github import HttpxGitHubClient
+from cop.layer_clock import HttpxLayerClockClient
 from cop.refresher import Clock, Refresher, RefresherOptions, Sources, utc_now
 from cop.settings import (
     LOGIN_FAILURE_WINDOW,
@@ -144,6 +145,7 @@ def build_refresher(settings: Settings, clock: Clock = utc_now) -> Refresher:
                 github=DemoGitHub(clock),
                 aureon=DemoAureon(),
                 agents=DemoAgents(clock),
+                lc_layer_clock=None,
                 lifecycles=DemoLifecycles(clock),
                 escalations=DemoEscalations(clock),
                 breaks=DemoBreaks(clock),
@@ -169,6 +171,11 @@ def build_refresher(settings: Settings, clock: Clock = utc_now) -> Refresher:
             # "not configured" rather than inventing an address to fail against.
             agents=(
                 HttpxAgentsClient(settings.agents_url) if settings.agents_url is not None else None
+            ),
+            lc_layer_clock=(
+                HttpxLayerClockClient(settings.lc_layer_clock_url)
+                if settings.lc_layer_clock_url is not None
+                else None
             ),
             # No live lifecycle source exists: the middle layer is Wave 4. Outside
             # demo mode the board says so rather than rendering an empty table.

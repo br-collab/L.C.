@@ -502,6 +502,8 @@ class BannerView:
     github_authenticated: bool
     refresh_seconds: int
     demo: bool
+    lc_layer_clock: str
+    lc_layer_clock_current: bool
 
 
 @dataclass(frozen=True)
@@ -1159,6 +1161,9 @@ def _stale_sources(snapshot: Snapshot, now: datetime) -> tuple[str, ...]:
     agents_obs = snapshot.agents.snapshot
     if agents_obs.error_class != NOT_CONFIGURED and too_old(agents_obs):
         stale.append(AGENTS_SNAPSHOT_SOURCE)
+    clock_obs = snapshot.lc_layer_clock.clock
+    if clock_obs.error_class != NOT_CONFIGURED and too_old(clock_obs):
+        stale.append("L.C. layer clock")
     return tuple(stale)
 
 
@@ -1264,6 +1269,13 @@ def build_page(snapshot: Snapshot, now: datetime) -> PageView:
         github_authenticated=snapshot.github_authenticated,
         refresh_seconds=snapshot.refresh_seconds,
         demo=snapshot.demo,
+        lc_layer_clock=(
+            fmt_time(snapshot.lc_layer_clock.clock.value.times.event_time)
+            if snapshot.lc_layer_clock.clock.is_current(now)
+            and snapshot.lc_layer_clock.clock.value is not None
+            else "Absent"
+        ),
+        lc_layer_clock_current=snapshot.lc_layer_clock.clock.is_current(now),
     )
     return PageView(
         banner=banner,

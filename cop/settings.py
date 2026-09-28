@@ -47,6 +47,10 @@ LIFECYCLE_SOURCE = "Lifecycle board (synthetic; no live source until Wave 4)"
 LIFECYCLE_SOURCE_UNSET = (
     "no lifecycle source is connected; the middle layer that would supply one is Wave 4"
 )
+LC_LAYER_CLOCK_SOURCE = "L.C. layer clock (LC_LAYER_CLOCK_URL)"
+LC_LAYER_CLOCK_SOURCE_UNSET = (
+    "LC_LAYER_CLOCK_URL is not set, so no L.C. register clock is being read"
+)
 AGENTS_SOURCE_UNSET = "ATREIDES_AGENTS_URL is not set, so no activation snapshot is being read"
 PROGRAM_FILE = Path(__file__).with_name("program.yaml")
 
@@ -88,6 +92,7 @@ ENV_INSECURE_LOCAL = "LEGATE_INSECURE_LOCAL"
 ENV_DEMO = "LEGATE_DEMO"
 ENV_AGENTS_URL = "ATREIDES_AGENTS_URL"
 ENV_ESCALATIONS_URL = "C2_ESCALATIONS_URL"
+ENV_LC_LAYER_CLOCK_URL = "LC_LAYER_CLOCK_URL"
 
 
 @dataclass(frozen=True)
@@ -99,6 +104,7 @@ class Settings:
     github_token: str | None = field(repr=False)
     agents_url: str | None
     escalations_url: str | None
+    lc_layer_clock_url: str | None
     """Where the C2 escalation queue is published. ``None`` when unset, which
     panel 12 reports by name rather than the page hiding."""
     """Where the Atreides activation snapshot is published. ``None`` when unset,
@@ -139,6 +145,7 @@ def load_settings(env: Mapping[str, str]) -> Settings:
     github_token = _non_empty(env, ENV_GITHUB_TOKEN)
     agents_url = _non_empty(env, ENV_AGENTS_URL)
     escalations_url = _non_empty(env, ENV_ESCALATIONS_URL)
+    lc_layer_clock_url = _non_empty(env, ENV_LC_LAYER_CLOCK_URL)
     insecure_local = _flag(env, ENV_INSECURE_LOCAL)
     demo = _flag(env, ENV_DEMO)
     production = any(name in env for name in PRODUCTION_MARKERS)
@@ -172,6 +179,7 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         github_token=github_token,
         agents_url=agents_url,
         escalations_url=escalations_url,
+        lc_layer_clock_url=lc_layer_clock_url,
         insecure_local=insecure_local,
         demo=demo,
         production=production,
