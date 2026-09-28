@@ -7,10 +7,16 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import Self
 
+from cannae_kernel.absence import Absent, Recorded
 from cannae_kernel.actor import ActorRef
 from cannae_kernel.canonical import canonical_bytes_of, digest
 from cannae_kernel.delivery import DeliveryPattern
-from cannae_kernel.envelopes import ClearingTransformation, SettlementObligationEnvelope
+from cannae_kernel.disposition import Disposition
+from cannae_kernel.envelopes import (
+    ClearingTransformation,
+    ObligationAcceptanceRecord,
+    SettlementObligationEnvelope,
+)
 from cannae_kernel.finality import FinalityType
 from cannae_kernel.ids import ObligationId, OrderId
 from cannae_kernel.provenance import Provenance
@@ -28,6 +34,7 @@ __all__ = [
     "Correction",
     "ExpectedFinality",
     "FormedObligation",
+    "HandoffOutcome",
     "LegKind",
     "ObligationPayload",
     "ParticipantAccount",
@@ -36,6 +43,7 @@ __all__ = [
     "SourceManifest",
     "SourceReference",
     "form_obligation",
+    "record_atreides_handoff",
 ]
 
 
@@ -198,6 +206,48 @@ class FormedObligation(_Record):
     journal: LifecycleRegister
     envelope: SettlementObligationEnvelope
     payload: ObligationPayload
+
+
+class HandoffOutcome(_Record):
+    """The frozen Atreides answer and the L.C. journal state it produced."""
+
+    journal: LifecycleRegister
+    acceptance: ObligationAcceptanceRecord
+
+
+def record_atreides_handoff(
+    formed: FormedObligation,
+    *,
+    order_id: OrderId,
+    acceptance: ObligationAcceptanceRecord,
+    actor: ActorRef,
+    event: EventInput,
+) -> HandoffOutcome:
+    """Record Atreides' frozen answer without restating obligation economics."""
+    if acceptance.obligation_id != formed.envelope.obligation_id:
+        raise ValueError("Atreides acceptance names another obligation")
+    if acceptance.obligation_digest != digest(formed.envelope):
+        raise ValueError("Atreides acceptance does not bind the handed-off envelope")
+
+    accepted = acceptance.disposition is Disposition.PASS
+    target = LifecycleState.HANDED_TO_ATREIDES if accepted else LifecycleState.REFUSED_BY_ATREIDES
+    if isinstance(acceptance.dsor_record, Recorded):
+        evidence = f"Decision System of Record reference {acceptance.dsor_record.value}"
+    else:
+        assert isinstance(acceptance.dsor_record, Absent)
+        evidence = f"no Decision System of Record entry: {acceptance.dsor_record.reason}"
+    journal = transition(
+        formed.journal,
+        order_id=order_id,
+        target=target,
+        reason=(
+            f"Atreides returned {acceptance.disposition.value} for "
+            f"{acceptance.obligation_id}; {evidence}"
+        ),
+        actor=actor,
+        event=event,
+    )
+    return HandoffOutcome(journal=journal, acceptance=acceptance)
 
 
 def form_obligation(  # noqa: PLR0913 - every boundary input remains explicit
