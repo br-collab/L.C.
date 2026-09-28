@@ -331,6 +331,10 @@ _ALLOWED = {
     LifecycleState.AFFIRMED: {LifecycleState.CLEARING_TRANSFORMED},
     LifecycleState.CLEARING_TRANSFORMED: {LifecycleState.OBLIGATION_READY},
     LifecycleState.OBLIGATION_READY: {LifecycleState.SETTLEMENT_CANDIDATE_READY},
+    LifecycleState.SETTLEMENT_CANDIDATE_READY: {
+        LifecycleState.HANDED_TO_ATREIDES,
+        LifecycleState.REFUSED_BY_ATREIDES,
+    },
 }
 
 
