@@ -337,6 +337,7 @@
   <dl class="facts">
     <div><dt>Halt state (server-side)</dt><dd>{% if ag.halted %}<strong>HALTED</strong> — {% endif %}{{ ag.halt_text }}</dd></div>
     <div><dt>Last activation tick</dt><dd>{{ ag.tick_text }}</dd></div>
+    <div><dt>Reading age</dt><dd>{{ ag.age_text }}</dd></div>
   </dl>
 
   {% if ag.rows %}

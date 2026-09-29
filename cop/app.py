@@ -15,6 +15,7 @@ import os
 import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any
 
 from flask import (
     Flask,
@@ -46,6 +47,7 @@ from cop.demo import (
 from cop.escalations import HttpxEscalationClient
 from cop.github import HttpxGitHubClient
 from cop.layer_clock import HttpxLayerClockClient
+from cop.observation import NOT_CONFIGURED, Observation
 from cop.refresher import Clock, Refresher, RefresherOptions, Sources, utc_now
 from cop.settings import (
     LOGIN_FAILURE_WINDOW,
@@ -222,6 +224,49 @@ def _logged_in(state: CopState) -> bool:
     return hmac.compare_digest(stored, expected)
 
 
+def _health_source(
+    observations: list[Observation[Any]], now: datetime, *, variable: str | None = None
+) -> dict[str, object]:
+    """Return source state only; source addresses and values never cross this boundary."""
+    if observations and all(obs.error_class == NOT_CONFIGURED for obs in observations):
+        source_state = "not_configured"
+    elif any(not obs.ok for obs in observations):
+        source_state = "failing"
+    elif any(not obs.is_current(now) for obs in observations):
+        source_state = "stale"
+    else:
+        source_state = "configured"
+    good_times: list[datetime] = []
+    for observation in observations:
+        good_at = observation.good_at()
+        if good_at is not None:
+            good_times.append(good_at)
+    thresholds = [obs.stale_after for obs in observations if obs.stale_after is not None]
+    result: dict[str, object] = {
+        "state": source_state,
+        "last_good_age_seconds": (
+            max(0, int((now - min(good_times)).total_seconds())) if good_times else None
+        ),
+        "stale_after_seconds": (
+            min(int(value.total_seconds()) for value in thresholds) if thresholds else None
+        ),
+    }
+    if variable is not None:
+        result["variable"] = variable
+    return result
+
+
+def _absent_health_source(*, variable: str | None = None) -> dict[str, object]:
+    result: dict[str, object] = {
+        "state": "not_configured",
+        "last_good_age_seconds": None,
+        "stale_after_seconds": None,
+    }
+    if variable is not None:
+        result["variable"] = variable
+    return result
+
+
 def create_app(  # noqa: PLR0915 - route definitions read best in one place
     settings: Settings | None = None,
     refresher: Refresher | None = None,
@@ -316,7 +361,45 @@ def create_app(  # noqa: PLR0915 - route definitions read best in one place
         state = _state()
         if state.refresher is None:
             return jsonify(status="misconfigured"), 503
-        return jsonify(status="ok", refresher="running" if state.refresher.running else "idle"), 200
+        snapshot = state.refresher.snapshot
+        agents = snapshot.agents.snapshot
+        now = state.clock()
+        github_observations = [
+            observation
+            for repo in snapshot.repos
+            for observation in (
+                repo.main_head,
+                repo.main_ci,
+                repo.latest_tag,
+                repo.pulls,
+                repo.scheduled,
+            )
+        ]
+        return jsonify(
+            status="ok",
+            refresher="running" if state.refresher.running else "idle",
+            sources={
+                "program": _health_source([snapshot.program], now),
+                "github": _health_source(github_observations, now),
+                "aureon-snapshot": _health_source([snapshot.aureon.snapshot], now),
+                "cash-leg": _health_source([snapshot.cash_leg.cash_leg], now),
+                "agents": _health_source([agents], now, variable="ATREIDES_AGENTS_URL"),
+                "lc-layer-clock": _health_source(
+                    [snapshot.lc_layer_clock.clock], now, variable="LC_LAYER_CLOCK_URL"
+                ),
+                "c2-escalations": _health_source(
+                    [snapshot.escalations.queue], now, variable="C2_ESCALATIONS_URL"
+                ),
+                "lifecycle": _health_source([snapshot.lifecycles.rows], now),
+                "breaks": _health_source([snapshot.breaks.records], now),
+                "holds": _absent_health_source(),
+                "dsor": _absent_health_source(),
+                "controls": _health_source([snapshot.grc.controls], now),
+                "limits": _absent_health_source(),
+                "cutoffs": _absent_health_source(),
+                "ofr": _absent_health_source(),
+            },
+        ), 200
 
     @app.get("/login")
     def login_form() -> str | BaseResponse:

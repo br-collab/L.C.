@@ -24,23 +24,23 @@ System of Record. SLA means service-level agreement.
 
 ## Source register
 
-| Key | Repository and published document | Current state |
-|---|---|---|
-| `program` | `br-collab/L.C.`, packaged `cop/program.yaml` | Published with Legate |
-| `github` | GitHub REST documents for commits, workflow runs, tags and pull requests | Live |
-| `aureon-snapshot` | `br-collab/aureon`, public `/api/snapshot` | Live; no kernel `EventTimes` |
-| `cash-leg` | `br-collab/aureon`, public `/api/cashleg/demo` document prepared by Atreides | Reachable demonstration document; admitted only in `LEGATE_DEMO=1`. Production has no cash-leg producer, cutoff table or clocks |
-| `agents` | `br-collab/Project-Atreides`, activation snapshot configured by `ATREIDES_AGENTS_URL` | Producer exists; deployment URL may be absent |
-| `lc-layer-clock` | `br-collab/L.C.`, versioned layer-clock document configured by `LC_LAYER_CLOCK_URL` | Producer and reader exist; deployment URL may be absent; an empty register cannot publish |
-| `c2-escalations` | `br-collab/L.C.`, C2 escalation queue configured by `C2_ESCALATIONS_URL` | Reader and demo producer exist; live publication may be absent |
-| `lifecycle` | Published lifecycle document assembled from Aureon, L.C. and Atreides records | No production producer; demo only |
-| `breaks` | Atreides cross-layer break records | No producer |
-| `holds` | Aureon hold records | No aggregate producer |
-| `dsor` | Aureon DSOR authority-decision feed | No published feed |
-| `controls` | Aureon/Verana screening outputs and control-test results | No aggregate producer |
-| `limits` | Atreides cash exposure plus Aureon Kaladan limit definitions | No published limit definitions |
-| `cutoffs` | Published trading-session, Fedwire and NSCC cutoff table | No producer |
-| `ofr` | Published Office of Financial Research stress reading used in production | No COP feed; test and production series difference must remain visible |
+| Key | Repository and published document | Publication cadence | Staleness threshold | Current state |
+|---|---|---|---|---|
+| `program` | `br-collab/L.C.`, packaged `cop/program.yaml` | On deploy | Does not age | Published with Legate |
+| `github` | GitHub REST documents for commits, workflow runs, tags and pull requests | Live request | 5 minutes | Live |
+| `aureon-snapshot` | `br-collab/aureon`, public `/api/snapshot` | Live request | 5 minutes | Live; no kernel `EventTimes` |
+| `cash-leg` | `br-collab/aureon`, public `/api/cashleg/demo` document prepared by Atreides | Live request in demo | 5 minutes | Reachable demonstration document; admitted only in `LEGATE_DEMO=1`. Production has no cash-leg producer, cutoff table or clocks |
+| `agents` | `br-collab/Project-Atreides`, activation snapshot configured by `ATREIDES_AGENTS_URL` | On push and nightly | 26 hours | Producer exists; deployment URL may be absent |
+| `lc-layer-clock` | `br-collab/L.C.`, versioned layer-clock document configured by `LC_LAYER_CLOCK_URL` | Live request | 5 minutes | Producer and reader exist; deployment URL may be absent; an empty register cannot publish |
+| `c2-escalations` | `br-collab/L.C.`, C2 escalation queue configured by `C2_ESCALATIONS_URL` | Live request | 5 minutes | Reader and demo producer exist; live publication may be absent |
+| `lifecycle` | Published lifecycle document assembled from Aureon, L.C. and Atreides records | Live request when connected | 5 minutes | No production producer; demo only |
+| `breaks` | Atreides cross-layer break records | Live request when connected | 5 minutes | No producer |
+| `holds` | Aureon hold records | No producer | Not applicable | No aggregate producer |
+| `dsor` | Aureon decision system of record authority-decision feed | No producer | Not applicable | No published feed |
+| `controls` | Aureon/Verana screening outputs and control-test results | Live request when connected | 5 minutes | No aggregate producer |
+| `limits` | Atreides cash exposure plus Aureon Kaladan limit definitions | No producer | Not applicable | No published limit definitions |
+| `cutoffs` | Published trading-session, Fedwire and NSCC cutoff table | No producer | Not applicable | No producer |
+| `ofr` | Published Office of Financial Research stress reading used in production | No COP feed | Not applicable | Test and production series difference must remain visible |
 
 ## L.C. production-module register
 
