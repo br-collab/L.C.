@@ -79,6 +79,7 @@ jobs:
         run: >-
           mypy lc tests --exclude tests/cop --exclude tests/harness_c2
           --exclude tests/thifur_h --exclude tests/test_atreides_handoff.py
+          --exclude tests/test_aureon_intent_wire.py
 
       - name: pytest
         run: >-
@@ -117,6 +118,40 @@ jobs:
         env:
           HANDOFF_EXTRA_REQUIRED: "1"
         run: pytest -q tests/test_atreides_handoff.py
+
+  aureon-intent:
+    name: Aureon intent (pinned real producer)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check out the ancestry-verified Aureon producer
+        uses: actions/checkout@v7
+        with:
+          repository: br-collab/aureon
+          # Ancestry verified against aureon/main after PR #56 deployed.
+          ref: 3e90f72a1ffa177045d4e4f3e7f9770689e037f1
+          path: .handoff/aureon
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Install L.C.
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Exercise Aureon's real approved-intent bytes
+        env:
+          AUREON_WIRE_REQUIRED: "1"
+          PYTHONPATH: .handoff/aureon
+        run: pytest -q tests/test_aureon_intent_wire.py
+
+      - name: Type check the producer boundary
+        env:
+          MYPYPATH: .handoff/aureon
+        run: mypy lc tests/test_aureon_intent_wire.py
 
   harness:
     name: Thifur-C2 harness (kernel only)
@@ -185,7 +220,10 @@ jobs:
           ruff format --check .
 
       - name: mypy
-        run: mypy lc cop harness_c2 thifur_h tests --exclude tests/test_atreides_handoff.py
+        run: >-
+          mypy lc cop harness_c2 thifur_h tests
+          --exclude tests/test_atreides_handoff.py
+          --exclude tests/test_aureon_intent_wire.py
 
       - name: pytest
         env:

@@ -85,6 +85,30 @@ def _payload() -> ApprovedIntentPayload:
     )
 
 
+def _wire_bytes(payload: ApprovedIntentPayload) -> bytes:
+    return canonical_bytes_of(
+        {
+            "schema_version": "aureon.approved_intent/0.1-draft",
+            "intent": {
+                "instrument_id": payload.instrument_id,
+                "side": payload.side,
+                "quantity": {"basis": "QUANTITY", "quantity": str(payload.quantity)},
+            },
+            "policy_manifest": {
+                "disposition": "PASS" if payload.policy_manifest.enabled else "BLOCK",
+                "policy_record_id": payload.policy_manifest.policy_id,
+                "rule_set_version": payload.policy_manifest.version,
+                "rules_digest": payload.policy_manifest.bounds_digest,
+            },
+            "authority_manifest": {
+                "quorum_met": payload.authority_manifest.authorized,
+                "authority_id": payload.authority_manifest.authority_id,
+            },
+            "allocation_accounts": payload.allocation_accounts,
+        }
+    )
+
+
 def _envelope(payload: ApprovedIntentPayload | None = None) -> ApprovedIntentEnvelope:
     payload = payload or _payload()
     return ApprovedIntentEnvelope(
@@ -107,7 +131,7 @@ def _envelope(payload: ApprovedIntentPayload | None = None) -> ApprovedIntentEnv
             effects=(),
             note="records approval inside Aureon; L.C. consumption is read-only",
         ),
-        payload_digest=digest_bytes(canonical_bytes_of(payload)),
+        payload_digest=digest_bytes(_wire_bytes(payload)),
     )
 
 
@@ -115,7 +139,7 @@ def _accepted() -> IntentOutcome:
     payload = _payload()
     outcome = accept_intent(
         _envelope(payload),
-        canonical_bytes_of(payload),
+        _wire_bytes(payload),
         parent_order_id=OrderId(_id("ord_", 10)),
         actor=_actor(),
         event=_event(10),
@@ -130,7 +154,7 @@ def test_same_inputs_produce_a_byte_identical_register() -> None:
 
 def test_tampered_envelope_digest_is_a_first_class_refusal() -> None:
     payload = _payload()
-    payload_bytes = canonical_bytes_of(payload)
+    payload_bytes = _wire_bytes(payload)
     tampered_bytes = payload_bytes.replace(b'"100"', b'"101"', 1)
     assert len(tampered_bytes) == len(payload_bytes)
     assert (
@@ -163,7 +187,7 @@ def test_policy_and_authority_manifests_are_verified(field: str) -> None:
         )
     outcome = accept_intent(
         _envelope(payload),
-        canonical_bytes_of(payload),
+        _wire_bytes(payload),
         parent_order_id=OrderId(_id("ord_", 10)),
         actor=_actor(),
         event=_event(10),
@@ -182,7 +206,7 @@ def test_authority_manifest_must_name_the_approving_actor() -> None:
     )
     outcome = accept_intent(
         _envelope(payload),
-        canonical_bytes_of(payload),
+        _wire_bytes(payload),
         parent_order_id=OrderId(_id("ord_", 10)),
         actor=_actor(),
         event=_event(10),
@@ -254,7 +278,7 @@ def test_refusal_records_later_states_as_not_reached() -> None:
     payload = _payload().model_copy(update={"quantity": Decimal("101")})
     outcome = accept_intent(
         _envelope(),
-        canonical_bytes_of(payload),
+        _wire_bytes(payload),
         parent_order_id=OrderId(_id("ord_", 10)),
         actor=_actor(),
         event=_event(10),
@@ -268,7 +292,7 @@ def test_parent_activation_cannot_skip_strategy_authorization() -> None:
     payload = _payload()
     outcome = accept_intent(
         _envelope(payload),
-        canonical_bytes_of(payload),
+        _wire_bytes(payload),
         parent_order_id=OrderId(_id("ord_", 10)),
         actor=_actor(),
         event=_event(10),
