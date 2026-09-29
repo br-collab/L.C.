@@ -171,7 +171,7 @@ class LineageRecord:
         """Stop 5's precondition: is this a whole picture, or a partial one?
 
         C2 never escalates a partial picture. A record carrying a
-        ``LIFECYCLE_MISMATCH`` or a ``BROKEN_LINK`` is not a partial picture of
+        ``LIFECYCLE_MISMATCH`` or an ``AMBIGUOUS`` stage is not a partial picture of
         one lifecycle — it is a picture of something that is not one lifecycle,
         and escalating it would send an operator to reconcile a story that was
         never true. Escalation packaging is a later work package; this property
