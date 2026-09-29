@@ -54,6 +54,7 @@ from cop.program import Program, load_program
 from cop.settings import (
     AGENTS_SNAPSHOT_SOURCE,
     AGENTS_SOURCE_UNSET,
+    AGENTS_STALE_AFTER,
     AUREON_CASH_LEG_URL,
     AUREON_REPOSITORY,
     AUREON_SNAPSHOT_URL,
@@ -232,7 +233,9 @@ class Refresher:
             program=pending("program", PROGRAM_SOURCE, Provenance.HUMAN_JUDGMENT, None),
             repos=repos,
             agents=AgentsState(
-                snapshot=pending("agents:snapshot", AGENTS_SNAPSHOT_SOURCE, fact, STALE_AFTER)
+                snapshot=pending(
+                    "agents:snapshot", AGENTS_SNAPSHOT_SOURCE, fact, AGENTS_STALE_AFTER
+                )
             ),
             lc_layer_clock=LayerClockState(
                 clock=pending("lc:layer_clock", LC_LAYER_CLOCK_SOURCE, fact, STALE_AFTER)
@@ -442,7 +445,7 @@ class Refresher:
                 AGENTS_SNAPSHOT_SOURCE,
                 Provenance.FACT_EXTERNAL,
                 AGENTS_SOURCE_UNSET,
-                STALE_AFTER,
+                AGENTS_STALE_AFTER,
             )
             return AgentsState(snapshot=snapshot)
         return AgentsState(
@@ -451,6 +454,7 @@ class Refresher:
                 AGENTS_SNAPSHOT_SOURCE,
                 Provenance.FACT_EXTERNAL,
                 self._agents.snapshot,
+                AGENTS_STALE_AFTER,
                 value_time=lambda value: value.taken_at,
             )
         )

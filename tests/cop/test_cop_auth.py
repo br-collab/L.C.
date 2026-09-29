@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -175,7 +176,44 @@ def test_healthz_is_public_and_ok_when_configured() -> None:
     client = Rig().app_client()
     response = client.get("/healthz")
     assert response.status_code == 200
-    assert response.get_json() == {"status": "ok", "refresher": "idle"}
+    body = response.get_json()
+    assert body["status"] == "ok"
+    assert body["refresher"] == "idle"
+    assert body["sources"]["agents"] == {
+        "last_good_age_seconds": None,
+        "stale_after_seconds": 93600,
+        "state": "failing",
+        "variable": "ATREIDES_AGENTS_URL",
+    }
+
+
+def test_healthz_reports_unconfigured_agents_without_leaking_source_data() -> None:
+    rig = Rig(agents_configured=False)
+    rig.refresher.refresh_once()
+    response = rig.app_client({**GOOD_ENV, "ATREIDES_AGENTS_URL": ""}).get("/healthz")
+    body = response.get_json()
+    assert body["sources"]["agents"]["state"] == "not_configured"
+    serialised = response.get_data(as_text=True)
+    for forbidden in ("https://", "example.test", OPERATOR_KEY, SESSION_SECRET, "agent_id"):
+        assert forbidden not in serialised
+
+
+def test_healthz_distinguishes_failing_stale_and_configured_agents() -> None:
+    rig = Rig()
+    rig.atreides.failure = "timeout"
+    rig.refresher.refresh_once()
+    assert rig.app_client().get("/healthz").get_json()["sources"]["agents"]["state"] == "failing"
+
+    rig.atreides.failure = None
+    rig.atreides.body["taken_at"] = (rig.clock.now - timedelta(hours=27)).isoformat()
+    rig.refresher.refresh_once()
+    assert rig.app_client().get("/healthz").get_json()["sources"]["agents"]["state"] == "stale"
+
+    rig.atreides.body["taken_at"] = (rig.clock.now - timedelta(minutes=42)).isoformat()
+    rig.refresher.refresh_once()
+    health = rig.app_client().get("/healthz").get_json()["sources"]["agents"]
+    assert health["state"] == "configured"
+    assert health["last_good_age_seconds"] == 42 * 60
 
 
 def test_security_headers_on_every_response() -> None:

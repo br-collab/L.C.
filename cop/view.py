@@ -188,7 +188,8 @@ def tile(obs: Observation[T], now: datetime, badge_for: Callable[[T], Badge]) ->
         # The source answered, but too long ago: the refresher may have stopped.
         stale_value, stale_at = obs.value, obs.observed_at
         error_class = STALE_ERROR
-        detail = f"Last refreshed more than {int(STALE_AFTER.total_seconds() // 60)} minutes ago"
+        threshold = obs.stale_after or STALE_AFTER
+        detail = f"Last refreshed more than {fmt_age(threshold)} ago"
     else:
         stale_value, stale_at = obs.last_good_value, obs.last_good_at
         error_class = obs.error_class or STALE_ERROR
@@ -400,6 +401,7 @@ class AgentsView:
     tick_text: str
     synthetic: bool
     phase: str
+    age_text: str
 
 
 @dataclass(frozen=True)
@@ -1009,6 +1011,7 @@ def _agents_view(state: AgentsState, now: datetime) -> AgentsView:
             tick_text="Not confirmed: no current activation snapshot",
             synthetic=True,
             phase="A",
+            age_text="Absent — no current activation snapshot",
         )
     return AgentsView(
         tile=tile_view,
@@ -1018,6 +1021,9 @@ def _agents_view(state: AgentsState, now: datetime) -> AgentsView:
         tick_text=shown_text(snapshot.tick, lambda t: f"tick {t}"),
         synthetic=snapshot.synthetic,
         phase=snapshot.phase,
+        age_text=fmt_age(now - state.snapshot.observed_at)
+        if state.snapshot.observed_at is not None
+        else "Absent — no observation time",
     )
 
 
@@ -1136,11 +1142,12 @@ def _overall(
 
 
 def _stale_sources(snapshot: Snapshot, now: datetime) -> tuple[str, ...]:
-    """Sources with no good value, or whose newest good value is older than STALE_AFTER."""
+    """Sources with no good value, or older than their declared threshold."""
 
     def too_old(obs: Observation[Any]) -> bool:
         good_at = obs.good_at()
-        return good_at is None or now - good_at > STALE_AFTER
+        threshold = obs.stale_after or STALE_AFTER
+        return good_at is None or now - good_at > threshold
 
     stale: list[str] = []
     for repo in snapshot.repos:

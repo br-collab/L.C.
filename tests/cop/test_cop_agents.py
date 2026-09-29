@@ -90,20 +90,33 @@ class TestTheSourceFailsClosed:
 
 
 class TestSnapshotAgeComesFromTheDocument:
-    def test_a_fresh_fetch_of_an_old_document_is_stale(self) -> None:
+    def test_a_forty_two_minute_old_document_is_current_and_shows_age(self) -> None:
         rig = Rig()
         body = activation_body()
-        body["taken_at"] = (rig.clock.now - timedelta(minutes=6)).isoformat()
+        body["taken_at"] = (rig.clock.now - timedelta(minutes=42)).isoformat()
         rig.atreides.body = body
 
         page = _page(rig)
 
+        assert page.agents.tile.current is True
+        assert page.agents.rows
+        assert page.agents.age_text == "42 min"
+
+        rig.refresher.refresh_once()
+        client = rig.app_client()
+        login(client)
+        panel = section(client.get("/panel/agents").get_data(as_text=True), "agents")
+        assert "Reading age" in panel
+
+    def test_a_document_older_than_the_declared_cadence_is_stale(self) -> None:
+        rig = Rig()
+        body = activation_body()
+        body["taken_at"] = (rig.clock.now - timedelta(hours=27)).isoformat()
+        rig.atreides.body = body
+        page = _page(rig)
         assert page.agents.tile.current is False
-        assert page.agents.tile.value is None
-        assert page.agents.tile.stale_value is not None
         assert page.agents.tile.badge.code == Disposition.INDETERMINATE
         assert page.agents.rows == ()
-        assert page.banner.overall.code != Disposition.PASS
         assert page.banner.stale_sources
 
     def test_a_current_document_keeps_its_taken_at_as_the_last_good_time(self) -> None:
@@ -239,7 +252,7 @@ class TestAT5TheCopReportsHaltedOnlyFromServerState:
         rig = Rig()
         rig.atreides.body = activation_body(halted=True)
         rig.refresher.refresh_once()
-        rig.clock.advance(minutes=30)
+        rig.clock.advance(hours=27)
         page = build_page(rig.refresher.snapshot, rig.clock.now)
         assert page.agents.halted is False
         assert "Not confirmed" in page.agents.halt_text

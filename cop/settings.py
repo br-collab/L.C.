@@ -61,6 +61,10 @@ HTTP_TIMEOUT_SECONDS = 10.0
 REFRESH_SECONDS_WITH_TOKEN = 60
 REFRESH_SECONDS_WITHOUT_TOKEN = 600
 STALE_AFTER = timedelta(minutes=5)
+# The activation document is published on push and nightly.  Twenty-six hours
+# allows the scheduled job a two-hour delivery margin while still reporting a
+# stopped daily publication cycle as stale.
+AGENTS_STALE_AFTER = timedelta(hours=26)
 PAGE_RELOAD_SECONDS = 60
 
 # Access ----------------------------------------------------------------------------------
