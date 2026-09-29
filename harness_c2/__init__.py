@@ -28,10 +28,9 @@ weaken it.
 
 Build order
 -----------
-The lineage assembler first, then handoff issuance, then escalation packaging.
-The assembler is the only part testable against the frozen contracts with no
-authority existing at all, so it goes first — and this package currently
-contains only the assembler.
+The lineage assembler first, then handoff issuance, escalation packaging,
+scenario identity and the byte transcript. The harness transports frozen
+envelopes and canonical payload bytes; it does not import a business domain.
 
 Boundaries
 ----------
