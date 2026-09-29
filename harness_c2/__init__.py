@@ -3,11 +3,10 @@
 Phase B of ``_tasking/W3-agent-activation.md``. C2 = Command and Control.
 CAOM = Consolidated Authority Operating Mode. COP = Common Operating Picture.
 
-**Held, and deliberately unpushed.** ``W3-agent-activation-AMD1.md`` § 4 holds
-Phase B on Bill's Research Charter § 18.5 intellectual-property decision, and no
-C2 orchestration design reaches any public repository under ``br-collab`` until
-that decision is recorded in the research record. This package exists on a local
-branch only. Do not push it until § 18.5 is recorded.
+**Published under the open-publication decision.** Bill's Research Charter
+§ 18.5 intellectual-property decision was recorded on 21 September 2026 in
+``Research-record/decisions/DEC-18.5-open-publication-2026-09-21.md``. It
+confirms publication of this package as intended rather than accidental.
 
 The five immutable stops
 ------------------------
