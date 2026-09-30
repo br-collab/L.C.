@@ -60,6 +60,7 @@ class CrossingArtifactEnvelope(BaseModel):
         "member_submission",
         "rail_response",
         "reconciliation",
+        "injection_condition",
     ]
     payload_digest: Digest
 
