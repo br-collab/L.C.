@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from decimal import Decimal
 from enum import StrEnum
-from typing import Self
+from typing import Literal, Self
 
 from cannae_kernel.absence import Recorded, require_recorded
 from cannae_kernel.actor import ActorRef
 from cannae_kernel.canonical import canonical_bytes_of, digest, digest_bytes
 from cannae_kernel.clocks import EventTimes
+from cannae_kernel.disposition import Disposition
 from cannae_kernel.envelopes import ApprovedIntentEnvelope
 from cannae_kernel.events import verify
 from cannae_kernel.ids import ActorId, EventId, IntentId, LifecycleId, OrderId
@@ -78,6 +79,72 @@ class ApprovedIntentPayload(_Record):
         if len(set(self.allocation_accounts)) != len(self.allocation_accounts):
             raise ValueError("allocation intent cannot name the same account twice")
         return self
+
+
+class _AureonRecord(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="ignore", strict=True)
+
+
+class _AureonQuantityTerms(_AureonRecord):
+    basis: Literal["QUANTITY", "NOTIONAL"]
+    quantity: str | None
+
+
+class _AureonIntentTerms(_AureonRecord):
+    instrument_id: str = Field(min_length=1)
+    side: OrderSide
+    quantity: _AureonQuantityTerms
+
+
+class _AureonPolicyManifest(_AureonRecord):
+    disposition: Disposition
+    policy_record_id: str = Field(min_length=1)
+    rule_set_version: str = Field(min_length=1)
+    rules_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+
+
+class _AureonAuthorityManifest(_AureonRecord):
+    quorum_met: bool
+    authority_id: ActorId
+
+
+class _AureonApprovedIntentPayload(_AureonRecord):
+    """The Aureon-owned wire fields L.C. consumes; unrelated fields remain Aureon's."""
+
+    schema_version: Literal["aureon.approved_intent/0.1-draft"]
+    intent: _AureonIntentTerms
+    policy_manifest: _AureonPolicyManifest
+    authority_manifest: _AureonAuthorityManifest
+    allocation_accounts: tuple[str, ...] | None
+
+
+def _read_aureon_payload(
+    envelope: ApprovedIntentEnvelope, payload_bytes: bytes
+) -> ApprovedIntentPayload:
+    wire = _AureonApprovedIntentPayload.model_validate_json(payload_bytes, strict=True)
+    if wire.intent.quantity.basis != "QUANTITY" or wire.intent.quantity.quantity is None:
+        raise ValueError("Aureon intent has no executable quantity for L.C.")
+    if wire.allocation_accounts is None:
+        raise ValueError("Aureon intent has no explicit allocation_accounts instruction")
+    policy = PolicyManifest(
+        policy_id=wire.policy_manifest.policy_record_id,
+        version=wire.policy_manifest.rule_set_version,
+        bounds_digest=wire.policy_manifest.rules_digest,
+        enabled=wire.policy_manifest.disposition in {Disposition.PASS, Disposition.HOLD},
+    )
+    return ApprovedIntentPayload(
+        intent_id=envelope.envelope_id,
+        instrument_id=wire.intent.instrument_id,
+        side=wire.intent.side,
+        quantity=Decimal(wire.intent.quantity.quantity),
+        policy_manifest=policy,
+        authority_manifest=AuthorityManifest(
+            authority_id=wire.authority_manifest.authority_id,
+            policy_manifest_digest=digest(policy),
+            authorized=wire.authority_manifest.quorum_met,
+        ),
+        allocation_accounts=wire.allocation_accounts,
+    )
 
 
 class EventInput(_Record):
@@ -180,7 +247,7 @@ def accept_intent(
 ) -> IntentOutcome:
     """Verify exact received bytes before parsing and checking their manifests."""
     received_digest = digest_bytes(payload_bytes)
-    payload = ApprovedIntentPayload.model_validate_json(payload_bytes)
+    payload = _read_aureon_payload(envelope, payload_bytes)
     checks = (
         ("payload_digest", envelope.payload_digest == received_digest, "payload digest mismatch"),
         ("intent_identity", payload.intent_id == envelope.envelope_id, "intent id mismatch"),
