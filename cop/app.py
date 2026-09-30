@@ -47,6 +47,7 @@ from cop.demo import (
 from cop.escalations import HttpxEscalationClient
 from cop.github import HttpxGitHubClient
 from cop.layer_clock import HttpxLayerClockClient
+from cop.lifecycle import HttpxLifecycleClient
 from cop.observation import NOT_CONFIGURED, Observation
 from cop.refresher import Clock, Refresher, RefresherOptions, Sources, utc_now
 from cop.settings import (
@@ -179,9 +180,11 @@ def build_refresher(settings: Settings, clock: Clock = utc_now) -> Refresher:
                 if settings.lc_layer_clock_url is not None
                 else None
             ),
-            # No live lifecycle source exists: the middle layer is Wave 4. Outside
-            # demo mode the board says so rather than rendering an empty table.
-            lifecycles=None,
+            lifecycles=(
+                HttpxLifecycleClient(settings.lifecycle_base_url)
+                if settings.lifecycle_base_url is not None
+                else None
+            ),
             # None when C2_ESCALATIONS_URL is unset. Panel 12 names it as an
             # unconnected source rather than the queue rendering empty, which
             # would read as "nothing is waiting".
@@ -390,7 +393,9 @@ def create_app(  # noqa: PLR0915 - route definitions read best in one place
                 "c2-escalations": _health_source(
                     [snapshot.escalations.queue], now, variable="C2_ESCALATIONS_URL"
                 ),
-                "lifecycle": _health_source([snapshot.lifecycles.rows], now),
+                "lifecycle": _health_source(
+                    [snapshot.lifecycles.rows], now, variable="LC_LIFECYCLE_BASE_URL"
+                ),
                 "breaks": _health_source([snapshot.breaks.records], now),
                 "holds": _absent_health_source(),
                 "dsor": _absent_health_source(),

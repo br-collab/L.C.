@@ -42,11 +42,22 @@ down, and it is why a row with a single unknown cell cannot render `PASS`.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
+from typing import Literal, Protocol
 
+import httpx
+from cannae_kernel.absence import Absent, Recorded
 from cannae_kernel.disposition import Disposition
+from cannae_kernel.ids import LifecycleId, ScenarioId
+from cannae_kernel.provenance import Provenance
+from pydantic import BaseModel, ConfigDict, ValidationError
+
+from cop.http import get_bytes
+from cop.observation import SourceFieldAbsentError, SourceMalformedError
+from cop.settings import HTTP_TIMEOUT_SECONDS, PRODUCT_NAME
 
 __all__ = [
     "CHECKPOINT_LAYER",
@@ -54,12 +65,14 @@ __all__ = [
     "NOT_BUILT_REASON",
     "NOT_REACHED_REASON",
     "Checkpoint",
+    "HttpxLifecycleClient",
     "Layer",
     "LayerReading",
     "LifecycleCell",
     "LifecycleRow",
     "build_row",
     "cell_for",
+    "parse_document",
     "row_disposition",
 ]
 
@@ -159,6 +172,7 @@ class LifecycleRow:
 
     lifecycle_id: str
     cells: tuple[LifecycleCell, ...]
+    taken_at: datetime | None = None
 
     @property
     def disposition(self) -> Disposition:
@@ -293,3 +307,105 @@ def build_row(
         for checkpoint in CHECKPOINT_ORDER
     )
     return LifecycleRow(lifecycle_id=lifecycle_id, cells=cells)
+
+
+SUPPORTED_SCHEMA_VERSION = "harness_c2.lifecycle_document/1"
+
+
+class _WireModel(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
+
+
+class _StageEvidence(_WireModel):
+    disposition: Disposition
+    reason: str
+    stamped_at: datetime
+    provenance: Provenance
+
+
+class _StageRow(_WireModel):
+    stage: Checkpoint
+    evidence: Recorded[_StageEvidence] | Absent
+
+
+class _LifecycleDocument(_WireModel):
+    schema_version: Literal["harness_c2.lifecycle_document/1"]
+    taken_at: datetime
+    scenario_id: ScenarioId
+    lifecycle_id: LifecycleId
+    synthetic: Literal[True]
+    stages: tuple[_StageRow, ...]
+
+
+class LifecycleSource(Protocol):
+    def rows(self) -> tuple[LifecycleRow, ...]: ...
+
+
+def parse_document(raw: bytes) -> LifecycleRow:
+    """Read one strict publication instance without importing its producer."""
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        raise SourceMalformedError("Lifecycle document is not valid JSON") from None
+    if not isinstance(data, dict):
+        raise SourceMalformedError("Lifecycle document is not a JSON object")
+    version = data.get("schema_version")
+    if version is None:
+        raise SourceFieldAbsentError("Lifecycle document has no schema_version")
+    if version != SUPPORTED_SCHEMA_VERSION:
+        raise SourceMalformedError(
+            f"Lifecycle document is schema version {version!r}; this reader understands "
+            f"only {SUPPORTED_SCHEMA_VERSION!r}"
+        )
+    try:
+        document = _LifecycleDocument.model_validate_json(raw)
+    except ValidationError as exc:
+        raise SourceMalformedError(
+            f"Unexpected lifecycle document shape ({exc.error_count()} problems)"
+        ) from None
+    if tuple(stage.stage for stage in document.stages) != CHECKPOINT_ORDER:
+        raise SourceMalformedError("Lifecycle document stages are absent, duplicated, or unordered")
+    cells = []
+    for stage in document.stages:
+        layer = CHECKPOINT_LAYER[stage.stage]
+        if isinstance(stage.evidence, Absent):
+            cells.append(
+                LifecycleCell(
+                    checkpoint=stage.stage,
+                    layer=layer,
+                    disposition=Disposition.INDETERMINATE,
+                    detail=stage.evidence.reason,
+                    stamped_at=None,
+                    provenance="FACT_SYNTHETIC",
+                )
+            )
+        else:
+            value = stage.evidence.value
+            cells.append(
+                LifecycleCell(
+                    checkpoint=stage.stage,
+                    layer=layer,
+                    disposition=value.disposition,
+                    detail=value.reason,
+                    stamped_at=value.stamped_at,
+                    provenance=value.provenance.value,
+                )
+            )
+    return LifecycleRow(
+        lifecycle_id=str(document.lifecycle_id), cells=tuple(cells), taken_at=document.taken_at
+    )
+
+
+class HttpxLifecycleClient:
+    """Read the funded and unfunded stable publication instances over HTTPS."""
+
+    def __init__(self, base_url: str, http: httpx.Client | None = None) -> None:
+        self._base_url = base_url.rstrip("/")
+        self._http = http or httpx.Client(timeout=HTTP_TIMEOUT_SECONDS)
+
+    def rows(self) -> tuple[LifecycleRow, ...]:
+        headers = {"Accept": "application/json", "User-Agent": PRODUCT_NAME}
+        return tuple(
+            parse_document(get_bytes(self._http, f"{self._base_url}/{name}.json", headers=headers))
+            for name in ("funded", "unfunded")
+        )
