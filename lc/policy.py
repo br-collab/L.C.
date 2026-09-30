@@ -19,6 +19,7 @@ from lc.events import LifecycleState
 from lc.lifecycle import EventInput, LifecycleRegister, replay, transition
 
 __all__ = [
+    "CounterfactualExecutionPolicy",
     "ExecutionApplication",
     "ExecutionPolicy",
     "ExecutionReport",
@@ -55,6 +56,14 @@ class ExecutionPolicy(_Record):
         if self.max_evidence_age <= timedelta(0):
             raise ValueError("max_evidence_age must be positive")
         return self
+
+
+class CounterfactualExecutionPolicy(_Record):
+    """A versioned BB1 ranking rule; it observes no emulator implementation."""
+
+    policy_id: str = Field(min_length=1)
+    version: str = Field(min_length=1)
+    objective: Literal["PRICE_ONLY", "SETTLEMENT_AWARE"]
 
 
 class MarketEvidenceSnapshot(_Record):
