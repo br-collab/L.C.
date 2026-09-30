@@ -44,7 +44,9 @@ def test_unfunded_document_holds_and_records_later_stages_as_not_reached() -> No
     assert acceptance.evidence.value.disposition is Disposition.HOLD
     assert acceptance.evidence.value.reason == "CASH_GATE_HOLD:UNFUNDED_AT_SETTLEMENT_INSTANT"
     assert isinstance(settled.evidence, Absent)
-    assert "NOT_REACHED" in settled.evidence.reason
+    assert settled.evidence.reason == (
+        "NOT_REACHED: CASH_GATE_HOLD:UNFUNDED_AT_SETTLEMENT_INSTANT"
+    )
 
 
 def test_every_published_value_comes_from_the_transcript() -> None:
