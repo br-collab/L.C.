@@ -57,6 +57,7 @@ from cannae_kernel.session import BusinessDate, MarketSession, SessionContext
 from emulators.matching import MatchingEmulator, MatchingOutcome, MatchRequest
 from emulators.settlement import RailOutcome, SyntheticEntitledMember, SyntheticRail
 from emulators.venue import VenueEmulator, VenueOrder, VenueOutcome
+from harness_c2.chaos import ChaosPlan, record_injection_conditions
 from harness_c2.escalation import (
     EscalationRefusedError,
     EscalationRequest,
@@ -214,7 +215,10 @@ def _artifact_envelope(
 
 
 def _run(  # noqa: PLR0915 - the ordered lifecycle remains visible as one experiment
-    *, funded: bool, asset_profile: AssetProfile = BILATERAL_TREASURY
+    *,
+    funded: bool,
+    asset_profile: AssetProfile = BILATERAL_TREASURY,
+    chaos_plan: ChaosPlan | None = None,
 ) -> tuple[ScenarioRecord, CrossingTranscript]:
     scenario = _scenario(funded=funded, asset_profile=asset_profile)
     decision = {
@@ -428,6 +432,13 @@ def _run(  # noqa: PLR0915 - the ordered lifecycle remains visible as one experi
         halt=None,
     )
     transcript = CrossingTranscript()
+    if chaos_plan is not None:
+        transcript = record_injection_conditions(
+            scenario,
+            transcript,
+            chaos_plan,
+            recorded_at=_times(29),
+        )
     transcript = _crossing(
         transcript,
         scenario,
