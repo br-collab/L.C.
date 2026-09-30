@@ -127,19 +127,20 @@ def build_lifecycle_document(
     stopped_reason = "the transcript contains no record for this stage"
     for stage in LifecycleStage:
         crossing = reached[stage]
+        stage_reason: str | None = None
         if crossing is None:
             evidence: Recorded[StageEvidence] | Absent = _not_reached(stopped_reason)
         elif stage is LifecycleStage.OBLIGATION_ACCEPTANCE and cash_gate is not None:
             # The acceptance envelope records the decision; the preceding gate crossing
             # records its specific reason. The prefix names the recorded artifact kind
             # and disposition; it does not add a fact outside the transcript.
-            gate_reason = f"CASH_GATE_{cash_gate.disposition.value}:{cash_gate.reason}"
-            evidence = _recorded(crossing, reason=gate_reason)
+            stage_reason = f"CASH_GATE_{cash_gate.disposition.value}:{cash_gate.reason}"
+            evidence = _recorded(crossing, reason=stage_reason)
         else:
             evidence = _recorded(crossing)
         rows.append(StageRow(stage=stage, evidence=evidence))
         if crossing is not None and crossing.disposition is not Disposition.PASS:
-            stopped_reason = crossing.reason
+            stopped_reason = stage_reason or crossing.reason
     return LifecycleDocument(
         taken_at=taken_at,
         scenario_id=scenario.scenario_id,
