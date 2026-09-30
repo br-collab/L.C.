@@ -55,7 +55,11 @@ class CrossingArtifactEnvelope(BaseModel):
     artifact_id: str = Field(min_length=1)
     lifecycle_id: LifecycleId
     artifact_kind: Literal[
-        "prepared_instruction", "member_submission", "rail_response", "reconciliation"
+        "cash_gate_input",
+        "prepared_instruction",
+        "member_submission",
+        "rail_response",
+        "reconciliation",
     ]
     payload_digest: Digest
 
@@ -86,6 +90,7 @@ class Crossing(_Record):
     producer: Domain
     consumer: Domain
     lifecycle_id: LifecycleId
+    scenario_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
     envelope: Envelope
     payload_bytes: bytes = Field(min_length=1)
     producer_asserted_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
@@ -147,6 +152,7 @@ def record_crossing(  # noqa: PLR0913 - every crossing field is evidence, not co
         producer=producer,
         consumer=consumer,
         lifecycle_id=lifecycle_id,
+        scenario_digest=scenario.canonical_digest,
         envelope=_ENVELOPE.validate_python(envelope, strict=True),
         payload_bytes=payload_bytes,
         producer_asserted_digest=asserted,

@@ -184,7 +184,11 @@ def _artifact_envelope(
     *,
     artifact_id: str,
     artifact_kind: Literal[
-        "prepared_instruction", "member_submission", "rail_response", "reconciliation"
+        "cash_gate_input",
+        "prepared_instruction",
+        "member_submission",
+        "rail_response",
+        "reconciliation",
     ],
     payload_bytes: bytes,
 ) -> CrossingArtifactEnvelope:
@@ -384,22 +388,26 @@ def _run(  # noqa: PLR0915 - the ordered lifecycle remains visible as one experi
         obligation_event=_event(27),
         candidate_event=_event(28),
     )
+    operation = OperationContext(
+        notional=Decimal("9950"), currency="USD", is_material=False, is_lvps_material=False
+    )
+    funding = FundingState(
+        Decimal("10000") if funded else Decimal(0), Decimal("9950"), Decimal("20000"), True
+    )
+    rails = {CashRail.FEDWIRE: RailState(CashRail.FEDWIRE, RailStatus.AVAILABLE, 7200)}
     gate = evaluate(
-        operation=OperationContext(
-            notional=Decimal("9950"), currency="USD", is_material=False, is_lvps_material=False
-        ),
-        funding=FundingState(
-            Decimal("10000") if funded else Decimal(0), Decimal("9950"), Decimal("20000"), True
-        ),
-        rails={CashRail.FEDWIRE: RailState(CashRail.FEDWIRE, RailStatus.AVAILABLE, 7200)},
+        operation=operation,
+        funding=funding,
+        rails=rails,
         ofr_stlfsi4=0.0,
         obligation_id=formed.envelope.obligation_id,
         obligation_digest=digest(formed.envelope),
     )
+    acceptance_id = uuid.UUID("00000000-0000-4000-8000-000000000006")
     acceptance = evaluate_candidate(
         formed.envelope,
         formed.payload.canonical_bytes(),
-        acceptance_id=uuid.UUID("00000000-0000-4000-8000-000000000006"),
+        acceptance_id=acceptance_id,
         evaluated_at=AT,
         decided_by=ACTOR,
         gate_decision=gate,
@@ -442,13 +450,60 @@ def _run(  # noqa: PLR0915 - the ordered lifecycle remains visible as one experi
     transcript = _crossing(
         transcript,
         scenario,
+        producer="emulator",
+        consumer="atreides",
+        envelope=_artifact_envelope(
+            scenario,
+            artifact_id=f"cash-gate-{formed.envelope.obligation_id}",
+            artifact_kind="cash_gate_input",
+            payload_bytes=(
+                gate_input_bytes := canonical_bytes_of(
+                    {
+                        "acceptance_id": str(acceptance_id),
+                        "evaluated_at": AT,
+                        "decided_by": ACTOR,
+                        "operation": {
+                            "notional": operation.notional,
+                            "currency": operation.currency,
+                            "is_material": operation.is_material,
+                            "is_lvps_material": operation.is_lvps_material,
+                        },
+                        "funding": {
+                            "projected_funded_position": funding.projected_funded_position,
+                            "net_obligation": funding.net_obligation,
+                            "net_debit_cap_headroom": funding.net_debit_cap_headroom,
+                            "clearing_fund_sufficient": funding.clearing_fund_sufficient,
+                            "position_is_assertable": funding.position_is_assertable,
+                        },
+                        "rails": {
+                            rail.value: {
+                                "status": state.status.value,
+                                "seconds_to_cutoff": state.seconds_to_cutoff,
+                            }
+                            for rail, state in rails.items()
+                        },
+                        "ofr_stlfsi4": "0.0",
+                        "obligation_id": str(formed.envelope.obligation_id),
+                        "obligation_digest": digest(formed.envelope),
+                    }
+                )
+            ),
+        ),
+        payload_bytes=gate_input_bytes,
+        disposition=acceptance.disposition,
+        reason=gate.reason_code,
+        n=33,
+    )
+    transcript = _crossing(
+        transcript,
+        scenario,
         producer="lc",
         consumer="atreides",
         envelope=formed.envelope,
         payload_bytes=formed.payload.canonical_bytes(),
         disposition=acceptance.disposition,
         reason="obligation evaluated",
-        n=33,
+        n=34,
     )
     transcript = _crossing(
         transcript,
@@ -459,7 +514,7 @@ def _run(  # noqa: PLR0915 - the ordered lifecycle remains visible as one experi
         payload_bytes=canonical_bytes_of(acceptance),
         disposition=acceptance.disposition,
         reason="Atreides boundary result",
-        n=34,
+        n=35,
     )
     if funded:
         debtor = FinancialInstitution(bicfi="AAAAUS33XXX")
@@ -499,10 +554,10 @@ def _run(  # noqa: PLR0915 - the ordered lifecycle remains visible as one experi
             payload_bytes=prepared_bytes,
             disposition=Disposition.PASS,
             reason="Atreides prepared; synthetic member may submit",
-            n=35,
+            n=36,
         )
         submission = SyntheticEntitledMember(seed=29).submit(
-            lifecycle_id=scenario.lifecycle_id, instruction=prepared_bytes, times=_times(36)
+            lifecycle_id=scenario.lifecycle_id, instruction=prepared_bytes, times=_times(37)
         )
         submission_bytes = submission.model_dump_json().encode("utf-8")
         transcript = _crossing(
@@ -519,9 +574,9 @@ def _run(  # noqa: PLR0915 - the ordered lifecycle remains visible as one experi
             payload_bytes=submission_bytes,
             disposition=Disposition.PASS,
             reason="synthetic entitled member submitted exact prepared bytes",
-            n=36,
+            n=37,
         )
-        rail = SyntheticRail(seed=2).respond(submission, times=_times(37))
+        rail = SyntheticRail(seed=2).respond(submission, times=_times(38))
         assert rail.outcome is RailOutcome.SETTLED
         rail_bytes = rail.model_dump_json().encode("utf-8")
         transcript = _crossing(
@@ -538,7 +593,7 @@ def _run(  # noqa: PLR0915 - the ordered lifecycle remains visible as one experi
             payload_bytes=rail_bytes,
             disposition=rail.disposition,
             reason=rail.reason,
-            n=37,
+            n=38,
         )
         status = StatusReport(
             message_id=rail.response_id,
@@ -593,7 +648,7 @@ def _run(  # noqa: PLR0915 - the ordered lifecycle remains visible as one experi
             payload_bytes=reconciliation_bytes,
             disposition=Disposition.PASS,
             reason="Atreides reconciled prepared instruction to settled rail response",
-            n=38,
+            n=39,
         )
     return scenario, transcript
 
@@ -613,7 +668,7 @@ def _lineage(scenario: ScenarioRecord, transcript: CrossingTranscript) -> Lineag
 def test_funded_lifecycle_passes_and_clean_lineage_refuses_escalation() -> None:
     scenario, transcript = _run(funded=True)
     record = _lineage(scenario, transcript)
-    assert len(transcript.crossings) == 9
+    assert len(transcript.crossings) == 10
     assert record.disposition is Disposition.PASS
     with pytest.raises(EscalationRefusedError, match="nothing to escalate"):
         package_escalation(
@@ -629,7 +684,7 @@ def test_funded_lifecycle_passes_and_clean_lineage_refuses_escalation() -> None:
 
 def test_unfunded_lifecycle_holds_at_atreides_and_does_not_submit() -> None:
     scenario, transcript = _run(funded=False)
-    assert len(transcript.crossings) == 5
+    assert len(transcript.crossings) == 6
     assert transcript.crossings[-1].disposition is Disposition.HOLD
     assert _lineage(scenario, transcript).complete
 
