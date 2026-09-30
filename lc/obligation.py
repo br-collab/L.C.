@@ -23,6 +23,7 @@ from cannae_kernel.provenance import Provenance
 from cannae_kernel.session import SessionContext
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from lc.asset_profile import AssetProfile
 from lc.clearing import GrossClearingResult
 from lc.events import LifecycleState
 from lc.lifecycle import EventInput, LifecycleRegister, replay, transition
@@ -206,6 +207,7 @@ class FormedObligation(_Record):
     journal: LifecycleRegister
     envelope: SettlementObligationEnvelope
     payload: ObligationPayload
+    asset_profile: AssetProfile
 
 
 class HandoffOutcome(_Record):
@@ -259,6 +261,7 @@ def form_obligation(  # noqa: PLR0913 - every boundary input remains explicit
     obligation_id: ObligationId,
     session: SessionContext,
     source_manifest: SourceManifest,
+    asset_profile: AssetProfile,
     securities_leg: SecuritiesLeg,
     cash_leg: CashLeg,
     participants: tuple[ParticipantAccount, ...],
@@ -280,6 +283,8 @@ def form_obligation(  # noqa: PLR0913 - every boundary input remains explicit
         raise ValueError("clearing transformation does not bind this clearing result")
     if obligation_id not in clearing.output_obligation_ids:
         raise ValueError("obligation identifier is not a gross-clearing output")
+    if delivery_pattern is not asset_profile.settlement_pattern:
+        raise ValueError("delivery pattern does not match the registered asset profile")
     gross = next(item for item in clearing.obligations if item.obligation_id == obligation_id)
     if securities_leg.quantity != gross.quantity:
         raise ValueError("securities leg quantity does not match gross-clearing output")
@@ -337,4 +342,9 @@ def form_obligation(  # noqa: PLR0913 - every boundary input remains explicit
         actor=actor,
         event=candidate_event,
     )
-    return FormedObligation(journal=journal, envelope=envelope, payload=payload)
+    return FormedObligation(
+        journal=journal,
+        envelope=envelope,
+        payload=payload,
+        asset_profile=asset_profile,
+    )

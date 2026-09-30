@@ -17,6 +17,7 @@ from test_lifecycle import _actor, _event, _id
 from test_trade import _allocated, _fact
 
 from emulators.matching import MatchingOutcome
+from lc.asset_profile import BILATERAL_TREASURY
 from lc.clearing import GrossTrade, clear_gross
 from lc.events import LifecycleState
 from lc.lifecycle import replay
@@ -125,6 +126,7 @@ def _formed() -> FormedObligation:
             ),
         ),
         source_manifest=_manifest(digest(transformation)),
+        asset_profile=BILATERAL_TREASURY,
         securities_leg=SecuritiesLeg(
             instrument_id=captured.instrument_id,
             quantity=captured.quantity,
