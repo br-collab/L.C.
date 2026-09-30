@@ -1,0 +1,81 @@
+{
+  "schema_version": "harness_c2.lifecycle_document/1",
+  "taken_at": "2026-09-29T15:00:00Z",
+  "scenario_id": "scn_00000000000000000000000001",
+  "lifecycle_id": "lif_03J0YY19FSPXWRSJ8ES4ZMMHSR",
+  "synthetic": true,
+  "stages": [
+    {
+      "stage": "APPROVED_INTENT",
+      "evidence": {
+        "state": "recorded",
+        "value": {
+          "disposition": "PASS",
+          "reason": "approved intent accepted",
+          "stamped_at": "2026-09-29T15:00:30Z",
+          "provenance": "FACT_SYNTHETIC"
+        }
+      }
+    },
+    {
+      "stage": "EXECUTION",
+      "evidence": {
+        "state": "recorded",
+        "value": {
+          "disposition": "PASS",
+          "reason": "execution recorded",
+          "stamped_at": "2026-09-29T15:00:31Z",
+          "provenance": "FACT_SYNTHETIC"
+        }
+      }
+    },
+    {
+      "stage": "CLEARING",
+      "evidence": {
+        "state": "recorded",
+        "value": {
+          "disposition": "PASS",
+          "reason": "gross clearing conserved",
+          "stamped_at": "2026-09-29T15:00:32Z",
+          "provenance": "FACT_SYNTHETIC"
+        }
+      }
+    },
+    {
+      "stage": "SETTLEMENT_OBLIGATION",
+      "evidence": {
+        "state": "recorded",
+        "value": {
+          "disposition": "PASS",
+          "reason": "obligation evaluated",
+          "stamped_at": "2026-09-29T15:00:34Z",
+          "provenance": "FACT_SYNTHETIC"
+        }
+      }
+    },
+    {
+      "stage": "OBLIGATION_ACCEPTANCE",
+      "evidence": {
+        "state": "recorded",
+        "value": {
+          "disposition": "PASS",
+          "reason": "CASH_GATE_PASS:CLEARED",
+          "stamped_at": "2026-09-29T15:00:35Z",
+          "provenance": "FACT_SYNTHETIC"
+        }
+      }
+    },
+    {
+      "stage": "SETTLED",
+      "evidence": {
+        "state": "recorded",
+        "value": {
+          "disposition": "PASS",
+          "reason": "Atreides reconciled prepared instruction to settled rail response",
+          "stamped_at": "2026-09-29T15:00:39Z",
+          "provenance": "FACT_SYNTHETIC"
+        }
+      }
+    }
+  ]
+}
