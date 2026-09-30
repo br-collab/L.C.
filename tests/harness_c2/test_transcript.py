@@ -11,7 +11,12 @@ from cannae_kernel.provenance import Provenance
 from cannae_kernel.session import BusinessDate, MarketSession, SessionContext
 
 from harness_c2.scenario import start_scenario
-from harness_c2.transcript import Crossing, CrossingTranscript, record_crossing
+from harness_c2.transcript import (
+    Crossing,
+    CrossingArtifactEnvelope,
+    CrossingTranscript,
+    record_crossing,
+)
 
 NOW = datetime(2026, 9, 29, 12, tzinfo=UTC)
 TIMES = EventTimes(
@@ -93,3 +98,29 @@ def test_transcript_contains_bytes_and_a_frozen_envelope_not_domain_objects() ->
     assert isinstance(crossing.payload_bytes, bytes)
     assert isinstance(crossing.envelope, ApprovedIntentEnvelope)
     assert not hasattr(crossing, "payload")
+
+
+def test_transcript_accepts_a_byte_attested_external_artifact() -> None:
+    payload = b'{"outcome":"SETTLED"}'
+    envelope = CrossingArtifactEnvelope(
+        artifact_id="rail-response-1",
+        lifecycle_id=SCENARIO.lifecycle_id,
+        artifact_kind="rail_response",
+        payload_digest=digest_bytes(payload),
+    )
+    crossing = record_crossing(
+        scenario=SCENARIO,
+        producer="emulator",
+        consumer="atreides",
+        lifecycle_id=SCENARIO.lifecycle_id,
+        envelope=envelope,
+        payload_bytes=payload,
+        producer_asserted_digest=str(envelope.payload_digest),
+        times=TIMES,
+        accepted_disposition=Disposition.PASS,
+        accepted_reason="synthetic rail response received",
+    )
+    encoded = CrossingTranscript(crossings=(crossing,)).to_bytes()
+    restored = CrossingTranscript.from_bytes(encoded)
+    assert restored.to_bytes() == encoded
+    assert isinstance(restored.crossings[0].envelope, CrossingArtifactEnvelope)

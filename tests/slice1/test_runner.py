@@ -6,9 +6,21 @@ import uuid
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
+from typing import Literal
 
 import pytest
-from atreides.acceptance.service import evaluate_candidate
+from atreides.acceptance.service import evaluate_candidate, prepare_instruction
+from atreides.messaging.canonical import (
+    CashLegInstruction,
+    FinancialInstitution,
+    SettlementMethod,
+)
+from atreides.messaging.readback import (
+    SettlementStatus,
+    StatusEntry,
+    StatusReport,
+    reconcile,
+)
 from atreides.rails.cato_cash import (
     CashRail,
     FundingState,
@@ -54,7 +66,13 @@ from harness_c2.escalation import (
 )
 from harness_c2.lineage import GapCode, LineageRecord, assemble_lineage
 from harness_c2.scenario import ScenarioRecord, start_scenario
-from harness_c2.transcript import CrossingTranscript, Domain, Envelope, record_crossing
+from harness_c2.transcript import (
+    CrossingArtifactEnvelope,
+    CrossingTranscript,
+    Domain,
+    Envelope,
+    record_crossing,
+)
 from lc.clearing import GrossTrade, clear_gross
 from lc.lifecycle import (
     ChildOrder,
@@ -161,7 +179,26 @@ def _crossing(  # noqa: PLR0913 - every crossing field is evidence
     )
 
 
-def _run(*, funded: bool) -> tuple[ScenarioRecord, CrossingTranscript]:
+def _artifact_envelope(
+    scenario: ScenarioRecord,
+    *,
+    artifact_id: str,
+    artifact_kind: Literal[
+        "prepared_instruction", "member_submission", "rail_response", "reconciliation"
+    ],
+    payload_bytes: bytes,
+) -> CrossingArtifactEnvelope:
+    return CrossingArtifactEnvelope(
+        artifact_id=artifact_id,
+        lifecycle_id=scenario.lifecycle_id,
+        artifact_kind=artifact_kind,
+        payload_digest=digest_bytes(payload_bytes),
+    )
+
+
+def _run(  # noqa: PLR0915 - the ordered lifecycle remains visible as one experiment
+    *, funded: bool
+) -> tuple[ScenarioRecord, CrossingTranscript]:
     scenario = _scenario()
     decision = {
         "id": "DEC-W5-TREASURY",
@@ -425,13 +462,139 @@ def _run(*, funded: bool) -> tuple[ScenarioRecord, CrossingTranscript]:
         n=34,
     )
     if funded:
-        submission = SyntheticEntitledMember(seed=29).submit(
-            lifecycle_id=scenario.lifecycle_id,
-            instruction=formed.payload.canonical_bytes(),
-            times=_times(35),
+        debtor = FinancialInstitution(bicfi="AAAAUS33XXX")
+        creditor = FinancialInstitution(bicfi="BBBBUS33XXX")
+        cash_instruction = CashLegInstruction(
+            message_id="W5-MSG-001",
+            end_to_end_id="W5-E2E-001",
+            created_at=AT,
+            amount=Decimal("9950"),
+            currency="USD",
+            debtor=debtor,
+            creditor=creditor,
+            settlement_method=SettlementMethod.CLEARING_SYSTEM,
+            sender=debtor,
+            receiver=creditor,
+            dsor_lineage_uri=f"urn:cannae:lifecycle:{scenario.lifecycle_id}",
         )
-        rail = SyntheticRail(seed=2).respond(submission, times=_times(36))
+        prepared = prepare_instruction(
+            formed.envelope,
+            formed.payload.canonical_bytes(),
+            acceptance,
+            cash_instruction,
+        )
+        prepared_bytes = prepared.header_xml + b"\n" + prepared.document_xml
+        prepared_envelope = _artifact_envelope(
+            scenario,
+            artifact_id=cash_instruction.message_id,
+            artifact_kind="prepared_instruction",
+            payload_bytes=prepared_bytes,
+        )
+        transcript = _crossing(
+            transcript,
+            scenario,
+            producer="atreides",
+            consumer="synthetic_member",
+            envelope=prepared_envelope,
+            payload_bytes=prepared_bytes,
+            disposition=Disposition.PASS,
+            reason="Atreides prepared; synthetic member may submit",
+            n=35,
+        )
+        submission = SyntheticEntitledMember(seed=29).submit(
+            lifecycle_id=scenario.lifecycle_id, instruction=prepared_bytes, times=_times(36)
+        )
+        submission_bytes = submission.model_dump_json().encode("utf-8")
+        transcript = _crossing(
+            transcript,
+            scenario,
+            producer="synthetic_member",
+            consumer="synthetic_rail",
+            envelope=_artifact_envelope(
+                scenario,
+                artifact_id=submission.submission_id,
+                artifact_kind="member_submission",
+                payload_bytes=submission_bytes,
+            ),
+            payload_bytes=submission_bytes,
+            disposition=Disposition.PASS,
+            reason="synthetic entitled member submitted exact prepared bytes",
+            n=36,
+        )
+        rail = SyntheticRail(seed=2).respond(submission, times=_times(37))
         assert rail.outcome is RailOutcome.SETTLED
+        rail_bytes = rail.model_dump_json().encode("utf-8")
+        transcript = _crossing(
+            transcript,
+            scenario,
+            producer="synthetic_rail",
+            consumer="atreides",
+            envelope=_artifact_envelope(
+                scenario,
+                artifact_id=rail.response_id,
+                artifact_kind="rail_response",
+                payload_bytes=rail_bytes,
+            ),
+            payload_bytes=rail_bytes,
+            disposition=rail.disposition,
+            reason=rail.reason,
+            n=37,
+        )
+        status = StatusReport(
+            message_id=rail.response_id,
+            created_at=rail.times.event_time.isoformat(),
+            namespace="synthetic://wave5/rail-response",
+            original_message_id=cash_instruction.message_id,
+            original_message_name_id=prepared.message_definition,
+            group_status_code=None,
+            entries=(
+                StatusEntry(
+                    status_code="ACSC",
+                    status=SettlementStatus.SETTLED,
+                    end_to_end_id=cash_instruction.end_to_end_id,
+                    echoed_amount=cash_instruction.amount,
+                    echoed_currency=cash_instruction.currency,
+                ),
+            ),
+        )
+        reconciliation = reconcile(status, (cash_instruction,))
+        assert reconciliation.clean
+        assert reconciliation.settled_ids == (cash_instruction.end_to_end_id,)
+        reconciliation_bytes = canonical_bytes_of(
+            {
+                "report_message_id": reconciliation.report.message_id,
+                "original_message_id": reconciliation.report.original_message_id,
+                "matched": {
+                    key: value.value for key, value in sorted(reconciliation.matched.items())
+                },
+                "settled_ids": reconciliation.settled_ids,
+                "breaks": tuple(
+                    {
+                        "code": item.code.value,
+                        "detail": item.detail,
+                        "end_to_end_id": item.end_to_end_id,
+                    }
+                    for item in reconciliation.breaks
+                ),
+                "is_absent": reconciliation.is_absent,
+            }
+        )
+        transcript = _crossing(
+            transcript,
+            scenario,
+            producer="atreides",
+            consumer="harness_c2",
+            envelope=_artifact_envelope(
+                scenario,
+                artifact_id=f"reconciliation-{rail.response_id}",
+                artifact_kind="reconciliation",
+                payload_bytes=reconciliation_bytes,
+            ),
+            payload_bytes=reconciliation_bytes,
+            disposition=Disposition.PASS,
+            reason="Atreides reconciled prepared instruction to settled rail response",
+            n=38,
+        )
     return scenario, transcript
 
 
@@ -450,7 +613,7 @@ def _lineage(scenario: ScenarioRecord, transcript: CrossingTranscript) -> Lineag
 def test_funded_lifecycle_passes_and_clean_lineage_refuses_escalation() -> None:
     scenario, transcript = _run(funded=True)
     record = _lineage(scenario, transcript)
-    assert len(transcript.crossings) == 5
+    assert len(transcript.crossings) == 9
     assert record.disposition is Disposition.PASS
     with pytest.raises(EscalationRefusedError, match="nothing to escalate"):
         package_escalation(
@@ -466,6 +629,7 @@ def test_funded_lifecycle_passes_and_clean_lineage_refuses_escalation() -> None:
 
 def test_unfunded_lifecycle_holds_at_atreides_and_does_not_submit() -> None:
     scenario, transcript = _run(funded=False)
+    assert len(transcript.crossings) == 5
     assert transcript.crossings[-1].disposition is Disposition.HOLD
     assert _lineage(scenario, transcript).complete
 

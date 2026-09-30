@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal, Self
 
-from cannae_kernel.canonical import digest_bytes
+from cannae_kernel.canonical import Digest, digest_bytes
 from cannae_kernel.clocks import EventTimes
 from cannae_kernel.disposition import Disposition
 from cannae_kernel.envelopes import (
@@ -19,15 +19,54 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
 from harness_c2.scenario import ScenarioRecord
 
-__all__ = ["Crossing", "CrossingTranscript", "Domain", "record_crossing"]
+__all__ = [
+    "Crossing",
+    "CrossingArtifactEnvelope",
+    "CrossingTranscript",
+    "Domain",
+    "Envelope",
+    "record_crossing",
+]
 
-Domain = Literal["aureon", "lc", "atreides", "emulator", "harness_c2"]
+Domain = Literal[
+    "aureon",
+    "lc",
+    "atreides",
+    "emulator",
+    "synthetic_member",
+    "synthetic_rail",
+    "harness_c2",
+]
+
+
+class CrossingArtifactEnvelope(BaseModel):
+    """Typed attestation header for a crossing that has no kernel domain envelope.
+
+    Submission, external rail response and reconciliation are evidence artifacts,
+    not economic domain envelopes.  The transcript still needs a frozen header that
+    binds their exact bytes to the lifecycle without importing their producer's type.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
+
+    schema_version: Literal["harness_c2.crossing_artifact/0.1-draft"] = (
+        "harness_c2.crossing_artifact/0.1-draft"
+    )
+    artifact_id: str = Field(min_length=1)
+    lifecycle_id: LifecycleId
+    artifact_kind: Literal[
+        "prepared_instruction", "member_submission", "rail_response", "reconciliation"
+    ]
+    payload_digest: Digest
+
+
 Envelope = Annotated[
     ApprovedIntentEnvelope
     | ExecutionEvent
     | ClearingTransformation
     | SettlementObligationEnvelope
-    | ObligationAcceptanceRecord,
+    | ObligationAcceptanceRecord
+    | CrossingArtifactEnvelope,
     Field(discriminator="schema_version"),
 ]
 _ENVELOPE: TypeAdapter[Envelope] = TypeAdapter(Envelope)
