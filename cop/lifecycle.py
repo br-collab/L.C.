@@ -9,15 +9,11 @@ module renders what those types carry and invents nothing.
 
 The rule this panel exists to demonstrate
 ------------------------------------------
-Most of the board is **absent**, and that is the correct state rather than a
-gap in the work. The middle layer is Wave 4; until it exists, the checkpoints
-Legiones Cannenses owns have nothing behind them and say so — *absent — layer not
-built* — with the reason attached.
-
-A surface that rendered those as blank would read as "nothing wrong here", and a
-surface that rendered them as `PASS` would be claiming a lifecycle completed
-stages that do not exist yet. The whole point of the board at this stage is that
-it shows how much it cannot show.
+Absence is a recorded state rather than a gap in the rendering. A lifecycle
+stopped at a hold carries the reason later checkpoints were not reached. A
+surface that rendered those as blank would read as "nothing wrong here", and a
+surface that rendered them as `PASS` would claim stages the transcript never
+recorded.
 
 Each layer's own clock
 ----------------------
@@ -83,7 +79,7 @@ NOT_BUILT_REASON = "absent — layer not built"
 
 #: What a cell says where the layer exists and has simply not reached this
 #: checkpoint. Kept apart from :data:`NOT_BUILT_REASON` because they are
-#: different facts with different responses: one waits for Wave 4, the other is
+#: different facts with different responses: one waits for a missing layer, the other is
 #: an ordinary lifecycle in flight. Collapsing them would have the board report
 #: a built layer as unbuilt, which is the kind of false statement this panel
 #: exists to prevent.
@@ -97,7 +93,7 @@ class Layer(StrEnum):
     """Pre-trade: governed, approved intent."""
 
     LC = "LC"
-    """Legiones Cannenses: execution, clearing and obligation formation. Wave 4."""
+    """Legiones Cannenses: execution, clearing and obligation formation."""
 
     ATREIDES = "ATREIDES"
     """Post-trade: acceptance, settlement, finality."""
@@ -129,9 +125,8 @@ CHECKPOINT_ORDER: tuple[Checkpoint, ...] = (
 #:
 #: Three of the six belong to L.C., not the two the order names. The settlement
 #: obligation is *formed* by the middle layer (JUM-D-02) and handed over, so it
-#: is absent for the same reason execution and clearing are. Deriving the board
-#: from ownership rather than from a list means Wave 4 turns on three columns by
-#: building one layer, instead of somebody remembering to add the third.
+#: shares ownership with execution and clearing. Deriving the board from ownership
+#: rather than from a list keeps all three columns governed by one layer state.
 CHECKPOINT_LAYER: dict[Checkpoint, Layer] = {
     Checkpoint.APPROVED_INTENT: Layer.AUREON,
     Checkpoint.EXECUTION: Layer.LC,
@@ -234,7 +229,7 @@ def cell_for(checkpoint: Checkpoint, reading: LayerReading) -> LifecycleCell:
 
     **Not current** — the layer exists and the reading is stale or failed.
     ``INDETERMINATE``, and the detail says which, because the response is
-    different: one waits for Wave 4, the other asks somebody to look at a source.
+    different: one waits for a missing layer, the other asks somebody to look at a source.
 
     **Current** — whatever the layer said, carried through with its own clock.
     """
@@ -270,7 +265,7 @@ def cell_for(checkpoint: Checkpoint, reading: LayerReading) -> LifecycleCell:
 def _missing(checkpoint: Checkpoint, built_layers: frozenset[Layer]) -> LifecycleCell:
     """A checkpoint with no reading. **Which kind of nothing depends on the layer.**
 
-    An unbuilt layer has nothing to report and never will until Wave 4. A built
+    An unbuilt layer has nothing to report until that layer exists. A built
     layer with no record at this checkpoint is an ordinary lifecycle in flight.
     Saying "layer not built" about Atreides because a trade has not settled yet
     would be false on the page, and false in the direction that makes the

@@ -124,8 +124,7 @@ def _pending_drop_source() -> str:
 class Sources:
     """Everything the refresher reads. ``None`` means *not connected*.
 
-    Grouped because there are four now and a fifth is Wave 4. A constructor
-    taking them loose invites a caller to pass three and silently lose a panel;
+    Grouped so a constructor cannot silently omit one of the source-backed panels;
     a missing field here is a name that does not exist.
     """
 
@@ -165,8 +164,7 @@ class Refresher:
         # panel reports, not an error it hides: see ``_refresh_agents``.
         self._agents = sources.agents
         self._lc_layer_clock = sources.lc_layer_clock
-        # ``None`` means no lifecycle source is connected, which is the state
-        # outside demo mode until Wave 4 builds the layer that would supply one.
+        # ``None`` means no lifecycle publication address is configured.
         self._lifecycles = sources.lifecycles
         self._escalations = sources.escalations
         self._breaks = sources.breaks
