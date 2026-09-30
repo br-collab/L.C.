@@ -137,9 +137,9 @@ def _event(n: int) -> EventInput:
     )
 
 
-def _scenario() -> ScenarioRecord:
+def _scenario(*, funded: bool) -> ScenarioRecord:
     return start_scenario(
-        scenario_id=ScenarioId(_id("scn_", 1)),
+        scenario_id=ScenarioId(_id("scn_", 1 if funded else 2)),
         seed=29,
         pinned_commits={"aureon": AUREON_COMMIT, "atreides": ATREIDES_COMMIT},
         policy_versions={"aureon": "w5-policy/1.0", "lc": "lc-m7/1.0"},
@@ -203,7 +203,7 @@ def _artifact_envelope(
 def _run(  # noqa: PLR0915 - the ordered lifecycle remains visible as one experiment
     *, funded: bool
 ) -> tuple[ScenarioRecord, CrossingTranscript]:
-    scenario = _scenario()
+    scenario = _scenario(funded=funded)
     decision = {
         "id": "DEC-W5-TREASURY",
         "symbol": "91282CJL6",
