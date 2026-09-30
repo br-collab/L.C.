@@ -1,0 +1,46 @@
+name: Publish lifecycle documents
+description: Publish the newest successful slice transcript views to a stable branch.
+
+inputs:
+  token:
+    description: GitHub token allowed to update the generated publication branch
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v7
+      with:
+        python-version: "3.11"
+    - name: Install L.C. and pinned domains
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
+        pip install --no-deps -e .slice1/Project-Atreides
+    - name: Validate the slice and write its lifecycle documents
+      shell: bash
+      env:
+        PYTHONPATH: .slice1/aureon
+        LIFECYCLE_PUBLICATION_DIR: ${{ runner.temp }}/lifecycle-publication-output
+      run: pytest -q tests/slice1
+    - name: Publish the newest good documents
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+      run: |
+        set -euo pipefail
+        publish_dir="$RUNNER_TEMP/lifecycle-document-publication"
+        remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+        git clone --depth 1 --branch lifecycle-document "$remote" "$publish_dir" 2>/dev/null || {
+          mkdir -p "$publish_dir"
+          git -C "$publish_dir" init --initial-branch=lifecycle-document
+          git -C "$publish_dir" remote add origin "$remote"
+        }
+        cp "$RUNNER_TEMP/lifecycle-publication-output/"*.json "$publish_dir/"
+        git -C "$publish_dir" config user.name "github-actions[bot]"
+        git -C "$publish_dir" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git -C "$publish_dir" add funded.json unfunded.json
+        git -C "$publish_dir" diff --cached --quiet && exit 0
+        git -C "$publish_dir" commit -m "Publish lifecycle documents"
+        git -C "$publish_dir" push origin HEAD:lifecycle-document

@@ -156,6 +156,8 @@ jobs:
   slice1:
     name: Wave 5 slice 1 (pinned domains)
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v7
 
@@ -194,6 +196,12 @@ jobs:
         env:
           MYPYPATH: .slice1/aureon:.slice1/Project-Atreides
         run: mypy lc emulators harness_c2 tests/slice1
+
+      - name: Publish successful lifecycle documents
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: ./.github/actions/publish-lifecycle-document
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
   harness:
     name: Thifur-C2 harness (kernel only)
