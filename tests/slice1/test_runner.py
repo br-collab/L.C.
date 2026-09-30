@@ -34,7 +34,6 @@ from cannae_kernel.absence import Recorded
 from cannae_kernel.actor import ActorKind, ActorRef
 from cannae_kernel.canonical import canonical_bytes_of, digest, digest_bytes
 from cannae_kernel.clocks import EventTimes
-from cannae_kernel.delivery import DeliveryPattern
 from cannae_kernel.disposition import Disposition
 from cannae_kernel.envelopes import (
     ApprovedIntentEnvelope,
@@ -72,6 +71,11 @@ from harness_c2.transcript import (
     Domain,
     Envelope,
     record_crossing,
+)
+from lc.asset_profile import (
+    BILATERAL_TREASURY,
+    TOKENIZED_TREASURY_SINGLE_PLATFORM,
+    AssetProfile,
 )
 from lc.clearing import GrossTrade, clear_gross
 from lc.lifecycle import (
@@ -137,9 +141,18 @@ def _event(n: int) -> EventInput:
     )
 
 
-def _scenario(*, funded: bool) -> ScenarioRecord:
+def _scenario(*, funded: bool, asset_profile: AssetProfile) -> ScenarioRecord:
+    known_profile_number = {
+        BILATERAL_TREASURY.profile_id: 0,
+        TOKENIZED_TREASURY_SINGLE_PLATFORM.profile_id: 2,
+    }.get(asset_profile.profile_id)
+    profile_number = (
+        known_profile_number
+        if known_profile_number is not None
+        else 100 + int(digest(asset_profile)[7:19], 16)
+    )
     return start_scenario(
-        scenario_id=ScenarioId(_id("scn_", 1 if funded else 2)),
+        scenario_id=ScenarioId(_id("scn_", profile_number + (1 if funded else 2))),
         seed=29,
         pinned_commits={"aureon": AUREON_COMMIT, "atreides": ATREIDES_COMMIT},
         policy_versions={"aureon": "w5-policy/1.0", "lc": "lc-m7/1.0"},
@@ -201,9 +214,9 @@ def _artifact_envelope(
 
 
 def _run(  # noqa: PLR0915 - the ordered lifecycle remains visible as one experiment
-    *, funded: bool
+    *, funded: bool, asset_profile: AssetProfile = BILATERAL_TREASURY
 ) -> tuple[ScenarioRecord, CrossingTranscript]:
-    scenario = _scenario(funded=funded)
+    scenario = _scenario(funded=funded, asset_profile=asset_profile)
     decision = {
         "id": "DEC-W5-TREASURY",
         "symbol": "91282CJL6",
@@ -344,6 +357,7 @@ def _run(  # noqa: PLR0915 - the ordered lifecycle remains visible as one experi
         obligation_id=obligation_id,
         session=SESSION,
         source_manifest=manifest,
+        asset_profile=asset_profile,
         securities_leg=SecuritiesLeg(
             instrument_id=internal.instrument_id,
             quantity=Decimal("100"),
@@ -360,26 +374,26 @@ def _run(  # noqa: PLR0915 - the ordered lifecycle remains visible as one experi
             receiving_account_id="CASH-RECEIVE",
         ),
         participants=participants,
-        delivery_pattern=DeliveryPattern.DVP,
+        delivery_pattern=asset_profile.settlement_pattern,
         candidate_paths=(
             CandidatePathDescriptor(
-                path_id="fedwire-dvp",
-                rail="Fedwire",
-                securities_route="bilateral securities",
-                cash_route="Fedwire Funds",
-                delivery_pattern=DeliveryPattern.DVP,
+                path_id=asset_profile.profile_id,
+                rail=asset_profile.custody_path,
+                securities_route=asset_profile.custody_path,
+                cash_route=asset_profile.cash_representation,
+                delivery_pattern=asset_profile.settlement_pattern,
             ),
         ),
         expected_finality=(
             ExpectedFinality(
                 leg=LegKind.SECURITIES,
                 finality_type=FinalityType.ASSET_FINAL,
-                governing_rule_set="fedwire-securities/2026.1",
+                governing_rule_set=asset_profile.securities_finality_evidence,
             ),
             ExpectedFinality(
                 leg=LegKind.CASH,
                 finality_type=FinalityType.CASH_FINAL,
-                governing_rule_set="fedwire-funds/2026.1",
+                governing_rule_set=asset_profile.cash_finality_evidence,
             ),
         ),
         corrections=(),
