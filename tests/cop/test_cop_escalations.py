@@ -165,7 +165,7 @@ class TestPanelTwelveIsNeverEmpty:
         )
         layer = next(s for s in spots if s.kind is BlindSpotKind.LAYER_NOT_BUILT)
         assert "execution and clearing" in layer.detail
-        assert "Wave 4" in layer.remedy
+        assert "build the missing layer" in layer.remedy
 
     def test_every_entry_says_what_would_change_it(self) -> None:
         """A remedy a reader cannot act on makes the list longer and the page no
@@ -189,6 +189,15 @@ class TestThePanelsRenderOnThePage:
         rig.refresher.refresh_once()
         page = build_page(rig.refresher.snapshot, rig.clock.now)
         assert page.blind_spots
+
+    def test_reconciled_no_producer_list_is_exactly_still_present(self) -> None:
+        rig = Rig()
+        rig.refresher.refresh_once()
+        page = build_page(rig.refresher.snapshot, rig.clock.now)
+        names = {spot.name for spot in page.blind_spots}
+        assert {"breaks", "cutoffs", "limits", "holds", "dsor"} <= names
+        assert "Lifecycle board" not in names
+        assert "Legiones Cannenses layer" not in names
 
     def test_an_unconfigured_escalation_source_appears_in_panel_twelve(self) -> None:
         rig = Rig(escalations_configured=False)

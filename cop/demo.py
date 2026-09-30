@@ -306,9 +306,8 @@ class DemoAgents:
         )
 
 
-#: The layers that exist. The middle one is Wave 4, and the board says so rather
-#: than leaving three columns blank.
-_BUILT_LAYERS = frozenset({Layer.AUREON, Layer.ATREIDES})
+#: All three layers exist. Missing demo checkpoints are not reached, not unbuilt.
+_BUILT_LAYERS = frozenset(Layer)
 
 
 class DemoLifecycles:
@@ -319,9 +318,8 @@ class DemoLifecycles:
     row whose Atreides reading is stale. A board that only ever showed clean rows
     would not tell anyone whether the unhappy ones render at all.
 
-    Every value is invented, and three of the six columns are absent on every row
-    because the layer that would fill them does not exist yet. **That is the
-    picture, not a gap in it.**
+    Every value is invented. Missing checkpoints are explicitly not reached;
+    none is described as belonging to an unbuilt layer.
     """
 
     def __init__(self, clock: Callable[[], datetime]) -> None:

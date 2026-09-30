@@ -10,8 +10,7 @@ absence would make the others misleading.
 
 An operating picture with four green panels and no statement of its own limits
 invites exactly one reading: **that the four panels are the whole picture.** They
-are not, and at this stage they are not close — one of three layers is unbuilt,
-most sources are unconnected, and several facts the operator needs are not
+are not — several sources remain unconnected, and facts the operator needs are not
 expressible in the frozen contracts at all.
 
 It is computed, not written down
@@ -60,7 +59,7 @@ class BlindSpotKind(StrEnum):
     """A source is configured and is not answering now. Somebody looks at it."""
 
     LAYER_NOT_BUILT = "LAYER_NOT_BUILT"
-    """The thing that would report does not exist yet. Wave 4, or later."""
+    """The thing that would report does not exist yet."""
 
     CONTRACT_CANNOT_EXPRESS = "CONTRACT_CANNOT_EXPRESS"
     """The frozen contracts carry no field for it. A contract change, deliberately."""
@@ -106,16 +105,6 @@ CONTRACT_BLIND_SPOTS: tuple[BlindSpot, ...] = (
     ),
     BlindSpot(
         kind=BlindSpotKind.CONTRACT_CANNOT_EXPRESS,
-        name="Why an obligation was held, beyond the DSOR record's own reason",
-        detail=(
-            "ObligationAcceptanceRecord carries a disposition and either a Decision System "
-            "of Record entry or the reason there is none. It does not carry which gate held "
-            "it, so a held row shows that it is held and not which rule did it."
-        ),
-        remedy="a gate reference on the acceptance record, or a separate escalation for each hold",
-    ),
-    BlindSpot(
-        kind=BlindSpotKind.CONTRACT_CANNOT_EXPRESS,
         name="The cost of a break, in money or in time",
         detail=(
             "Nothing in the five contracts carries an impact. An operator reading this page "
@@ -154,7 +143,6 @@ class SourceStatus:
 
 
 #: The layers, and whether the thing that would report from them exists.
-#: ``LC`` is Wave 4; the other two are built.
 @dataclass(frozen=True)
 class LayerStatus:
     name: str
@@ -220,7 +208,7 @@ def blind_spots(
                         f"The {layer.name} layer does not exist yet, so {layer.covers} "
                         f"cannot be shown by any panel here."
                     ),
-                    remedy="Wave 4 builds it; nothing before then will fill these columns",
+                    remedy="build the missing layer before treating these columns as observable",
                 )
             )
 

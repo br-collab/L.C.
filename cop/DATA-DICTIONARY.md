@@ -51,12 +51,12 @@ by the test suite so a new module cannot arrive without a dictionary decision.
 
 | Module | Owned record or rule | Rendered composite or Blind spots consumer | If unpublished |
 |---|---|---|---|
-| `lc/events.py` | `OrderEvent`, `OrderEventPayload` and the `LifecycleState` vocabulary | Lifecycle board through the future `lifecycle` aggregate; source absence is listed under Blind spots | No inferred state; lifecycle board is `Absent` |
+| `lc/events.py` | `OrderEvent`, `OrderEventPayload` and the `LifecycleState` vocabulary | Versioned `lifecycle` documents; source absence is listed under Blind spots | No inferred state; unavailable or stale documents are `INDETERMINATE` |
 | `lc/lifecycle.py` | Append-only `LifecycleRegister`, transitions, explicit `NOT_REACHED`, and deterministic replay | Lifecycle board; newest recorded event also supplies the L.C. layer-clock projection | No empty row and no invented clock |
-| `lc/policy.py` | Versioned execution policy gate, market-evidence freshness, operator decision and execution application | Lifecycle board state and reason through the future `lifecycle` aggregate | No policy result is inferred from a later execution |
+| `lc/policy.py` | Versioned execution policy gate, market-evidence freshness, operator decision and execution application | Lifecycle board state and reason through the published `lifecycle` documents | No policy result is inferred from a later execution |
 | `lc/trade.py` | Capture, allocation, match/affirmation and `OpenException` records | Lifecycle board; exception output requires a future `breaks` or exception producer already listed under Blind spots | No exception is presented as a live break |
-| `lc/clearing.py` | Gross clearing output and computed conservation result; non-gross paths remain explicitly unbuilt | Lifecycle board clearing checkpoint through the future `lifecycle` aggregate | No clearing checkpoint is inferred from obligation existence |
-| `lc/obligation.py` | L.C.-owned obligation payload, frozen `SettlementObligationEnvelope` formation, and recorded Atreides handoff result | Lifecycle board obligation and handoff checkpoints through the future `lifecycle` aggregate | No acceptance or settlement state is inferred |
+| `lc/clearing.py` | Gross clearing output and computed conservation result; non-gross paths remain explicitly unbuilt | Lifecycle board clearing checkpoint through the published `lifecycle` documents | No clearing checkpoint is inferred from obligation existence |
+| `lc/obligation.py` | L.C.-owned obligation payload, frozen `SettlementObligationEnvelope` formation, and recorded Atreides handoff result | Lifecycle board obligation and handoff checkpoints through the published `lifecycle` documents | No acceptance or settlement state is inferred |
 | `lc/layer_clock.py` | Versioned `LayerClockDocument` projected from the newest event in a non-empty register | L.C. clock strip through `lc-layer-clock` | Hatched `Absent` under the clock-strip rule below |
 
 ## Side-rail badges
@@ -85,9 +85,9 @@ distinct meanings from kernel `EventTimes`. The strip displays the latest record
 
 | Clock | Kernel type | Repository and published document | If unread or absent |
 |---|---|---|---|
-| **Aureon** | `EventTimes` from the newest current `ApprovedIntentEnvelope` record | `aureon`; future `lifecycle` document | Hatched `Absent`. `/api/snapshot` has no `EventTimes` and may not substitute its fetch time |
+| **Aureon** | `EventTimes` from the newest current `ApprovedIntentEnvelope` record | Published `lifecycle` document | Hatched `Absent` when that document is unavailable or stale. `/api/snapshot` has no `EventTimes` and may not substitute its fetch time |
 | **L.C.** | `EventTimes` from the newest event in a non-empty `LifecycleRegister`; the strip displays `event_time` and freshness is aged from `processing_time` | `L.C.`; versioned layer-clock document configured by `LC_LAYER_CLOCK_URL` | Hatched `Absent` when the URL is unconfigured, the document is unreadable or malformed, or its `processing_time` is stale. An empty register cannot publish a clock |
-| **Atreides** | `EventTimes` from the newest current `ObligationAcceptanceRecord` or settlement record | `Project-Atreides`; future `lifecycle`/settlement document | Hatched `Absent`; activation `taken_at` is feed freshness, not the settlement-layer clock |
+| **Atreides** | `EventTimes` from the newest current `ObligationAcceptanceRecord` or settlement record | Published `lifecycle` document | Hatched `Absent` when that document is unavailable or stale; activation `taken_at` is feed freshness, not the settlement-layer clock |
 | **Trading session** | `Recorded[MarketSession] \| Absent`, paired with the source record's `EventTimes` | Future published session document; not local time | Hatched `Absent` until published |
 | **Fedwire state and close** | `Recorded[str] \| Absent` state and `Recorded[datetime] \| Absent` close from a versioned cutoff table | `cutoffs` | Hatched `Absent`; do not calculate from wall time or copy a remembered schedule |
 | **Next NSCC cycle** | `Recorded[datetime] \| Absent` from a versioned cutoff table | `cutoffs` | Hatched `Absent`; do not calculate from wall time |
@@ -184,7 +184,7 @@ no qualifying producer, not that the value is zero or passing.
 - **Dictionary row without a rendered panel:** none. Source-register entries such as `holds`,
   `dsor`, `controls`, `limits`, `cutoffs`, and `ofr` feed rendered composite panels or Blind
   spots; they are not promised as standalone panels.
-- **Known absent producers:** lifecycle, breaks, holds, DSOR, controls, limits, cutoffs, the
+- **Known absent producers:** breaks, holds, DSOR, controls, limits, cutoffs, the
   production cash leg, and a COP OFR feed remain Absent as stated in the source register.
 
 ## Governance, controls and risk panels

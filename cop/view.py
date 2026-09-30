@@ -917,12 +917,32 @@ def _blind_spots(snapshot: Snapshot, now: datetime) -> tuple[BlindSpotView, ...]
         status("C2 escalation queue", snapshot.escalations.queue),
         status("Lifecycle board", snapshot.lifecycles.rows),
         status("Aureon cash-leg demonstration", snapshot.cash_leg.cash_leg),
+        SourceStatus("breaks", False, False, "no domain publishes cross-layer break records"),
+        SourceStatus(
+            "cutoffs",
+            False,
+            False,
+            "publish a versioned trading-session and settlement-rail cutoff table",
+        ),
+        SourceStatus(
+            "limits",
+            False,
+            False,
+            "publish limit definitions with the exposure records they govern",
+        ),
+        SourceStatus("holds", False, False, "publish an aggregate Aureon hold-record feed"),
+        SourceStatus(
+            "dsor",
+            False,
+            False,
+            "publish the authority-decision feed from the Decision System of Record",
+        ),
     )
     layers = (
         LayerStatus("Aureon", True, "approved intent"),
         LayerStatus(
             "Legiones Cannenses",
-            False,
+            True,
             "execution, clearing and settlement-obligation formation",
         ),
         LayerStatus("Atreides", True, "acceptance, settlement and finality"),

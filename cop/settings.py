@@ -36,11 +36,9 @@ CASH_LEG_SOURCE = "Aureon cash-leg demonstration (/api/cashleg/demo)"
 # panel's own source.
 AGENTS_SNAPSHOT_SOURCE = "Atreides activation snapshot (ATREIDES_AGENTS_URL)"
 
-# COP-1 panel 8. In demo mode the rows are invented (cop/demo.py). There is no live
-# source yet: the middle layer is Wave 4, and two of the three layers a row needs
-# publish nothing a board could read. Unconfigured, the panel reports that rather
-# than rendering an empty table, which would read as "no lifecycles" instead of
-# "no source".
+# COP-1 panel 8. In demo mode the rows are invented (cop/demo.py). In production,
+# unconfigured means no publication address was supplied; it never renders as an
+# empty table, which would read as "no lifecycles" instead of "no source".
 ESCALATION_SOURCE = "C2 escalation queue (C2_ESCALATIONS_URL)"
 ESCALATION_SOURCE_UNSET = "C2_ESCALATIONS_URL is not set, so no escalation queue is being read"
 LIFECYCLE_SOURCE = "Published lifecycle documents (LC_LIFECYCLE_BASE_URL)"

@@ -210,8 +210,7 @@ class TestARowIsNeverGreenerThanItsWeakestCell:
 
 
 class TestTheMiddleLayerRendersAbsent:
-    """The order's third acceptance test: *"absent — layer not built", not empty
-    and not PASS.*"""
+    """The generic unbuilt-layer state remains explicit, non-empty and non-PASS."""
 
     @pytest.mark.parametrize(
         "checkpoint",
@@ -233,9 +232,8 @@ class TestTheMiddleLayerRendersAbsent:
         assert middle and all(c.disposition is not Disposition.PASS for c in middle)
 
     def test_all_three_middle_columns_belong_to_the_middle_layer(self) -> None:
-        """Three, not the two the order names. The settlement obligation is
-        formed by L.C. (JUM-D-02), so it is absent for the same reason —
-        and Wave 4 turns on three columns by building one layer."""
+        """The settlement obligation is formed by L.C. (JUM-D-02), so the same
+        layer state governs it together with execution and clearing."""
         assert [c for c, layer in CHECKPOINT_LAYER.items() if layer is Layer.LC] == [
             Checkpoint.EXECUTION,
             Checkpoint.CLEARING,
@@ -310,7 +308,7 @@ class TestNotBuiltIsNotTheSameAsNotReached:
             assert cell.disposition is Disposition.INDETERMINATE
 
     def test_when_the_middle_layer_is_built_the_columns_stop_saying_not_built(self) -> None:
-        """What Wave 4 changes, asserted now so it is visible when it lands."""
+        """A built layer reports not reached rather than falsely claiming unbuilt."""
         row = build_row("lif_1", approved(), ALL_BUILT)
         middle = [c for c in row.cells if c.layer is Layer.LC]
         assert all(c.detail == NOT_REACHED_REASON for c in middle)
@@ -335,7 +333,7 @@ class TestAStaleSourceIsNeverCurrent:
         assert cell.disposition is Disposition.INDETERMINATE
 
     def test_a_stale_reading_says_which_kind_of_nothing_it_is(self) -> None:
-        """One waits for Wave 4; the other asks somebody to look at a source."""
+        """One waits for a missing layer; the other asks somebody to inspect a source."""
         readings = approved()
         readings[Checkpoint.SETTLED] = reading(
             Layer.ATREIDES, Disposition.PASS, current=False, stale_reason="Timeout"
