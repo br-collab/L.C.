@@ -43,9 +43,9 @@ AGENTS_SNAPSHOT_SOURCE = "Atreides activation snapshot (ATREIDES_AGENTS_URL)"
 # "no source".
 ESCALATION_SOURCE = "C2 escalation queue (C2_ESCALATIONS_URL)"
 ESCALATION_SOURCE_UNSET = "C2_ESCALATIONS_URL is not set, so no escalation queue is being read"
-LIFECYCLE_SOURCE = "Lifecycle board (synthetic; no live source until Wave 4)"
+LIFECYCLE_SOURCE = "Published lifecycle documents (LC_LIFECYCLE_BASE_URL)"
 LIFECYCLE_SOURCE_UNSET = (
-    "no lifecycle source is connected; the middle layer that would supply one is Wave 4"
+    "LC_LIFECYCLE_BASE_URL is not set, so no lifecycle documents are being read"
 )
 LC_LAYER_CLOCK_SOURCE = "L.C. layer clock (LC_LAYER_CLOCK_URL)"
 LC_LAYER_CLOCK_SOURCE_UNSET = (
@@ -65,6 +65,7 @@ STALE_AFTER = timedelta(minutes=5)
 # allows the scheduled job a two-hour delivery margin while still reporting a
 # stopped daily publication cycle as stale.
 AGENTS_STALE_AFTER = timedelta(hours=26)
+LIFECYCLE_STALE_AFTER = timedelta(hours=26)
 PAGE_RELOAD_SECONDS = 60
 
 # Access ----------------------------------------------------------------------------------
@@ -97,6 +98,7 @@ ENV_DEMO = "LEGATE_DEMO"
 ENV_AGENTS_URL = "ATREIDES_AGENTS_URL"
 ENV_ESCALATIONS_URL = "C2_ESCALATIONS_URL"
 ENV_LC_LAYER_CLOCK_URL = "LC_LAYER_CLOCK_URL"
+ENV_LIFECYCLE_BASE_URL = "LC_LIFECYCLE_BASE_URL"
 
 
 @dataclass(frozen=True)
@@ -109,6 +111,7 @@ class Settings:
     agents_url: str | None
     escalations_url: str | None
     lc_layer_clock_url: str | None
+    lifecycle_base_url: str | None
     """Where the C2 escalation queue is published. ``None`` when unset, which
     panel 12 reports by name rather than the page hiding."""
     """Where the Atreides activation snapshot is published. ``None`` when unset,
@@ -150,6 +153,7 @@ def load_settings(env: Mapping[str, str]) -> Settings:
     agents_url = _non_empty(env, ENV_AGENTS_URL)
     escalations_url = _non_empty(env, ENV_ESCALATIONS_URL)
     lc_layer_clock_url = _non_empty(env, ENV_LC_LAYER_CLOCK_URL)
+    lifecycle_base_url = _non_empty(env, ENV_LIFECYCLE_BASE_URL)
     insecure_local = _flag(env, ENV_INSECURE_LOCAL)
     demo = _flag(env, ENV_DEMO)
     production = any(name in env for name in PRODUCTION_MARKERS)
@@ -184,6 +188,7 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         agents_url=agents_url,
         escalations_url=escalations_url,
         lc_layer_clock_url=lc_layer_clock_url,
+        lifecycle_base_url=lifecycle_base_url,
         insecure_local=insecure_local,
         demo=demo,
         production=production,

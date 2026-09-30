@@ -6,10 +6,13 @@ rather than a gap in the work. These tests are mostly about the absences.
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 
+import httpx
 import pytest
 from cannae_kernel.disposition import Disposition
+from cop_fakes import Rig, login, section
 
 from cop.app import PANELS, create_app
 from cop.lifecycle import (
@@ -18,16 +21,135 @@ from cop.lifecycle import (
     NOT_BUILT_REASON,
     NOT_REACHED_REASON,
     Checkpoint,
+    HttpxLifecycleClient,
     Layer,
     LayerReading,
     build_row,
+    parse_document,
     row_disposition,
 )
+from cop.observation import SourceMalformedError
 from cop.settings import load_settings
+from cop.view import build_page
 
 AT = datetime(2026, 9, 21, 23, 0, tzinfo=UTC)
 BUILT = frozenset({Layer.AUREON, Layer.ATREIDES})
 ALL_BUILT = frozenset(Layer)
+
+
+def _wire_document(
+    *, funded: bool = True, version: str = "harness_c2.lifecycle_document/1"
+) -> bytes:
+    stages = []
+    for checkpoint in CHECKPOINT_ORDER:
+        if checkpoint is Checkpoint.SETTLED and not funded:
+            evidence: dict[str, object] = {
+                "state": "absent",
+                "kind": "NOTHING_RECORDED",
+                "reason": "NOT_REACHED: CASH_GATE_HOLD:UNFUNDED_AT_SETTLEMENT_INSTANT",
+            }
+        else:
+            disposition = (
+                "HOLD"
+                if not funded
+                and checkpoint
+                in {
+                    Checkpoint.SETTLEMENT_OBLIGATION,
+                    Checkpoint.OBLIGATION_ACCEPTANCE,
+                }
+                else "PASS"
+            )
+            reason = (
+                "CASH_GATE_HOLD:UNFUNDED_AT_SETTLEMENT_INSTANT"
+                if checkpoint is Checkpoint.OBLIGATION_ACCEPTANCE and not funded
+                else f"recorded {checkpoint.value.lower()}"
+            )
+            evidence = {
+                "state": "recorded",
+                "value": {
+                    "disposition": disposition,
+                    "reason": reason,
+                    "stamped_at": "2026-09-29T15:00:00Z",
+                    "provenance": "FACT_SYNTHETIC",
+                },
+            }
+        stages.append({"stage": checkpoint.value, "evidence": evidence})
+    return json.dumps(
+        {
+            "schema_version": version,
+            "taken_at": "2026-09-29T15:00:00Z",
+            "scenario_id": "scn_00000000000000000000000001",
+            "lifecycle_id": "lif_03J0YY19FSPXWRSJ8ES4ZMMHSR",
+            "synthetic": True,
+            "stages": stages,
+        }
+    ).encode()
+
+
+class TestPublishedLifecycleReader:
+    def test_funded_and_unfunded_documents_render_without_inference(self) -> None:
+        funded = parse_document(_wire_document())
+        unfunded = parse_document(_wire_document(funded=False))
+        assert funded.disposition is Disposition.PASS
+        assert unfunded.disposition is Disposition.INDETERMINATE
+        acceptance = next(
+            cell for cell in unfunded.cells if cell.checkpoint is Checkpoint.OBLIGATION_ACCEPTANCE
+        )
+        settled = next(cell for cell in unfunded.cells if cell.checkpoint is Checkpoint.SETTLED)
+        assert acceptance.disposition is Disposition.HOLD
+        assert acceptance.detail == "CASH_GATE_HOLD:UNFUNDED_AT_SETTLEMENT_INSTANT"
+        assert settled.is_absent and settled.stamped_at is None
+        assert "NOT_REACHED" in settled.detail
+
+    def test_unknown_schema_is_refused_before_fields_are_read(self) -> None:
+        with pytest.raises(SourceMalformedError, match="understands only"):
+            parse_document(_wire_document(version="harness_c2.lifecycle_document/2"))
+
+    def test_http_client_reads_both_stable_instances(self) -> None:
+        requested: list[str] = []
+
+        def respond(request: httpx.Request) -> httpx.Response:
+            requested.append(str(request.url))
+            return httpx.Response(
+                200,
+                content=_wire_document(
+                    funded=request.url.path.endswith("funded.json")
+                    and not request.url.path.endswith("unfunded.json")
+                ),
+            )
+
+        client = HttpxLifecycleClient(
+            "https://example.invalid/lifecycle/",
+            http=httpx.Client(transport=httpx.MockTransport(respond)),
+        )
+        rows = client.rows()
+        assert len(rows) == 2
+        assert requested == [
+            "https://example.invalid/lifecycle/funded.json",
+            "https://example.invalid/lifecycle/unfunded.json",
+        ]
+
+    def test_unset_configuration_names_the_variable(self) -> None:
+        settings = load_settings({"LEGATE_OPERATOR_KEY": "k", "LEGATE_SESSION_SECRET": "s"})
+        assert settings.lifecycle_base_url is None
+
+    def test_reading_age_is_visible_whenever_rows_are_shown(self) -> None:
+        rig = Rig()
+        rig.refresher.refresh_once()
+        client = rig.app_client()
+        login(client)
+        html = section(client.get("/section/trades").get_data(as_text=True), "lifecycles")
+        assert "Reading age:" in html and "0 s" in html
+
+    def test_past_lifecycle_cadence_holds_the_board_and_names_the_source(self) -> None:
+        rig = Rig()
+        snapshot = rig.refresher.refresh_once()
+        rig.clock.advance(hours=27)
+        page = build_page(snapshot, rig.clock.now)
+        assert not page.lifecycles.tile.current
+        assert page.lifecycles.rows == ()
+        assert page.lifecycles.tile.badge.code == Disposition.INDETERMINATE.value
+        assert any("Lifecycle board" in reason.text for reason in page.banner.reasons)
 
 
 def reading(layer: Layer, disposition: Disposition, **overrides: object) -> LayerReading:

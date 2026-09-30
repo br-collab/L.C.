@@ -431,6 +431,7 @@ class LifecycleView:
     tile: TileView[tuple[LifecycleRow, ...]]
     rows: tuple[LifecycleRowView, ...]
     columns: tuple[str, ...]
+    age_text: str
 
 
 @dataclass(frozen=True)
@@ -969,7 +970,12 @@ def _lifecycle_view(state: LifecycleState, now: datetime) -> LifecycleView:
     rows = tile_view.value if tile_view.current else None
     columns = tuple(c.value for c in CHECKPOINT_ORDER)
     if rows is None:
-        return LifecycleView(tile=tile_view, rows=(), columns=columns)
+        return LifecycleView(
+            tile=tile_view,
+            rows=(),
+            columns=columns,
+            age_text="Absent — no current lifecycle reading",
+        )
     return LifecycleView(
         tile=tile_view,
         rows=tuple(
@@ -982,6 +988,9 @@ def _lifecycle_view(state: LifecycleState, now: datetime) -> LifecycleView:
             for row in rows
         ),
         columns=columns,
+        age_text=fmt_age(now - state.rows.observed_at)
+        if state.rows.observed_at is not None
+        else "Absent — no observation time",
     )
 
 
@@ -1123,6 +1132,7 @@ def _overall(
     repos: Sequence[RepoView],
     aureon: AureonView,
     agents: AgentsView,
+    lifecycles: LifecycleView,
 ) -> tuple[Badge, tuple[Reason, ...]]:
     """Worst of: every source tile, CI on main, scheduled runs, Aureon stack, drift,
     the AUR-I-17 marker, blocked waves and Atreides agent activation. Open pull
@@ -1133,6 +1143,18 @@ def _overall(
         _repo_reasons(found, repo)
     _aureon_reasons(found, aureon)
     _agents_reasons(found, agents)
+    if not lifecycles.tile.current:
+        found.append(
+            (
+                Disposition.INDETERMINATE,
+                f"Lifecycle board: {lifecycles.tile.error_class}",
+            )
+        )
+    else:
+        for row in lifecycles.rows:
+            disposition = Disposition(row.badge.code)
+            if disposition is not Disposition.PASS:
+                found.append((disposition, f"Lifecycle {row.lifecycle_id}: {row.badge.label}"))
     if not found:
         return disposition_badge(Disposition.PASS, "All sources current; nothing failing"), ()
     worst = max((d for d, _ in found), key=lambda d: _SEVERITY[d])
@@ -1252,7 +1274,7 @@ def build_page(snapshot: Snapshot, now: datetime) -> PageView:
     grc = GrcView(
         governance_tile, governance_rows, controls_tile, control_rows, risks_tile, risk_rows
     )
-    overall, reasons = _overall(program, repos, aureon, agents)
+    overall, reasons = _overall(program, repos, aureon, agents, lifecycles)
     decisions: tuple[DecisionView, ...] = ()
     if program.current and program.value is not None:
         decisions = tuple(

@@ -370,7 +370,7 @@
   <h2>Lifecycle board {{ badge(lc.tile.badge) }}</h2>
   <p class="lede">One row per lifecycle object, one cell per contract checkpoint, then settled. The columns are the five frozen cross-domain contracts and are not a design choice: <code>ApprovedIntentEnvelope</code> &rarr; <code>ExecutionEvent</code> &rarr; <code>ClearingTransformation</code> &rarr; <code>SettlementObligationEnvelope</code> &rarr; <code>ObligationAcceptanceRecord</code>, then settled.</p>
 
-  <p class="warning" role="alert"><strong>MOST OF THIS BOARD IS ABSENT, AND THAT IS CORRECT.</strong> The three columns Legiones Cannenses owns &mdash; execution, clearing and the settlement obligation &mdash; read <em>absent &mdash; layer not built</em>, because that layer is Wave 4. They are not blank and they are not passes. A row is never greener than its weakest cell, so a row with one unknown cell cannot read complete.</p>
+  <p class="muted"><strong>Reading age:</strong> {{ lc.age_text }}.</p>
 
   {{ provenance(lc.tile) }}
   {{ failure(lc.tile) }}

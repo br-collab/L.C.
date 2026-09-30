@@ -9,6 +9,7 @@ from cannae_kernel.absence import Absent, Recorded
 from cannae_kernel.disposition import Disposition
 from test_runner import AT, _run
 
+from cop.lifecycle import parse_document
 from harness_c2.lifecycle_document import (
     LIFECYCLE_DOCUMENT_SCHEMA_VERSION,
     LifecycleDocument,
@@ -55,6 +56,18 @@ def test_every_published_value_comes_from_the_transcript() -> None:
     assert document.lifecycle_id == scenario.lifecycle_id
     assert len(document.stages) == 6
     assert all(isinstance(stage.evidence, Recorded) for stage in document.stages)
+
+
+def test_real_emitter_bytes_are_consumed_by_the_real_cop_parser() -> None:
+    document = _document(funded=False)
+    row = parse_document(document.model_dump_json().encode())
+    acceptance = next(
+        cell for cell in row.cells if cell.checkpoint.value == "OBLIGATION_ACCEPTANCE"
+    )
+    settled = next(cell for cell in row.cells if cell.checkpoint.value == "SETTLED")
+    assert acceptance.detail == "CASH_GATE_HOLD:UNFUNDED_AT_SETTLEMENT_INSTANT"
+    assert settled.is_absent
+    assert settled.detail == "NOT_REACHED: CASH_GATE_HOLD:UNFUNDED_AT_SETTLEMENT_INSTANT"
 
 
 def test_ci_publication_instances_are_written_when_requested() -> None:

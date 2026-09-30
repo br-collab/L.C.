@@ -33,7 +33,7 @@ System of Record. SLA means service-level agreement.
 | `agents` | `br-collab/Project-Atreides`, activation snapshot configured by `ATREIDES_AGENTS_URL` | On push and nightly | 26 hours | Producer exists; deployment URL may be absent |
 | `lc-layer-clock` | `br-collab/L.C.`, versioned layer-clock document configured by `LC_LAYER_CLOCK_URL` | Live request | 5 minutes | Producer and reader exist; deployment URL may be absent; an empty register cannot publish |
 | `c2-escalations` | `br-collab/L.C.`, C2 escalation queue configured by `C2_ESCALATIONS_URL` | Live request | 5 minutes | Reader and demo producer exist; live publication may be absent |
-| `lifecycle` | Published lifecycle document assembled from Aureon, L.C. and Atreides records | Live request when connected | 5 minutes | No production producer; demo only |
+| `lifecycle` | Versioned funded and unfunded slice documents published from the real CI transcript | `LC_LIFECYCLE_BASE_URL` over HTTPS | 26 hours | `NotConfigured` when the variable is unset; malformed, failed or stale documents hold at `INDETERMINATE` |
 | `breaks` | Atreides cross-layer break records | Live request when connected | 5 minutes | No producer |
 | `holds` | Aureon hold records | No producer | Not applicable | No aggregate producer |
 | `dsor` | Aureon decision system of record authority-decision feed | No producer | Not applicable | No published feed |
@@ -67,7 +67,7 @@ listed kernel disposition rule.
 | Rail item | Kernel type and rule | Source key(s) | If unread or absent |
 |---|---|---|---|
 | **Now** | Worst kernel `Disposition` of current items requiring authority, changes, and stale clocks/feeds; count is `Recorded[int] \| Absent` | All section sources below | `Absent` when no required source is readable; never “0 needs you” |
-| **Trades** | Worst `Disposition` of `LifecycleRow`, whose cells represent `ApprovedIntentEnvelope`, `ExecutionEvent`, `ClearingTransformation`, `SettlementObligationEnvelope` and `ObligationAcceptanceRecord` | `lifecycle` | Hatched `Absent`; demo rows only in demo mode |
+| **Trades** | Worst `Disposition` of `LifecycleRow`, whose cells represent `ApprovedIntentEnvelope`, `ExecutionEvent`, `ClearingTransformation`, `SettlementObligationEnvelope` and `ObligationAcceptanceRecord` | Published `lifecycle` documents | `NotConfigured` until `LC_LIFECYCLE_BASE_URL` is set; then malformed, failed or stale documents are `INDETERMINATE` |
 | **Exceptions** | Worst exception `Disposition`; count is `Recorded[int] \| Absent`. No owner forces `BLOCK` | `breaks`, `c2-escalations`, `holds`, `dsor` overrides | Hatched `Absent`; never an empty register presented as zero |
 | **Cash & liquidity** | Worst `Disposition` of funding, cutoff evidence and exposure-versus-limit; supporting count is `Recorded[int] \| Absent` | `cash-leg`, `cutoffs`, `limits` | Hatched `Absent` in production until all required producers publish. `/api/cashleg/demo` values appear only in demo mode |
 | **Decisions** | Worst `Disposition` of C2 escalations and DSOR authority records; count is `Recorded[int] \| Absent` | `c2-escalations`, `dsor` | `Absent` if neither feed is readable; partial coverage is `INDETERMINATE`, not `PASS` |
@@ -167,8 +167,8 @@ no qualifying producer, not that the value is zero or passing.
 | **Live Aureon — pending-drop badge, comparison count, before/after pending and commits, detection time** | Process-local AUR-I-17 observation; detection time is explicitly a COP clock | `aureon-snapshot` observations held by Legate; `Absent` before comparable observations exist |
 | **Agents — aggregate badge, phase, synthetic marker, halt state and activation tick** | `AgentsSnapshot` fields and disposition; tick is producer freshness, not a settlement clock | `agents`; `Absent` when the endpoint is not configured |
 | **Agents — identifier, tier, role, output, observation time, claim kind, handoff basis/refusal and counts** | Recorded activation-agent fields; optional handoff/refusal values are `Recorded \| Absent` | `agents`; missing optional evidence stays hatched `Absent` |
-| **Lifecycle — board/row badge, lifecycle identifier and unknown count** | Worst checkpoint `Disposition`; kernel lifecycle identifier | `lifecycle`; production is `Absent` until a document is published |
-| **Lifecycle — checkpoint, layer, detail, disposition, provenance and stamped time** | The five frozen envelopes plus settled state; source-layer `EventTimes` only | `lifecycle`; unbuilt L.C. checkpoints are `Absent`, never PASS |
+| **Lifecycle — board/row badge, lifecycle identifier and unknown count** | Worst checkpoint `Disposition`; kernel lifecycle identifier | Versioned `lifecycle` document; `NotConfigured` until its base URL is set |
+| **Lifecycle — checkpoint, layer, detail, disposition, provenance and stamped time** | The five frozen envelopes plus settled state; source-layer `EventTimes` only | Versioned `lifecycle` document; explicit `Absent` remains hatched and never reads as PASS |
 | **Escalations — queue/packet badge, packet and lifecycle identifiers, trigger, summary, raised/waiting, findings and unknowns** | Published `EscalationPacket`; waiting derives from packet `raised_at` | `c2-escalations`; production is `Absent` when unconfigured |
 | **Breaks — panel/row badge, object, left/right claims and layer clocks** | Cross-layer break record with producer dispositions and producer timestamps | `breaks`; no production producer, demo only |
 | **Cash leg — panel badge, scenario, boundary and funding disposition** | Demonstration document disposition and text | `cash-leg`; admitted only in `LEGATE_DEMO=1`, otherwise `Absent` |

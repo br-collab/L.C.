@@ -18,7 +18,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Protocol, TypeVar, cast
+from typing import Any, TypeVar, cast
 
 from cannae_kernel.provenance import Provenance
 
@@ -41,7 +41,7 @@ from cop.grc import (
     RiskSource,
 )
 from cop.layer_clock import LayerClockSource
-from cop.lifecycle import LifecycleRow
+from cop.lifecycle import LifecycleRow, LifecycleSource
 from cop.observation import (
     UNEXPECTED_ERROR,
     InputUnavailableError,
@@ -67,6 +67,7 @@ from cop.settings import (
     LC_LAYER_CLOCK_SOURCE_UNSET,
     LIFECYCLE_SOURCE,
     LIFECYCLE_SOURCE_UNSET,
+    LIFECYCLE_STALE_AFTER,
     MAIN_BRANCH,
     REPOSITORIES,
     STALE_AFTER,
@@ -100,12 +101,6 @@ from cop.state import (
 
 T = TypeVar("T")
 Clock = Callable[[], datetime]
-
-
-class LifecycleSource(Protocol):
-    """Supplies the lifecycle board. Demo-mode only until Wave 4."""
-
-    def rows(self) -> tuple[LifecycleRow, ...]: ...
 
 
 log = logging.getLogger(__name__)
@@ -241,7 +236,7 @@ class Refresher:
                 clock=pending("lc:layer_clock", LC_LAYER_CLOCK_SOURCE, fact, STALE_AFTER)
             ),
             lifecycles=LifecycleState(
-                rows=pending("lifecycles", LIFECYCLE_SOURCE, fact, STALE_AFTER)
+                rows=pending("lifecycles", LIFECYCLE_SOURCE, fact, LIFECYCLE_STALE_AFTER)
             ),
             escalations=EscalationState(
                 queue=pending("escalations", ESCALATION_SOURCE, fact, STALE_AFTER)
@@ -471,12 +466,20 @@ class Refresher:
                 LIFECYCLE_SOURCE,
                 Provenance.FACT_SYNTHETIC,
                 LIFECYCLE_SOURCE_UNSET,
-                STALE_AFTER,
+                LIFECYCLE_STALE_AFTER,
             )
             return LifecycleState(rows=rows)
         return LifecycleState(
             rows=self._observe(
-                "lifecycles", LIFECYCLE_SOURCE, Provenance.FACT_SYNTHETIC, self._lifecycles.rows
+                "lifecycles",
+                LIFECYCLE_SOURCE,
+                Provenance.FACT_SYNTHETIC,
+                self._lifecycles.rows,
+                LIFECYCLE_STALE_AFTER,
+                value_time=lambda rows: min(
+                    (row.taken_at for row in rows if row.taken_at is not None),
+                    default=self._clock(),
+                ),
             )
         )
 
