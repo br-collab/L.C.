@@ -70,7 +70,7 @@
       "evidence": {
         "state": "absent",
         "kind": "NOTHING_RECORDED",
-        "reason": "NOT_REACHED: Atreides boundary result"
+        "reason": "NOT_REACHED: CASH_GATE_HOLD:UNFUNDED_AT_SETTLEMENT_INSTANT"
       }
     }
   ]
