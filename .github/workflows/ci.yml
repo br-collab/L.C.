@@ -79,12 +79,12 @@ jobs:
         run: >-
           mypy lc tests --exclude tests/cop --exclude tests/harness_c2
           --exclude tests/thifur_h --exclude tests/test_atreides_handoff.py
-          --exclude tests/test_aureon_intent_wire.py
+          --exclude tests/test_aureon_intent_wire.py --exclude tests/slice1
 
       - name: pytest
         run: >-
           pytest -q --ignore=tests/cop --ignore=tests/harness_c2 --ignore=tests/thifur_h
-          --ignore=tests/test_atreides_handoff.py
+          --ignore=tests/test_atreides_handoff.py --ignore=tests/slice1
 
   atreides-handoff:
     name: Atreides handoff (pinned real predicates)
@@ -152,6 +152,48 @@ jobs:
         env:
           MYPYPATH: .handoff/aureon
         run: mypy lc tests/test_aureon_intent_wire.py
+
+  slice1:
+    name: Wave 5 slice 1 (pinned domains)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check out ancestry-verified Aureon
+        uses: actions/checkout@v7
+        with:
+          repository: br-collab/aureon
+          # Ancestry verified after #56 deployed.
+          ref: 3e90f72a1ffa177045d4e4f3e7f9770689e037f1
+          path: .slice1/aureon
+
+      - name: Check out ancestry-verified Atreides
+        uses: actions/checkout@v7
+        with:
+          repository: br-collab/Project-Atreides
+          # Ancestry verified against Project-Atreides main.
+          ref: 7929b84d4b68c42ed857de42c40e64a9bb48b8a6
+          path: .slice1/Project-Atreides
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Install L.C. and pinned domain dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip install --no-deps -e .slice1/Project-Atreides
+
+      - name: Run the end-to-end slice
+        env:
+          PYTHONPATH: .slice1/aureon
+        run: pytest -q tests/slice1
+
+      - name: Type check the end-to-end slice
+        env:
+          MYPYPATH: .slice1/aureon:.slice1/Project-Atreides
+        run: mypy lc emulators harness_c2 tests/slice1
 
   harness:
     name: Thifur-C2 harness (kernel only)
@@ -223,11 +265,11 @@ jobs:
         run: >-
           mypy lc cop harness_c2 thifur_h tests
           --exclude tests/test_atreides_handoff.py
-          --exclude tests/test_aureon_intent_wire.py
+          --exclude tests/test_aureon_intent_wire.py --exclude tests/slice1
 
       - name: pytest
         env:
           COP_EXTRA_REQUIRED: "1"
           HARNESS_EXTRA_REQUIRED: "1"
           H_EXTRA_REQUIRED: "1"
-        run: pytest -q
+        run: pytest -q --ignore=tests/slice1
