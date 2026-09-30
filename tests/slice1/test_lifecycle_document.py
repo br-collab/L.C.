@@ -49,6 +49,13 @@ def test_unfunded_document_holds_and_records_later_stages_as_not_reached() -> No
     assert settled.evidence.reason == expected
 
 
+def test_published_variants_have_distinct_lifecycle_identities() -> None:
+    funded = _document(funded=True)
+    unfunded = _document(funded=False)
+    assert funded.scenario_id != unfunded.scenario_id
+    assert funded.lifecycle_id != unfunded.lifecycle_id
+
+
 def test_every_published_value_comes_from_the_transcript() -> None:
     scenario, transcript = _run(funded=True)
     document = build_lifecycle_document(scenario, transcript, taken_at=AT)
