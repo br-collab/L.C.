@@ -1,8 +1,8 @@
 {
   "schema_version": "harness_c2.lifecycle_document/1",
   "taken_at": "2026-09-29T15:00:00Z",
-  "scenario_id": "scn_00000000000000000000000001",
-  "lifecycle_id": "lif_03J0YY19FSPXWRSJ8ES4ZMMHSR",
+  "scenario_id": "scn_00000000000000000000000002",
+  "lifecycle_id": "lif_03EFX6ZETWH33FMMBD6A4WA0Y8",
   "synthetic": true,
   "stages": [
     {
