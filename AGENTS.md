@@ -1,4 +1,4 @@
 Repository instructions: read `CLAUDE.md` before making changes.
-The builder is Codex.
+The builder is Claude Code. The reviewer is Codex.
 Bill owns every merge to `main`.
-Do not change aureon while its 23 September 2026 freeze remains in force unless Bill lifts it in writing.
+The aureon freeze of 23 September 2026 has been lifted. Aureon changes require an approved order that names them.
