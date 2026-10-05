@@ -4,22 +4,25 @@ Acceptance criteria, mapped:
 
 - Below-criterion evidence yields HOLD with the cited criterion:
   ``test_evidence_below_the_criterion_holds_and_cites_it``.
-- Missing input or source evidence is INDETERMINATE: ``test_missing_evidence_is_indeterminate``,
-  ``test_the_committed_table_has_no_criterion_yet_so_the_check_is_indeterminate`` and every
-  refused-item case below.
+- Missing input or source evidence is INDETERMINATE: ``test_missing_evidence_is_indeterminate``
+  and every refused-item case below.
+- The committed table pins the criterion OCC publishes, from the file Bill saved:
+  ``test_the_committed_table_pins_the_published_criterion``, and, where ``OCC_SOURCES_DIR``
+  is set, ``test_every_committed_item_hashes_to_its_saved_source_file``.
 - PASS says only that this one published criterion was met:
   ``test_evidence_meeting_the_criterion_passes_and_says_only_that``.
 - The criterion comes from the cited, hash-pinned table, never a literal in code:
   ``test_no_occ_figure_is_a_literal_in_code``.
 
-The tables below are SYNTHETIC: their URLs are ``example.invalid`` and their source files are
-written by the test. None of them is OCC's text.
+Apart from the committed table, the tables below are SYNTHETIC: their URLs are
+``example.invalid`` and their source files are written by the test. None of them is OCC's text.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from decimal import Decimal
 from pathlib import Path
@@ -118,14 +121,33 @@ def test_the_check_records_the_table_it_read(tmp_path: Path) -> None:
     assert check.table_items_digest == loaded.items_digest
 
 
-def test_the_committed_table_has_no_criterion_yet_so_the_check_is_indeterminate() -> None:
-    """OCC's site refused retrieval from the build environment on 5 October 2026, so no OCC
-    source is pinned yet. This test changes when one is: it records the current state."""
+def test_the_committed_table_pins_the_published_criterion() -> None:
     committed = load_rule_table(DEFAULT_TABLE_PATH)
-    assert committed.items == ()
-    check = check_initial_net_capital(evidence("50000000"), committed)
-    assert check.disposition is Disposition.INDETERMINATE
-    assert f"has no item {CRITERION_ITEM}" in check.reason
+    assert committed.refused == ()
+    criterion = committed.item(CRITERION_ITEM)
+    assert criterion is not None
+    assert criterion.value == "10000000" and criterion.unit == "USD"
+    assert criterion.source.url == (
+        "https://www.theocc.com/company-information/becoming-a-clearing-member"
+    )
+    assert "a minimum of $10,000,000" in criterion.source.verbatim
+    below = check_initial_net_capital(evidence("9000000"), committed)
+    assert below.disposition is Disposition.HOLD
+    assert "becoming-a-clearing-member" in below.reason
+
+
+OCC_SOURCES = os.environ.get("OCC_SOURCES_DIR")
+
+
+@pytest.mark.skipif(
+    not OCC_SOURCES,
+    reason="OCC's source files are not vendored; set OCC_SOURCES_DIR to the folder Bill saved "
+    "them in to re-hash them. A skip is not a pass.",
+)
+def test_every_committed_item_hashes_to_its_saved_source_file() -> None:
+    committed = load_rule_table(DEFAULT_TABLE_PATH)
+    checked = verify_sources(committed, Path(str(OCC_SOURCES)))
+    assert checked.refused == () and checked.items == committed.items
 
 
 # --- the table fails closed --------------------------------------------------------------------

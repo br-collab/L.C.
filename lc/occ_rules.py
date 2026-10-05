@@ -20,11 +20,11 @@ A refused or absent item is not a figure: whatever needs it is INDETERMINATE.
 
 THE COMMITTED TABLE
 -------------------
-``lc/occ_rule_table.json`` is the table L.C. reads. On 5 October 2026 it holds
-no items: OCC's site refuses scripted retrieval from the build environment, so
-no OCC source could be retrieved, hashed and quoted. Items are added once the
-source files are saved and verified (ORDER SC-3, reserved item 1). Until then,
-every check that needs an OCC figure is INDETERMINATE, by design.
+``lc/occ_rule_table.json`` is the table L.C. reads. OCC's site refuses scripted
+retrieval, so its sources are files Bill saved from a browser; each item's
+SHA-256 is of the file as saved, and :func:`verify_sources` re-checks them where
+the files are at hand. Anything the table does not hold is INDETERMINATE
+wherever it is needed, by design.
 
 The loader takes the table's path explicitly. The JSON file is not declared as
 package data, so a built wheel would not carry it; an editable install, which
