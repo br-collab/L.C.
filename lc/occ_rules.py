@@ -54,6 +54,14 @@ __all__ = [
 ]
 
 DEFAULT_TABLE_PATH: Final = Path(__file__).with_name("occ_rule_table.json")
+_MILLION: Final = Decimal(10**6)
+#: Number words a source may use for a small whole number. Arithmetic, not regulation.
+_WORDS: Final = {
+    Decimal(n): word
+    for n, word in enumerate(
+        ("zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten")
+    )
+}
 
 
 class _Record(BaseModel):
@@ -115,9 +123,16 @@ class OccRuleTable(_Record):
 
 
 def _states(item: OccRuleItem) -> bool:
-    """Whether the verbatim text states the value, as written or with thousands separators."""
+    """Whether the verbatim text states the value: as written, with thousands separators, or
+    in millions ("$10 million"), or
+    as a word ("six places")."""
     value = item.decimal_value
     spellings = {item.value, f"{value:,}", f"{value:,.2f}"}
+    millions = value / _MILLION
+    if millions == millions.to_integral_value():
+        spellings.add(f"{millions:f} million")
+    if value in _WORDS:
+        spellings.add(_WORDS[value])
     return any(spelling in item.source.verbatim for spelling in spellings)
 
 
