@@ -1,21 +1,48 @@
 {
-  "table_version": "0.2-draft",
+  "table_version": "0.3-draft",
   "notes": [
-    "Source files were saved by Bill from a browser on 5 October 2026 into the workspace folder Research-record/Gaps ID'ed 10:4/. OCC's site refuses scripted retrieval, so the SHA-256 is of the file as saved, which for a web page is a browser-printed PDF rather than the bytes OCC served.",
-    "OCC Rule 301(b)(1) (OCC Rules, last modified 1 October 2026) states the binding broker-dealer minimum as the greater of $10 million, 6 2/3% of aggregate indebtedness, or 2% of aggregate debit items, for clearing members including applicants. The item below is the single criterion the clearing membership page publishes; replacing it with Rule 301 is amendment A5 in Research-record/Gaps ID'ed 10:4/ORDER-SC-3-occ-rule-verification-2026-10-05.md, which is Bill's decision."
+    "Source files were saved by Bill on 5 October 2026 into the workspace folder Research-record/Gaps ID'ed 10:4/. OCC's site refuses scripted retrieval, so each SHA-256 is of the file as saved. The retrieval DTG is the saved file's creation time, in UTC.",
+    "Rule 301(b)(1) states the aggregate indebtedness leg two ways: 6 2/3% of aggregate indebtedness, and 'aggregate indebtedness cannot exceed 1500% of net capital'. The table holds the 1500% ceiling because it is exact in decimal; 6 2/3% is not.",
+    "Amendment A5 to ORDER SC-3 (approved by Bill on 5 October 2026) replaced the membership page's single $10,000,000 criterion with Rule 301(b)(1)'s greater-of."
   ],
   "items": [
     {
-      "item_id": "occ.membership.initial_net_capital",
+      "item_id": "occ.rule301.broker_dealer.minimum_net_capital",
       "value": "10000000",
       "unit": "USD",
       "source": {
-        "url": "https://www.theocc.com/company-information/becoming-a-clearing-member",
-        "source_kind": "WEB_PAGE",
-        "retrieved_dtg": "202610052108",
-        "sha256": "de8c0bba73b59aa5517fb17e935f2159c5ef88dec9f4515ebf52a82896b246dd",
-        "file_name": "OCC - Becoming a Clearing Member.pdf",
-        "verbatim": "Applicant must meet minimum net capital requirements (initial requirement is a minimum of $10,000,000."
+        "url": "https://www.theocc.com/getcontentasset/9d3854cd-b782-450f-bcf7-33169b0576ce/dfc3d011-8f63-43f6-9ed8-4b444333a1d0/occ_rules.pdf",
+        "source_kind": "RULES",
+        "retrieved_dtg": "202610052106",
+        "sha256": "99e200752c6ad1f099b8c9725e6a7ab3a2398e3c0e1c753062acc42e10d18780",
+        "file_name": "occ_rules.pdf",
+        "verbatim": "Every Clearing Member that is a fully-registered broker-dealer must maintain minimum net capital equal to the greater of: (i) $10 million;"
+      }
+    },
+    {
+      "item_id": "occ.rule301.broker_dealer.aggregate_indebtedness_ceiling",
+      "value": "1500",
+      "unit": "percent of net capital",
+      "source": {
+        "url": "https://www.theocc.com/getcontentasset/9d3854cd-b782-450f-bcf7-33169b0576ce/dfc3d011-8f63-43f6-9ed8-4b444333a1d0/occ_rules.pdf",
+        "source_kind": "RULES",
+        "retrieved_dtg": "202610052106",
+        "sha256": "99e200752c6ad1f099b8c9725e6a7ab3a2398e3c0e1c753062acc42e10d18780",
+        "file_name": "occ_rules.pdf",
+        "verbatim": "(ii) in the case of a broker -dealer not electing to operate pursuant to the alternative net capital requirements, 6 2/3% of its aggregate indebtedness (i.e., aggregate indebtedness cannot exceed 1500% of net capital);"
+      }
+    },
+    {
+      "item_id": "occ.rule301.broker_dealer.aggregate_debit_items_percentage",
+      "value": "2",
+      "unit": "percent of aggregate debit items",
+      "source": {
+        "url": "https://www.theocc.com/getcontentasset/9d3854cd-b782-450f-bcf7-33169b0576ce/dfc3d011-8f63-43f6-9ed8-4b444333a1d0/occ_rules.pdf",
+        "source_kind": "RULES",
+        "retrieved_dtg": "202610052106",
+        "sha256": "99e200752c6ad1f099b8c9725e6a7ab3a2398e3c0e1c753062acc42e10d18780",
+        "file_name": "occ_rules.pdf",
+        "verbatim": "(iii) in the case of a broker-dealer electing to operate pursuant to the alternative net capital requirements, 2% of its aggregate debit items."
       }
     }
   ]
