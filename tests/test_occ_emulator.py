@@ -57,27 +57,45 @@ def report(
 ) -> OccTradeReport:
     at = NOW + timedelta(seconds=len(report_id))
     base: dict[str, Any] = {
-        "report_id": report_id, "trade_id": trade_id, "series_osi": SERIES, "side": side,
-        "open_close": open_close, "contracts": 10, "premium": Decimal("5250"),
-        "currency": "USD", "trade_date": date(2026, 10, 5), "clearing_member_id": member,
-        "account_id": f"{member}-ACCT", "account_type": AccountType.CUSTOMER,
-        "lifecycle_id": LifecycleId(_id("lif_", 1)), "intent_id": IntentId(_id("int_", 1)),
+        "report_id": report_id,
+        "trade_id": trade_id,
+        "series_osi": SERIES,
+        "side": side,
+        "open_close": open_close,
+        "contracts": 10,
+        "premium": Decimal("5250"),
+        "currency": "USD",
+        "trade_date": date(2026, 10, 5),
+        "clearing_member_id": member,
+        "account_id": f"{member}-ACCT",
+        "account_type": AccountType.CUSTOMER,
+        "lifecycle_id": LifecycleId(_id("lif_", 1)),
+        "intent_id": IntentId(_id("int_", 1)),
         "intent_digest": "sha256:" + "1" * 64,
-        "session": SessionContext(session=MarketSession.REGULAR, business_date=BusinessDate(
-            value=date(2026, 10, 5), calendar="SIFMA-US", established_by="scenario")),
+        "session": SessionContext(
+            session=MarketSession.REGULAR,
+            business_date=BusinessDate(
+                value=date(2026, 10, 5), calendar="SIFMA-US", established_by="scenario"
+            ),
+        ),
         "times": EventTimes(event_time=at, observation_time=at, processing_time=at),
     }
     return OccTradeReport(**(base | changes))
 
 
 def trade(  # noqa: PLR0913 - each term of a trade a test varies stays explicit
-    n: int, buyer: str, seller: str, *, buy: OpenClose = OpenClose.OPEN,
-    sell: OpenClose = OpenClose.OPEN, contracts: int = 10, series: str = SERIES,
+    n: int,
+    buyer: str,
+    seller: str,
+    *,
+    buy: OpenClose = OpenClose.OPEN,
+    sell: OpenClose = OpenClose.OPEN,
+    contracts: int = 10,
+    series: str = SERIES,
 ) -> tuple[OccTradeReport, OccTradeReport]:
     return (
         report(f"R{n}B", f"T{n}", Side.BUY, buyer, buy, contracts=contracts, series_osi=series),
-        report(f"R{n}S", f"T{n}", Side.SELL, seller, sell, contracts=contracts,
-               series_osi=series),
+        report(f"R{n}S", f"T{n}", Side.SELL, seller, sell, contracts=contracts, series_osi=series),
     )
 
 
@@ -87,8 +105,10 @@ def run(ccp: OccEmulator, reports: Iterable[OccTradeReport]) -> None:
 
 
 def holdings(ccp: OccEmulator) -> dict[tuple[str, str], tuple[int, int]]:
-    return {(p.clearing_member_id, p.series_osi): (p.long_contracts, p.short_contracts)
-            for p in ccp.positions()}
+    return {
+        (p.clearing_member_id, p.series_osi): (p.long_contracts, p.short_contracts)
+        for p in ccp.positions()
+    }
 
 
 def assert_conserved(ccp: OccEmulator) -> None:
@@ -137,6 +157,7 @@ def test_a_novation_is_deterministic() -> None:
         payload = ccp.submit(trade(1, "CM-A", "CM-B")[1]).payload
         assert payload is not None
         return payload
+
     assert novate() == novate()
 
 
@@ -176,19 +197,42 @@ def test_a_trade_already_novated_cannot_be_novated_again() -> None:
 @pytest.mark.parametrize(
     ("buyer", "buy", "seller", "sell", "expected"),
     [
-        ("CM-A", OpenClose.OPEN, "CM-B", OpenClose.OPEN,
-         {"CM-A": (13, 0), "CM-B": (0, 13), "CM-C": (3, 3), "CM-X": (3, 3)}),
-        ("CM-A", OpenClose.OPEN, "CM-C", OpenClose.CLOSE,
-         {"CM-A": (13, 0), "CM-B": (0, 10), "CM-C": (0, 3), "CM-X": (3, 3)}),
-        ("CM-C", OpenClose.CLOSE, "CM-B", OpenClose.OPEN,
-         {"CM-A": (10, 0), "CM-B": (0, 13), "CM-C": (3, 0), "CM-X": (3, 3)}),
-        ("CM-C", OpenClose.CLOSE, "CM-X", OpenClose.CLOSE,
-         {"CM-A": (10, 0), "CM-B": (0, 10), "CM-C": (3, 0), "CM-X": (0, 3)}),
+        (
+            "CM-A",
+            OpenClose.OPEN,
+            "CM-B",
+            OpenClose.OPEN,
+            {"CM-A": (13, 0), "CM-B": (0, 13), "CM-C": (3, 3), "CM-X": (3, 3)},
+        ),
+        (
+            "CM-A",
+            OpenClose.OPEN,
+            "CM-C",
+            OpenClose.CLOSE,
+            {"CM-A": (13, 0), "CM-B": (0, 10), "CM-C": (0, 3), "CM-X": (3, 3)},
+        ),
+        (
+            "CM-C",
+            OpenClose.CLOSE,
+            "CM-B",
+            OpenClose.OPEN,
+            {"CM-A": (10, 0), "CM-B": (0, 13), "CM-C": (3, 0), "CM-X": (3, 3)},
+        ),
+        (
+            "CM-C",
+            OpenClose.CLOSE,
+            "CM-X",
+            OpenClose.CLOSE,
+            {"CM-A": (10, 0), "CM-B": (0, 10), "CM-C": (3, 0), "CM-X": (0, 3)},
+        ),
     ],
     ids=["open-open", "open-sell-to-close", "buy-to-close-open", "close-close"],
 )
 def test_opening_adds_and_closing_reduces(
-    buyer: str, buy: OpenClose, seller: str, sell: OpenClose,
+    buyer: str,
+    buy: OpenClose,
+    seller: str,
+    sell: OpenClose,
     expected: dict[str, tuple[int, int]],
 ) -> None:
     """Before the trade under test: A long 10 and B short 10; C and X each long 3 and short 3.
@@ -208,14 +252,17 @@ def test_opening_adds_and_closing_reduces(
 
 @pytest.mark.parametrize(
     ("closing", "reason"),
-    [(trade(2, "CM-A", "CM-B", buy=OpenClose.CLOSE)[0], "buyer closes more short"),
-     (trade(2, "CM-A", "CM-B", sell=OpenClose.CLOSE)[1], "seller closes more long")],
+    [
+        (trade(2, "CM-A", "CM-B", buy=OpenClose.CLOSE)[0], "buyer closes more short"),
+        (trade(2, "CM-A", "CM-B", sell=OpenClose.CLOSE)[1], "seller closes more long"),
+    ],
     ids=["buy-to-close-without-short", "sell-to-close-without-long"],
 )
 def test_closing_more_than_is_held_is_rejected(closing: OccTradeReport, reason: str) -> None:
     ccp = OccEmulator()
-    counterpart = (trade(2, "CM-A", "CM-B")[1] if closing.side is Side.BUY
-                   else trade(2, "CM-A", "CM-B")[0])
+    counterpart = (
+        trade(2, "CM-A", "CM-B")[1] if closing.side is Side.BUY else trade(2, "CM-A", "CM-B")[0]
+    )
     ccp.submit(counterpart)
     result = ccp.submit(closing)
     assert result.outcome is OccOutcome.REJECTED and reason in result.reason
@@ -232,8 +279,16 @@ def test_long_equals_short_after_every_step_of_a_mixed_sequence() -> None:
             continue
         series = SERIES if n % 3 else OTHER_SERIES
         closes = n % 5 == 0
-        steps.append(trade(n, buyer, seller, contracts=n % 7 + 1, series=series,
-                           buy=OpenClose.CLOSE if closes else OpenClose.OPEN))
+        steps.append(
+            trade(
+                n,
+                buyer,
+                seller,
+                contracts=n % 7 + 1,
+                series=series,
+                buy=OpenClose.CLOSE if closes else OpenClose.OPEN,
+            )
+        )
     for buy_report, sell_report in steps:
         for each in (sell_report, buy_report):
             ccp.submit(each)
@@ -277,8 +332,13 @@ def test_a_reused_report_identifier_with_new_content_is_rejected() -> None:
 
 @pytest.mark.parametrize(
     "changes",
-    [{"series_osi": "SYN 261218C00150500"}, {"contracts": 0}, {"premium": Decimal(0)},
-     {"premium": 5250.0}, {"currency": "usd"}],
+    [
+        {"series_osi": "SYN 261218C00150500"},
+        {"contracts": 0},
+        {"premium": Decimal(0)},
+        {"premium": 5250.0},
+        {"currency": "usd"},
+    ],
 )
 def test_a_malformed_report_is_refused(changes: dict[str, Any]) -> None:
     with pytest.raises(ValidationError):

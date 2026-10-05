@@ -172,8 +172,7 @@ _Key = tuple[str, str, AccountType, str]
 
 
 def _key(report: OccTradeReport) -> _Key:
-    return (report.clearing_member_id, report.account_id, report.account_type,
-            report.series_osi)
+    return (report.clearing_member_id, report.account_id, report.account_type, report.series_osi)
 
 
 def _event_id(report: OccTradeReport) -> EventId:
@@ -184,8 +183,7 @@ def _event_id(report: OccTradeReport) -> EventId:
 
 
 def _terms(report: OccTradeReport) -> tuple[object, ...]:
-    return (report.series_osi, report.contracts, report.premium, report.currency,
-            report.trade_date)
+    return (report.series_osi, report.contracts, report.premium, report.currency, report.trade_date)
 
 
 class OccEmulator:
@@ -204,15 +202,19 @@ class OccEmulator:
         if prior is not None:
             if prior[0] == report:
                 return prior[1]
-            return self._reject(report, "report identifier reused with different content",
-                                record=False)
+            return self._reject(
+                report, "report identifier reused with different content", record=False
+            )
         if report.trade_id in self._novated:
             return self._reject(report, "trade already novated")
         counterpart = self._pending.get(report.trade_id)
         if counterpart is None:
             self._pending[report.trade_id] = report
-            result = OccResult(report_id=report.report_id, outcome=OccOutcome.UNMATCHED,
-                               reason="awaiting the counterpart report")
+            result = OccResult(
+                report_id=report.report_id,
+                outcome=OccOutcome.UNMATCHED,
+                reason="awaiting the counterpart report",
+            )
             self._results[report.report_id] = (report, result)
             return result
         return self._match(report, counterpart)
@@ -259,30 +261,48 @@ class OccEmulator:
         self._novated.add(report.trade_id)
 
         def party(side: OccTradeReport) -> NovationParty:
-            return NovationParty(report_id=side.report_id,
-                                 clearing_member_id=side.clearing_member_id,
-                                 account_id=side.account_id, account_type=side.account_type,
-                                 open_close=side.open_close)
+            return NovationParty(
+                report_id=side.report_id,
+                clearing_member_id=side.clearing_member_id,
+                account_id=side.account_id,
+                account_type=side.account_type,
+                open_close=side.open_close,
+            )
 
         novation = NovatedOptionTrade(
-            novation_id=f"NOV-{report.trade_id}", trade_id=report.trade_id,
-            central_counterparty=CENTRAL_COUNTERPARTY, series_osi=buyer.series_osi,
-            contracts=quantity, premium=buyer.premium, currency=buyer.currency,
-            trade_date=buyer.trade_date, buyer=party(buyer), seller=party(seller),
+            novation_id=f"NOV-{report.trade_id}",
+            trade_id=report.trade_id,
+            central_counterparty=CENTRAL_COUNTERPARTY,
+            series_osi=buyer.series_osi,
+            contracts=quantity,
+            premium=buyer.premium,
+            currency=buyer.currency,
+            trade_date=buyer.trade_date,
+            buyer=party(buyer),
+            seller=party(seller),
         )
         payload_digest = digest(novation)
         events = tuple(
             ExecutionEvent(
                 event_id=_event_id(side),
-                lifecycle_id=side.lifecycle_id, intent_id=side.intent_id,
-                intent_digest=side.intent_digest, times=side.times, session=side.session,
-                provenance=Provenance.FACT_SYNTHETIC, payload_digest=payload_digest,
+                lifecycle_id=side.lifecycle_id,
+                intent_id=side.intent_id,
+                intent_digest=side.intent_digest,
+                times=side.times,
+                session=side.session,
+                provenance=Provenance.FACT_SYNTHETIC,
+                payload_digest=payload_digest,
             )
             for side in (buyer, seller)
         )
-        result = OccResult(report_id=report.report_id, outcome=OccOutcome.NOVATED,
-                           reason="matched and novated", novation=novation,
-                           payload=canonical_bytes(novation), events=events)
+        result = OccResult(
+            report_id=report.report_id,
+            outcome=OccOutcome.NOVATED,
+            reason="matched and novated",
+            novation=novation,
+            payload=canonical_bytes(novation),
+            events=events,
+        )
         for side in (buyer, seller):
             self._results[side.report_id] = (side, result)
         return result
@@ -295,8 +315,13 @@ class OccEmulator:
         """Every account's position in every series it has traded, in a fixed order."""
         keys = sorted(set(self._long) | set(self._short))
         return tuple(
-            Position(clearing_member_id=k[0], account_id=k[1], account_type=k[2],
-                     series_osi=k[3], long_contracts=self._long.get(k, 0),
-                     short_contracts=self._short.get(k, 0))
+            Position(
+                clearing_member_id=k[0],
+                account_id=k[1],
+                account_type=k[2],
+                series_osi=k[3],
+                long_contracts=self._long.get(k, 0),
+                short_contracts=self._short.get(k, 0),
+            )
             for k in keys
         )

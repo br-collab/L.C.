@@ -77,8 +77,10 @@ def test_what_lc_holds_is_byte_for_byte_what_was_attested() -> None:
 @pytest.mark.parametrize(
     ("alter", "refusal"),
     [
-        (lambda b: b.replace(b'"contracts":10', b'"contracts":11'),
-         NovationRefusal.DIGEST_MISMATCH),
+        (
+            lambda b: b.replace(b'"contracts":10', b'"contracts":11'),
+            NovationRefusal.DIGEST_MISMATCH,
+        ),
         (lambda b: b + b" ", NovationRefusal.DIGEST_MISMATCH),
     ],
     ids=["changed-economics", "trailing-byte"],
@@ -120,10 +122,12 @@ def test_neither_side_imports_the_other(module: object, forbidden: str) -> None:
     source = Path(str(getattr(module, "__file__", ""))).read_text(encoding="utf-8")
     imported = {
         (node.module or "").split(".")[0]
-        for node in ast.walk(ast.parse(source)) if isinstance(node, ast.ImportFrom)
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.ImportFrom)
     } | {
         alias.name.split(".")[0]
-        for node in ast.walk(ast.parse(source)) if isinstance(node, ast.Import)
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.Import)
         for alias in node.names
     }
     assert forbidden not in imported
