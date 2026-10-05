@@ -26,9 +26,8 @@ SHA-256 is of the file as saved, and :func:`verify_sources` re-checks them where
 the files are at hand. Anything the table does not hold is INDETERMINATE
 wherever it is needed, by design.
 
-The loader takes the table's path explicitly. The JSON file is not declared as
-package data, so a built wheel would not carry it; an editable install, which
-is how CI and every local run install L.C., reads it in place.
+The loader takes the table's path explicitly. The JSON file is declared as
+package data, so a built wheel carries it (``tests/test_package_data.py``).
 """
 
 from __future__ import annotations
