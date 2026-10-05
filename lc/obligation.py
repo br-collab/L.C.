@@ -1,4 +1,12 @@
-"""Form frozen settlement-obligation envelopes from gross-clearing outputs."""
+"""Form frozen settlement-obligation envelopes from gross-clearing outputs.
+
+The payload's legs follow its delivery pattern, as Atreides' acceptance parser
+reads them: a payment-only or payment-versus-payment obligation has no
+securities leg, a free-of-payment obligation has no cash leg, and every leg
+present has exactly one expected finality. Its source manifest is one complete
+family of upstream sources: an equity trade's, or a listed option premium's or
+exercise's (ORDER SC-3, WP-4).
+"""
 
 from __future__ import annotations
 
@@ -59,9 +67,45 @@ class SourceKind(StrEnum):
     ALLOCATION = "ALLOCATION"
     MATCH_AFFIRMATION = "MATCH_AFFIRMATION"
     CLEARING_TRANSFORMATION = "CLEARING_TRANSFORMATION"
+    OPTION_NOVATION = "OPTION_NOVATION"
+    OPTION_EXERCISE = "OPTION_EXERCISE"
+    OPTION_ASSIGNMENT = "OPTION_ASSIGNMENT"
 
 
-_REQUIRED_SOURCES = frozenset(SourceKind)
+#: Each complete set of upstream sources an obligation can be formed from.
+_SOURCE_FAMILIES = (
+    # An equity trade, through L.C.'s order lifecycle and gross clearing.
+    frozenset(
+        {
+            SourceKind.APPROVED_INTENT,
+            SourceKind.EXECUTION,
+            SourceKind.TRADE_CAPTURE,
+            SourceKind.ALLOCATION,
+            SourceKind.MATCH_AFFIRMATION,
+            SourceKind.CLEARING_TRANSFORMATION,
+        }
+    ),
+    # A listed option premium: the side's intent and execution, and the novation.
+    frozenset(
+        {
+            SourceKind.APPROVED_INTENT,
+            SourceKind.EXECUTION,
+            SourceKind.OPTION_NOVATION,
+            SourceKind.CLEARING_TRANSFORMATION,
+        }
+    ),
+    # A listed option exercise: the exercise and the assignment it was matched to.
+    frozenset(
+        {
+            SourceKind.OPTION_EXERCISE,
+            SourceKind.OPTION_ASSIGNMENT,
+            SourceKind.CLEARING_TRANSFORMATION,
+        }
+    ),
+)
+#: Delivery patterns with no securities leg, and with no cash leg.
+_NO_SECURITIES_LEG = frozenset({DeliveryPattern.PAYMENT_ONLY, DeliveryPattern.PVP})
+_NO_CASH_LEG = frozenset({DeliveryPattern.FOP})
 
 
 class SourceReference(_Record):
@@ -77,7 +121,7 @@ class SourceManifest(_Record):
 
     @model_validator(mode="after")
     def _is_complete_and_unambiguous(self) -> Self:
-        if frozenset(reference.kind for reference in self.references) != _REQUIRED_SOURCES:
+        if frozenset(reference.kind for reference in self.references) not in _SOURCE_FAMILIES:
             raise ValueError("source manifest must contain every required upstream source kind")
         identities = {(reference.kind, reference.identifier) for reference in self.references}
         if len(identities) != len(self.references):
@@ -168,8 +212,10 @@ class ObligationPayload(_Record):
     """L.C.-owned economics referenced by the frozen kernel envelope."""
 
     source_manifest: SourceManifest
-    securities_leg: SecuritiesLeg
-    cash_leg: CashLeg
+    #: None exactly when the delivery pattern moves no securities.
+    securities_leg: SecuritiesLeg | None
+    #: None exactly when the delivery pattern moves no cash.
+    cash_leg: CashLeg | None
     participants: tuple[ParticipantAccount, ...]
     delivery_pattern: DeliveryPattern
     candidate_paths: tuple[CandidatePathDescriptor, ...]
@@ -178,13 +224,25 @@ class ObligationPayload(_Record):
 
     @model_validator(mode="after")
     def _payload_is_complete(self) -> Self:
+        legs: set[LegKind] = set()
+        required_accounts: set[str] = set()
+        if (self.securities_leg is None) is not (self.delivery_pattern in _NO_SECURITIES_LEG):
+            raise ValueError("the securities leg must be present exactly when securities move")
+        if (self.cash_leg is None) is not (self.delivery_pattern in _NO_CASH_LEG):
+            raise ValueError("the cash leg must be present exactly when cash moves")
+        if self.securities_leg is not None:
+            legs.add(LegKind.SECURITIES)
+            required_accounts |= {
+                self.securities_leg.delivering_account_id,
+                self.securities_leg.receiving_account_id,
+            }
+        if self.cash_leg is not None:
+            legs.add(LegKind.CASH)
+            required_accounts |= {
+                self.cash_leg.paying_account_id,
+                self.cash_leg.receiving_account_id,
+            }
         accounts = {participant.account_id for participant in self.participants}
-        required_accounts = {
-            self.securities_leg.delivering_account_id,
-            self.securities_leg.receiving_account_id,
-            self.cash_leg.paying_account_id,
-            self.cash_leg.receiving_account_id,
-        }
         if not required_accounts.issubset(accounts):
             raise ValueError("every leg account must belong to a named participant")
         if len(accounts) != len(self.participants):
@@ -193,9 +251,9 @@ class ObligationPayload(_Record):
             raise ValueError("at least one candidate path descriptor is required")
         if any(path.delivery_pattern is not self.delivery_pattern for path in self.candidate_paths):
             raise ValueError("candidate paths must use the obligation delivery pattern")
-        if {item.leg for item in self.expected_finality} != set(LegKind):
-            raise ValueError("expected finality must name securities and cash exactly once")
-        if len(self.expected_finality) != len(LegKind):
+        if {item.leg for item in self.expected_finality} != legs:
+            raise ValueError("expected finality must name each leg present exactly once")
+        if len(self.expected_finality) != len(legs):
             raise ValueError("expected finality cannot duplicate a leg")
         return self
 

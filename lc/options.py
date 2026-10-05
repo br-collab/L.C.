@@ -23,12 +23,14 @@ adjustment: the OCC (Options Clearing Corporation) notice it comes from, with
 its URL, retrieval DTG (date-time group) and SHA-256. Adjustments are
 ingested, never computed.
 
-TWO SETTLEMENT PATHS, TWO PROFILES
-----------------------------------
+SETTLEMENT PATHS ARE PROFILES
+-----------------------------
 A premium settles as a payment, and an exercise or assignment settles as
 delivery against payment of the strike. They are different paths to finality,
-so they are two asset profiles, admitted to the existing registry as data
-(:data:`LISTED_OPTION_ASSET_PROFILES`).
+so they are different asset profiles, admitted to the existing registry as
+data (:data:`LISTED_OPTION_ASSET_PROFILES`). An adjusted deliverable can add
+two more: a further security delivered free of payment, and a cash component
+such as cash in lieu paid on its own.
 """
 
 from __future__ import annotations
@@ -46,6 +48,8 @@ from lc.asset_profile import DEFAULT_ASSET_PROFILES, AssetProfile, AssetProfileR
 __all__ = [
     "LISTED_OPTION_ASSET_PROFILES",
     "LISTED_OPTION_EXERCISE",
+    "LISTED_OPTION_EXERCISE_CASH",
+    "LISTED_OPTION_EXERCISE_FREE_DELIVERY",
     "LISTED_OPTION_PREMIUM",
     "AdjustmentEvidence",
     "CashComponent",
@@ -246,7 +250,30 @@ LISTED_OPTION_EXERCISE = AssetProfile(
     cash_finality_evidence="strike consideration payment finality",
 )
 
-#: The default registry with both listed option paths admitted, as data.
-LISTED_OPTION_ASSET_PROFILES: AssetProfileRegistry = DEFAULT_ASSET_PROFILES.register(
-    LISTED_OPTION_PREMIUM
-).register(LISTED_OPTION_EXERCISE)
+LISTED_OPTION_EXERCISE_FREE_DELIVERY = AssetProfile(
+    profile_id="equity-option.listed.exercise.free-delivery",
+    settlement_pattern=DeliveryPattern.FOP,
+    cash_representation="not applicable: the strike settles against the first security",
+    custody_path="underlying securities through the equity settlement system",
+    conditional_execution="deliver a further security of an adjusted deliverable, free of payment",
+    securities_finality_evidence="underlying securities delivery finality",
+    cash_finality_evidence="not applicable: no cash moves",
+)
+
+LISTED_OPTION_EXERCISE_CASH = AssetProfile(
+    profile_id="equity-option.listed.exercise.cash",
+    settlement_pattern=DeliveryPattern.PAYMENT_ONLY,
+    cash_representation="commercial-bank money through each clearing member's settlement bank",
+    custody_path="not applicable: no securities move",
+    conditional_execution="pay a cash component of an adjusted deliverable, or a strike alone",
+    securities_finality_evidence="not applicable: no securities move",
+    cash_finality_evidence="cash component payment finality",
+)
+
+#: The default registry with every listed option path admitted, as data.
+LISTED_OPTION_ASSET_PROFILES: AssetProfileRegistry = (
+    DEFAULT_ASSET_PROFILES.register(LISTED_OPTION_PREMIUM)
+    .register(LISTED_OPTION_EXERCISE)
+    .register(LISTED_OPTION_EXERCISE_FREE_DELIVERY)
+    .register(LISTED_OPTION_EXERCISE_CASH)
+)
