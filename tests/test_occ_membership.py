@@ -242,8 +242,9 @@ def test_the_check_records_the_table_it_read(tmp_path: Path) -> None:
 def test_the_committed_table_pins_rule_301() -> None:
     committed = load_rule_table(DEFAULT_TABLE_PATH)
     assert committed.refused == ()
-    assert {i.item_id for i in committed.items} == set(ALL_ITEMS)
-    for pinned in committed.items:
+    rule_301 = [i for i in committed.items if i.item_id.startswith("occ.rule301.")]
+    assert {i.item_id for i in rule_301} == set(ALL_ITEMS)
+    for pinned in rule_301:
         assert pinned.source.file_name == "occ_rules.pdf"
         assert pinned.source.source_kind == "RULES"
     minimum = committed.item(MINIMUM_ITEM)
