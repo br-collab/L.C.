@@ -48,15 +48,21 @@ STANDARD = Deliverable(
     components=(SharesComponent(security_id=UNDERLYING, quantity=CONTRACT_SHARES),),
 )
 NOTICE = AdjustmentEvidence(
-    notice_id="SYNTHETIC-MEMO-1", url="https://example.invalid/synthetic-memo-1",
-    retrieved_dtg="202610051200", sha256="ab" * 32,
+    notice_id="SYNTHETIC-MEMO-1",
+    url="https://example.invalid/synthetic-memo-1",
+    retrieved_dtg="202610051200",
+    sha256="ab" * 32,
 )
 
 
 def series(**changes: Any) -> OptionSeries:
     base: dict[str, Any] = {
-        "root": "SYN", "underlying_security_id": UNDERLYING, "expiry": date(2026, 12, 18),
-        "right": OptionRight.CALL, "strike": D("150.5"), "style": ExerciseStyle.AMERICAN,
+        "root": "SYN",
+        "underlying_security_id": UNDERLYING,
+        "expiry": date(2026, 12, 18),
+        "right": OptionRight.CALL,
+        "strike": D("150.5"),
+        "style": ExerciseStyle.AMERICAN,
         "deliverable": STANDARD,
     }
     return OptionSeries(**(base | changes))
@@ -74,9 +80,7 @@ def series(**changes: Any) -> OptionSeries:
         ({"root": "S1", "expiry": date(2030, 1, 4), "strike": D(25)}, "S1    300104C00025000"),
     ],
 )
-def test_the_identifier_is_derived_from_the_terms(
-    changes: dict[str, Any], identifier: str
-) -> None:
+def test_the_identifier_is_derived_from_the_terms(changes: dict[str, Any], identifier: str) -> None:
     built = series(**changes)
     assert built.osi_identifier == identifier
     assert len(identifier) == 21
@@ -95,16 +99,24 @@ def test_every_series_on_the_grid_round_trips_through_its_identifier(
     root: str, expiry: date, right: OptionRight, strike: Decimal
 ) -> None:
     built = series(root=root, expiry=expiry, right=right, strike=strike)
-    rebuilt = OptionSeries.from_osi(built.osi_identifier, underlying_security_id=UNDERLYING,
-                                    style=ExerciseStyle.AMERICAN, deliverable=STANDARD)
+    rebuilt = OptionSeries.from_osi(
+        built.osi_identifier,
+        underlying_security_id=UNDERLYING,
+        style=ExerciseStyle.AMERICAN,
+        deliverable=STANDARD,
+    )
     assert rebuilt == built
     assert rebuilt.osi_identifier == built.osi_identifier
 
 
 @pytest.mark.parametrize(
     "changes",
-    [{"root": "SYM"}, {"expiry": date(2026, 12, 19)}, {"right": OptionRight.PUT},
-     {"strike": D("150.501")}],
+    [
+        {"root": "SYM"},
+        {"expiry": date(2026, 12, 19)},
+        {"right": OptionRight.PUT},
+        {"strike": D("150.501")},
+    ],
 )
 def test_each_term_changes_the_identity(changes: dict[str, Any]) -> None:
     assert series(**changes).osi_identifier != series().osi_identifier
@@ -128,8 +140,12 @@ def test_equal_terms_give_one_identity_however_the_strike_is_written() -> None:
 )
 def test_a_non_canonical_identifier_is_refused(identifier: str, match: str) -> None:
     with pytest.raises(ValueError, match=match):
-        OptionSeries.from_osi(identifier, underlying_security_id=UNDERLYING,
-                              style=ExerciseStyle.AMERICAN, deliverable=STANDARD)
+        OptionSeries.from_osi(
+            identifier,
+            underlying_security_id=UNDERLYING,
+            style=ExerciseStyle.AMERICAN,
+            deliverable=STANDARD,
+        )
 
 
 @pytest.mark.parametrize(
@@ -160,9 +176,12 @@ def test_an_adjusted_deliverable_requires_its_evidence() -> None:
 
 def test_an_adjusted_deliverable_may_combine_securities_and_cash_in_lieu() -> None:
     adjusted = Deliverable(
-        kind=DeliverableKind.ADJUSTED, evidence=NOTICE,
-        components=(SharesComponent(security_id="SYNTHETIC-ACQUIRER", quantity=D(52)),
-                    CashComponent(amount=D("1234.56"), currency="USD")),
+        kind=DeliverableKind.ADJUSTED,
+        evidence=NOTICE,
+        components=(
+            SharesComponent(security_id="SYNTHETIC-ACQUIRER", quantity=D(52)),
+            CashComponent(amount=D("1234.56"), currency="USD"),
+        ),
     )
     assert series(root="SYN2", deliverable=adjusted).deliverable.kind is DeliverableKind.ADJUSTED
 
@@ -171,11 +190,19 @@ def test_an_adjusted_deliverable_may_combine_securities_and_cash_in_lieu() -> No
     ("kwargs", "match"),
     [
         ({"components": STANDARD.components, "evidence": NOTICE}, "carries no adjustment"),
-        ({"components": (CashComponent(amount=D(1), currency="USD"),)},
-         "anything else is adjusted"),
-        ({"components": (*STANDARD.components,
-                         SharesComponent(security_id="SYNTHETIC-B", quantity=D(1)))},
-         "anything else is adjusted"),
+        (
+            {"components": (CashComponent(amount=D(1), currency="USD"),)},
+            "anything else is adjusted",
+        ),
+        (
+            {
+                "components": (
+                    *STANDARD.components,
+                    SharesComponent(security_id="SYNTHETIC-B", quantity=D(1)),
+                )
+            },
+            "anything else is adjusted",
+        ),
         ({"components": ()}, "at least 1 item"),
     ],
 )
@@ -187,8 +214,10 @@ def test_a_standard_deliverable_is_one_quantity_of_the_underlying(
 
 
 def test_a_standard_deliverable_is_the_series_own_underlying() -> None:
-    other = Deliverable(kind=DeliverableKind.STANDARD,
-                        components=(SharesComponent(security_id="SYNTHETIC-B", quantity=D(100)),))
+    other = Deliverable(
+        kind=DeliverableKind.STANDARD,
+        components=(SharesComponent(security_id="SYNTHETIC-B", quantity=D(100)),),
+    )
     with pytest.raises(ValidationError, match="series' own underlying"):
         series(deliverable=other)
 
@@ -213,8 +242,9 @@ def test_no_contract_size_is_assumed() -> None:
 
 @pytest.mark.parametrize("account_type", list(PositionAccountType))
 def test_every_position_account_type(account_type: PositionAccountType) -> None:
-    account = PositionAccount(clearing_member_id="SYNTHETIC-CM", account_id="A-1",
-                              account_type=account_type)
+    account = PositionAccount(
+        clearing_member_id="SYNTHETIC-CM", account_id="A-1", account_type=account_type
+    )
     assert account.account_type is account_type
 
 

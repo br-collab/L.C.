@@ -189,7 +189,10 @@ class OptionSeries(_Record):
         if len(identifier) != _OSI_LENGTH:
             raise ValueError("an OSI identifier is 21 characters")
         root, expiry, right, strike = (
-            identifier[:6].rstrip(" "), identifier[6:12], identifier[12], identifier[13:]
+            identifier[:6].rstrip(" "),
+            identifier[6:12],
+            identifier[12],
+            identifier[13:],
         )
         if not strike.isdigit() or not expiry.isdigit():
             raise ValueError(f"{identifier!r} is not an OSI identifier")
