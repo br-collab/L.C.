@@ -12,7 +12,7 @@ import pytest
 from cannae_kernel.absence import Absent, Recorded
 from cannae_kernel.canonical import digest
 from cannae_kernel.disposition import Disposition
-from cannae_kernel.envelopes import ObligationAcceptanceRecord
+from cannae_kernel.envelopes import ObligationAcceptanceRecord, SettlementObligationEnvelope
 from test_lifecycle import _actor, _event
 from test_obligation import _formed
 
@@ -34,30 +34,36 @@ from atreides.rails.cato_cash import (
 
 from lc.events import LifecycleState
 from lc.lifecycle import replay
-from lc.obligation import FormedObligation, HandoffOutcome, record_atreides_handoff
+from lc.obligation import CashLeg, FormedObligation, HandoffOutcome, record_atreides_handoff
 
 AT = datetime(2026, 9, 28, 13, 0, tzinfo=UTC)
 
 
-def _gate(formed: FormedObligation, *, funded: bool) -> CatoCashDecision:
-    amount = formed.payload.cash_leg.total
+def _gate(
+    envelope: SettlementObligationEnvelope, cash: CashLeg | None, *, funded: bool
+) -> CatoCashDecision | None:
+    """Atreides' real cash gate, bound to ``envelope``. None for an obligation moving no cash."""
+    if cash is None:
+        return None
+    amount = cash.total
     return evaluate(
         operation=OperationContext(
             notional=amount,
-            currency=formed.payload.cash_leg.currency,
+            currency=cash.currency,
             is_material=False,
             is_lvps_material=False,
         ),
+        # Funded means the position covers the obligation with room to spare, whatever its size.
         funding=FundingState(
-            Decimal("5000") if funded else Decimal(0),
+            amount + Decimal("5000") if funded else Decimal(0),
             amount,
-            Decimal("10000"),
+            amount + Decimal("10000"),
             True,
         ),
         rails={CashRail.FEDWIRE: RailState(CashRail.FEDWIRE, RailStatus.AVAILABLE, 7200)},
         ofr_stlfsi4=0.0,
-        obligation_id=formed.envelope.obligation_id,
-        obligation_digest=digest(formed.envelope),
+        obligation_id=envelope.obligation_id,
+        obligation_digest=digest(envelope),
     )
 
 
@@ -69,7 +75,7 @@ def _acceptance(*, funded: bool) -> tuple[FormedObligation, ObligationAcceptance
         acceptance_id=uuid.UUID("00000000-0000-4000-8000-000000000006"),
         evaluated_at=AT,
         decided_by=_actor(),
-        gate_decision=_gate(formed, funded=funded),
+        gate_decision=_gate(formed.envelope, formed.payload.cash_leg, funded=funded),
         halt=None,
     )
     return formed, record
@@ -121,11 +127,9 @@ def test_acceptance_record_references_digest_and_copies_no_economics() -> None:
     formed, acceptance = _acceptance(funded=True)
     dumped = acceptance.model_dump_json()
     assert acceptance.obligation_digest == digest(formed.envelope)
-    for economic in (
-        str(formed.payload.cash_leg.total),
-        formed.payload.cash_leg.currency,
-        formed.payload.securities_leg.instrument_id,
-    ):
+    cash, securities = formed.payload.cash_leg, formed.payload.securities_leg
+    assert cash is not None and securities is not None
+    for economic in (str(cash.total), cash.currency, securities.instrument_id):
         assert economic not in dumped
 
 

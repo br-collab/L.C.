@@ -185,12 +185,16 @@ def test_emits_the_frozen_envelope_without_extension_and_with_every_owned_field(
         "payload_digest",
     }
     assert formed.envelope.payload_digest == digest(formed.payload)
-    assert formed.payload.cash_leg.total == (
-        formed.payload.cash_leg.principal + formed.payload.cash_leg.accrued
-    )
-    assert set(formed.payload.source_manifest.references[index].kind for index in range(6)) == set(
-        SourceKind
-    )
+    cash = formed.payload.cash_leg
+    assert cash is not None and cash.total == cash.principal + cash.accrued
+    assert {reference.kind for reference in formed.payload.source_manifest.references} == {
+        SourceKind.APPROVED_INTENT,
+        SourceKind.EXECUTION,
+        SourceKind.TRADE_CAPTURE,
+        SourceKind.ALLOCATION,
+        SourceKind.MATCH_AFFIRMATION,
+        SourceKind.CLEARING_TRANSFORMATION,
+    }
     assert (
         SettlementObligationEnvelope.model_validate_json(formed.envelope.model_dump_json())
         == formed.envelope
@@ -201,6 +205,7 @@ def test_payload_digest_is_stable_and_a_perturbed_field_changes_it() -> None:
     payload = _formed().payload
     assert canonical_bytes_of(payload) == payload.canonical_bytes()
     assert digest(payload) == digest(payload.model_copy(deep=True))
+    assert payload.cash_leg is not None
     cash = payload.cash_leg.model_copy(
         update={"principal": Decimal("996.00"), "total": Decimal("999.25")}
     )
