@@ -67,8 +67,12 @@ build-backend = "setuptools.build_meta"
 where = ["."]
 include = ["lc*", "emulators*", "cop*", "harness_c2*", "thifur_h*"]
 
+# Files the code reads at runtime through Path(__file__). An editable install reads them
+# in place; a built wheel carries only what is declared here.
+# tests/test_package_data.py keeps the lc entry complete.
 [tool.setuptools.package-data]
 cop = ["program.yaml", "templates/*.html", "static/*.css", "static/*.js"]
+lc = ["occ_rule_table.json"]
 
 [tool.ruff]
 line-length = 100
