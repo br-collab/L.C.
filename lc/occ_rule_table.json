@@ -1,4 +1,22 @@
 {
-  "table_version": "0.1-draft",
-  "items": []
+  "table_version": "0.2-draft",
+  "notes": [
+    "Source files were saved by Bill from a browser on 5 October 2026 into the workspace folder Research-record/Gaps ID'ed 10:4/. OCC's site refuses scripted retrieval, so the SHA-256 is of the file as saved, which for a web page is a browser-printed PDF rather than the bytes OCC served.",
+    "OCC Rule 301(b)(1) (OCC Rules, last modified 1 October 2026) states the binding broker-dealer minimum as the greater of $10 million, 6 2/3% of aggregate indebtedness, or 2% of aggregate debit items, for clearing members including applicants. The item below is the single criterion the clearing membership page publishes; replacing it with Rule 301 is amendment A5 in Research-record/Gaps ID'ed 10:4/ORDER-SC-3-occ-rule-verification-2026-10-05.md, which is Bill's decision."
+  ],
+  "items": [
+    {
+      "item_id": "occ.membership.initial_net_capital",
+      "value": "10000000",
+      "unit": "USD",
+      "source": {
+        "url": "https://www.theocc.com/company-information/becoming-a-clearing-member",
+        "source_kind": "WEB_PAGE",
+        "retrieved_dtg": "202610052108",
+        "sha256": "de8c0bba73b59aa5517fb17e935f2159c5ef88dec9f4515ebf52a82896b246dd",
+        "file_name": "OCC - Becoming a Clearing Member.pdf",
+        "verbatim": "Applicant must meet minimum net capital requirements (initial requirement is a minimum of $10,000,000."
+      }
+    }
+  ]
 }
