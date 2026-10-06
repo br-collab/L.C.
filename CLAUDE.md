@@ -2,12 +2,12 @@
 
 Guidance for Claude Code in this repository.
 
-## Hard gate
-Do not implement middle-layer behaviour until the joint Aureon/Atreides upgrade map exists and the first cross-domain contracts (ApprovedIntentEnvelope, AcceptedSettlementObligationEnvelope) are frozen. Research Charter §18.7. Scaffolding, tests of frozen contracts, and docs are allowed.
+## Historical hard gate
+Research Charter §18.7 prohibited middle-layer behaviour until the joint Aureon/Atreides upgrade map existed and the first cross-domain contracts (`ApprovedIntentEnvelope` and `SettlementObligationEnvelope`) were frozen. That condition was met in Wave 3 on 19 September 2026, so the gate is no longer active.
 
 ## Sibling repositories (same parent folder, ~/Code/cannae)
 - `aureon/` — pre-trade, governed intent. Source of ApprovedIntentEnvelope.
-- `Project-Atreides/` — post-trade settlement. Consumer of AcceptedSettlementObligationEnvelope. Python 3.11+.
+- `Project-Atreides/` — post-trade settlement. Consumer of `SettlementObligationEnvelope`. Python 3.11+.
 Consume their contracts; never vendor their code into this repository.
 
 ## Invariants
