@@ -66,14 +66,18 @@ MATCH = {("CA-1", "DTC")}
 
 def test_matching_adjustment_applies_from_effective_date_and_retains_old_terms() -> None:
     before = apply_adjustment(
-        SeriesTerms(active=SERIES), ADJUSTMENT, as_of=date(2026, 10, 9),
+        SeriesTerms(active=SERIES),
+        ADJUSTMENT,
+        as_of=date(2026, 10, 9),
         known_corporate_actions=MATCH,
     )
     assert before.outcome is AdjustmentOutcome.NOT_YET_EFFECTIVE
     assert before.terms.active == SERIES and before.terms.prior == ()
 
     after = apply_adjustment(
-        before.terms, ADJUSTMENT, as_of=date(2026, 10, 10),
+        before.terms,
+        ADJUSTMENT,
+        as_of=date(2026, 10, 10),
         known_corporate_actions=MATCH,
     )
     assert after.outcome is AdjustmentOutcome.APPLIED
@@ -83,7 +87,9 @@ def test_matching_adjustment_applies_from_effective_date_and_retains_old_terms()
 
 def test_an_adjustment_without_a_matching_event_is_flagged() -> None:
     result = apply_adjustment(
-        SeriesTerms(active=SERIES), ADJUSTMENT, as_of=date(2026, 10, 10),
+        SeriesTerms(active=SERIES),
+        ADJUSTMENT,
+        as_of=date(2026, 10, 10),
         known_corporate_actions=set(),
     )
     assert result.outcome is AdjustmentOutcome.UNMATCHED_EVENT
@@ -99,15 +105,21 @@ def test_invalid_or_inconsistent_evidence_is_refused() -> None:
         )
     with pytest.raises(ValidationError, match="adjusted deliverable"):
         OccContractAdjustment(
-            adjustment_id="ADJ-2", series_osi=SERIES.osi_identifier,
-            effective_date=date(2026, 10, 10), corporate_action_event_id="CA-1",
-            corporate_action_source_id="DTC", deliverable=STANDARD, evidence=EVIDENCE,
+            adjustment_id="ADJ-2",
+            series_osi=SERIES.osi_identifier,
+            effective_date=date(2026, 10, 10),
+            corporate_action_event_id="CA-1",
+            corporate_action_source_id="DTC",
+            deliverable=STANDARD,
+            evidence=EVIDENCE,
         )
 
 
 def test_exercise_uses_the_adjusted_deliverable_component_by_component() -> None:
     result = apply_adjustment(
-        SeriesTerms(active=SERIES), ADJUSTMENT, as_of=date(2026, 10, 10),
+        SeriesTerms(active=SERIES),
+        ADJUSTMENT,
+        as_of=date(2026, 10, 10),
         known_corporate_actions=MATCH,
     )
     assert deliverable_for(result.terms.active, 3) == (
@@ -121,5 +133,6 @@ def test_adjustment_for_another_series_is_refused() -> None:
         apply_adjustment(
             SeriesTerms(active=SERIES),
             ADJUSTMENT.model_copy(update={"series_osi": "OTHER 270115C00050000"}),
-            as_of=date(2026, 10, 10), known_corporate_actions=MATCH,
+            as_of=date(2026, 10, 10),
+            known_corporate_actions=MATCH,
         )

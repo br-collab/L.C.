@@ -100,4 +100,3 @@ def apply_adjustment(
         reason="the deliverable stated in the evidenced OCC notice is effective",
         adjustment=adjustment,
     )
-
