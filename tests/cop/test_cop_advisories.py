@@ -133,7 +133,6 @@ def test_unread_advisory_source_never_renders_an_empty_clean_state() -> None:
     assert "PASS" not in body
 
 
-@pytest.mark.xfail(strict=True, reason="WP-5 pinned producer seam is not implemented yet")
 def test_cross_domain_job_pins_and_exercises_the_advisory_producer() -> None:
     workflow = Path(".github/workflows/ci.yml").read_text()
     seam = Path("tests/test_atreides_handoff.py").read_text()
