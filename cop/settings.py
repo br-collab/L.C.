@@ -35,6 +35,10 @@ CASH_LEG_SOURCE = "Aureon cash-leg demonstration (/api/cashleg/demo)"
 # variable to set — the same rule the panel exists to enforce, applied to the
 # panel's own source.
 AGENTS_SNAPSHOT_SOURCE = "Atreides activation snapshot (ATREIDES_AGENTS_URL)"
+ADVISORIES_SOURCE = "Atreides engine advisories (ATREIDES_ADVISORIES_URL)"
+ADVISORIES_SOURCE_UNSET = (
+    "ATREIDES_ADVISORIES_URL is not set, so no engine advisories are being read"
+)
 
 # COP-1 panel 8. In demo mode the rows are invented (cop/demo.py). In production,
 # unconfigured means no publication address was supplied; it never renders as an
@@ -63,6 +67,7 @@ STALE_AFTER = timedelta(minutes=5)
 # allows the scheduled job a two-hour delivery margin while still reporting a
 # stopped daily publication cycle as stale.
 AGENTS_STALE_AFTER = timedelta(hours=26)
+ADVISORIES_STALE_AFTER = timedelta(hours=26)
 LIFECYCLE_STALE_AFTER = timedelta(hours=26)
 PAGE_RELOAD_SECONDS = 60
 
@@ -94,6 +99,7 @@ ENV_GITHUB_TOKEN = "GITHUB_TOKEN"
 ENV_INSECURE_LOCAL = "LEGATE_INSECURE_LOCAL"
 ENV_DEMO = "LEGATE_DEMO"
 ENV_AGENTS_URL = "ATREIDES_AGENTS_URL"
+ENV_ADVISORIES_URL = "ATREIDES_ADVISORIES_URL"
 ENV_ESCALATIONS_URL = "C2_ESCALATIONS_URL"
 ENV_LC_LAYER_CLOCK_URL = "LC_LAYER_CLOCK_URL"
 ENV_LIFECYCLE_BASE_URL = "LC_LIFECYCLE_BASE_URL"
@@ -107,6 +113,7 @@ class Settings:
     session_secret: str | None = field(repr=False)
     github_token: str | None = field(repr=False)
     agents_url: str | None
+    advisories_url: str | None
     escalations_url: str | None
     lc_layer_clock_url: str | None
     lifecycle_base_url: str | None
@@ -149,6 +156,7 @@ def load_settings(env: Mapping[str, str]) -> Settings:
     session_secret = _non_empty(env, ENV_SESSION_SECRET)
     github_token = _non_empty(env, ENV_GITHUB_TOKEN)
     agents_url = _non_empty(env, ENV_AGENTS_URL)
+    advisories_url = _non_empty(env, ENV_ADVISORIES_URL)
     escalations_url = _non_empty(env, ENV_ESCALATIONS_URL)
     lc_layer_clock_url = _non_empty(env, ENV_LC_LAYER_CLOCK_URL)
     lifecycle_base_url = _non_empty(env, ENV_LIFECYCLE_BASE_URL)
@@ -184,6 +192,7 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         session_secret=session_secret,
         github_token=github_token,
         agents_url=agents_url,
+        advisories_url=advisories_url,
         escalations_url=escalations_url,
         lc_layer_clock_url=lc_layer_clock_url,
         lifecycle_base_url=lifecycle_base_url,
