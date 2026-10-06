@@ -93,3 +93,12 @@ def test_unknown_disposition_and_empty_advisories_fail_closed() -> None:
 def test_malformed_json_fails_closed() -> None:
     with pytest.raises(SourceMalformedError, match="not valid JSON"):
         parse_publication(b"{not json")
+
+
+@pytest.mark.xfail(strict=True, reason="WP-4 advisory panel is not implemented yet")
+def test_advisory_panel_is_read_only_and_displays_required_labels() -> None:
+    view = import_module("cop.view")
+    app = import_module("cop.app")
+    assert "advisories" in app.PANELS
+    assert hasattr(view.PageView, "__dataclass_fields__")
+    assert "advisories" in view.PageView.__dataclass_fields__
