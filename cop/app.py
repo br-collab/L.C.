@@ -30,6 +30,7 @@ from flask import (
 )
 from werkzeug.wrappers.response import Response as BaseResponse
 
+from cop.advisories import HttpxAdvisoryClient
 from cop.agents import HttpxAgentsClient
 from cop.aureon import HttpxAureonClient
 from cop.auth import LoginLimiter, key_fingerprint, keys_match
@@ -80,6 +81,7 @@ PANELS: dict[str, str] = {
     "repositories": "Repositories",
     "aureon": "Live Aureon",
     "agents": "Atreides agents",
+    "advisories": "Engine advisories (synthetic)",
     "lifecycles": "Lifecycle board",
     "escalations": "Escalation queue",
     "breaks": "Breaks across layers",
@@ -101,7 +103,7 @@ SECTIONS: dict[str, tuple[str, ...]] = {
     "decisions": ("escalations", "governance", "decisions"),
     "controls": ("controls",),
     "risk": ("risk",),
-    "agents": ("agents",),
+    "agents": ("agents", "advisories"),
     "programme": ("waves", "repositories", "aureon", "scheduled"),
     "blind": ("blindspots",),
 }
@@ -148,6 +150,7 @@ def build_refresher(settings: Settings, clock: Clock = utc_now) -> Refresher:
                 github=DemoGitHub(clock),
                 aureon=DemoAureon(),
                 agents=DemoAgents(clock),
+                advisories=None,
                 lc_layer_clock=None,
                 lifecycles=DemoLifecycles(clock),
                 escalations=DemoEscalations(clock),
@@ -174,6 +177,11 @@ def build_refresher(settings: Settings, clock: Clock = utc_now) -> Refresher:
             # "not configured" rather than inventing an address to fail against.
             agents=(
                 HttpxAgentsClient(settings.agents_url) if settings.agents_url is not None else None
+            ),
+            advisories=(
+                HttpxAdvisoryClient(settings.advisories_url)
+                if settings.advisories_url is not None
+                else None
             ),
             lc_layer_clock=(
                 HttpxLayerClockClient(settings.lc_layer_clock_url)
@@ -387,6 +395,11 @@ def create_app(  # noqa: PLR0915 - route definitions read best in one place
                 "aureon-snapshot": _health_source([snapshot.aureon.snapshot], now),
                 "cash-leg": _health_source([snapshot.cash_leg.cash_leg], now),
                 "agents": _health_source([agents], now, variable="ATREIDES_AGENTS_URL"),
+                "advisories": _health_source(
+                    [snapshot.advisories.publication],
+                    now,
+                    variable="ATREIDES_ADVISORIES_URL",
+                ),
                 "lc-layer-clock": _health_source(
                     [snapshot.lc_layer_clock.clock], now, variable="LC_LAYER_CLOCK_URL"
                 ),

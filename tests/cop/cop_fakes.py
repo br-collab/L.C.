@@ -18,6 +18,7 @@ from cannae_kernel.provenance import Provenance
 from flask.testing import FlaskClient
 from werkzeug.test import TestResponse
 
+from cop.advisories import HttpxAdvisoryClient
 from cop.agents import HttpxAgentsClient
 from cop.app import create_app
 from cop.aureon import HttpxAureonClient
@@ -29,6 +30,7 @@ from cop.refresher import Refresher, RefresherOptions, Sources
 from cop.settings import AUREON_CASH_LEG_URL, AUREON_SNAPSHOT_URL, PROGRAM_FILE, load_settings
 
 AGENTS_URL = "https://atreides.example.invalid/api/activation"
+ADVISORIES_URL = "https://atreides.example.invalid/api/advisories"
 
 START = datetime(2026, 9, 17, 15, 0, tzinfo=UTC)
 FAILURE_MODES = ("timeout", "http500", "malformed_json", "rate_limit")
@@ -439,6 +441,57 @@ class FakeAtreides:
         return httpx.Response(200, json=self.body)
 
 
+def advisory_body(*, dispositions: tuple[str, ...] = ("PASS",)) -> dict[str, Any]:
+    digest = "sha256:" + "a" * 64
+    scenarios = []
+    for disposition in dispositions:
+        scenarios.append(
+            {
+                "scenario_id": f"synthetic-{disposition.lower()}",
+                "description": "Synthetic committed scenario.",
+                "advisories": [
+                    {
+                        "schema_version": "0.1-draft",
+                        "claim_label": "EXPERIMENTAL",
+                        "enforcement_status": "ADVISORY_ONLY",
+                        "subject": "possession_or_control",
+                        "as_of": "2026-10-02",
+                        "disposition": disposition,
+                        "reasons": [],
+                        "missing_rules": [],
+                        "missing_inputs": [],
+                        "rule_versions": [],
+                        "rule_table_version": "sc2-v1",
+                        "rule_table_digest": digest,
+                        "input_digest": digest,
+                        "result_digest": digest,
+                    }
+                ],
+            }
+        )
+    return {
+        "schema_version": 1,
+        "synthetic": True,
+        "taken_at": _iso(START),
+        "scenarios": scenarios,
+    }
+
+
+class FakeAdvisories:
+    def __init__(self) -> None:
+        self.failure: str | None = None
+        self.calls = 0
+        self.body = advisory_body()
+
+    def handler(self, request: httpx.Request) -> httpx.Response:
+        self.calls += 1
+        if str(request.url) != ADVISORIES_URL:
+            raise UnexpectedRequestError(f"unexpected request {request.url}")
+        if self.failure is not None:
+            return failure_response(self.failure, request)
+        return httpx.Response(200, json=self.body)
+
+
 class Rig:
     """A refresher wired to fake servers and a fake clock."""
 
@@ -448,6 +501,7 @@ class Rig:
         token: str | None = "test-token",
         *,
         agents_configured: bool = True,
+        advisories_configured: bool = True,
         lifecycles_configured: bool = True,
         escalations_configured: bool = True,
         exceptions_configured: bool = False,
@@ -459,6 +513,7 @@ class Rig:
         self.aureon = FakeAureon()
         self.cash_leg = FakeCashLeg()
         self.atreides = FakeAtreides()
+        self.advisories = FakeAdvisories()
         self.github_client = HttpxGitHubClient(
             token, http=httpx.Client(transport=httpx.MockTransport(self.github.handler))
         )
@@ -475,6 +530,14 @@ class Rig:
                         http=httpx.Client(transport=httpx.MockTransport(self.atreides.handler)),
                     )
                     if agents_configured
+                    else None
+                ),
+                advisories=(
+                    HttpxAdvisoryClient(
+                        ADVISORIES_URL,
+                        http=httpx.Client(transport=httpx.MockTransport(self.advisories.handler)),
+                    )
+                    if advisories_configured
                     else None
                 ),
                 lc_layer_clock=FakeLayerClock(self.clock) if layer_clock_configured else None,

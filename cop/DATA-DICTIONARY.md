@@ -31,6 +31,7 @@ System of Record. SLA means service-level agreement.
 | `aureon-snapshot` | `br-collab/aureon`, public `/api/snapshot` | Live request | 5 minutes | Live; no kernel `EventTimes` |
 | `cash-leg` | `br-collab/aureon`, public `/api/cashleg/demo` document prepared by Atreides | Live request in demo | 5 minutes | Reachable demonstration document; admitted only in `LEGATE_DEMO=1`. Production has no cash-leg producer, cutoff table or clocks |
 | `agents` | `br-collab/Project-Atreides`, activation snapshot configured by `ATREIDES_AGENTS_URL` | On push and nightly | 26 hours | Producer exists; deployment URL may be absent |
+| `advisories` | `br-collab/Project-Atreides`, synthetic customer protection advisory document configured by `ATREIDES_ADVISORIES_URL` | On push and nightly | 26 hours | `NotConfigured` when unset; malformed, failed or stale documents remain `INDETERMINATE` |
 | `lc-layer-clock` | `br-collab/L.C.`, versioned layer-clock document configured by `LC_LAYER_CLOCK_URL` | Live request | 5 minutes | Producer and reader exist; deployment URL may be absent; an empty register cannot publish |
 | `c2-escalations` | `br-collab/L.C.`, C2 escalation queue configured by `C2_ESCALATIONS_URL` | Live request | 5 minutes | Reader and demo producer exist; live publication may be absent |
 | `lifecycle` | Versioned funded and unfunded slice documents published from the real CI transcript | `LC_LIFECYCLE_BASE_URL` over HTTPS | 26 hours | `NotConfigured` when the variable is unset; malformed, failed or stale documents hold at `INDETERMINATE` |

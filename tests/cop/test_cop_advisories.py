@@ -6,7 +6,9 @@ import json
 from copy import deepcopy
 
 import pytest
+from cop_fakes import Rig, advisory_body, login, section
 
+from cop import app, view
 from cop.advisories import parse_publication
 from cop.observation import SourceMalformedError
 
@@ -93,3 +95,38 @@ def test_unknown_disposition_and_empty_advisories_fail_closed() -> None:
 def test_malformed_json_fails_closed() -> None:
     with pytest.raises(SourceMalformedError, match="not valid JSON"):
         parse_publication(b"{not json")
+
+
+def test_advisory_panel_is_read_only_and_displays_required_labels() -> None:
+    assert app.PANELS["advisories"] == "Engine advisories (synthetic)"
+    assert "advisories" in view.PageView.__dataclass_fields__
+
+    rig = Rig()
+    rig.advisories.body = advisory_body(dispositions=("PASS", "HOLD", "INDETERMINATE"))
+    rig.refresher.refresh_once()
+    client = rig.app_client()
+    login(client)
+    body = section(client.get("/section/agents").get_data(as_text=True), "advisories")
+    assert "ADVISORY_ONLY" in body
+    assert "EXPERIMENTAL" in body
+    assert "SYNTHETIC" in body
+    assert "PASS" in body
+    assert "HOLD" in body
+    assert "INDETERMINATE" in body
+    assert "no issue found within the supplied inputs" in body
+    for forbidden in ("compliant", "approved", "cleared", "certified"):
+        assert forbidden not in body.lower()
+    for verb in ("acknowledge", "authorize", "release", "submit"):
+        assert f'href="/{verb}' not in body
+
+
+def test_unread_advisory_source_never_renders_an_empty_clean_state() -> None:
+    rig = Rig(advisories_configured=False)
+    rig.refresher.refresh_once()
+    client = rig.app_client()
+    login(client)
+    body = section(client.get("/section/agents").get_data(as_text=True), "advisories")
+    assert "INDETERMINATE" in body
+    assert "NotConfigured" in body
+    assert "No advisory rows are shown" in body
+    assert "PASS" not in body

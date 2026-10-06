@@ -20,6 +20,7 @@ from cannae_kernel.absence import Absent, Recorded
 from cannae_kernel.disposition import Disposition
 from cannae_kernel.provenance import Provenance
 
+from cop.advisories import AdvisoryPublication, AdvisoryRow
 from cop.agents import AgentsSnapshot
 from cop.agents import AgentView as AgentRecord
 from cop.aureon import AureonSnapshot
@@ -40,6 +41,7 @@ from cop.settings import (
     STALE_AFTER,
 )
 from cop.state import (
+    AdvisoryState,
     AgentsState,
     BreaksState,
     CashLegState,
@@ -569,6 +571,22 @@ class GrcView:
 
 
 @dataclass(frozen=True)
+class AdvisoryRowView:
+    scenario_id: str
+    description: str
+    advisory: AdvisoryRow
+    badge: Badge
+    pass_limit: str | None
+
+
+@dataclass(frozen=True)
+class AdvisoriesView:
+    tile: TileView[AdvisoryPublication]
+    rows: tuple[AdvisoryRowView, ...]
+    age_text: str
+
+
+@dataclass(frozen=True)
 class PageView:
     banner: BannerView
     program: TileView[Program]
@@ -576,6 +594,7 @@ class PageView:
     repos: tuple[RepoView, ...]
     aureon: AureonView
     agents: AgentsView
+    advisories: AdvisoriesView
     lifecycles: LifecycleView
     escalations: EscalationView
     breaks: BreaksView
@@ -678,6 +697,7 @@ def build_rail(page: PageView) -> dict[str, RailItemView]:
         "controls": RailItemView("controls", "Controls & compliance", controls_badge),
         "risk": RailItemView("risk", "Risk limits", risks_badge),
         "agents": RailItemView("agents", "Agents", source_badge(page.agents.tile)),
+        "advisories": RailItemView("advisories", "Advisories", source_badge(page.advisories.tile)),
         "programme": RailItemView(
             "programme", "Programme", _worst_badge(programme_badges, "Programme state")
         ),
@@ -1056,6 +1076,44 @@ def _agents_view(state: AgentsState, now: datetime) -> AgentsView:
     )
 
 
+def _advisories_view(state: AdvisoryState, now: datetime) -> AdvisoriesView:
+    tile_view = tile(state.publication, now, lambda _: OBSERVED)
+    publication = tile_view.value if tile_view.current else None
+    if publication is None:
+        return AdvisoriesView(tile_view, (), "Absent, no current advisory publication")
+    severity = {
+        Disposition.HOLD: 0,
+        Disposition.INDETERMINATE: 1,
+        Disposition.PASS: 2,
+    }
+    rows = [
+        AdvisoryRowView(
+            scenario.scenario_id,
+            scenario.description,
+            advisory,
+            (
+                Badge("PASS", "No issue found in supplied inputs", Tone.NEUTRAL)
+                if advisory.disposition is Disposition.PASS
+                else disposition_badge(advisory.disposition, advisory.disposition.value)
+            ),
+            (
+                "no issue found within the supplied inputs; not a statement that any firm complies"
+                if advisory.disposition is Disposition.PASS
+                else None
+            ),
+        )
+        for scenario in publication.scenarios
+        for advisory in scenario.advisories
+    ]
+    rows.sort(key=lambda row: severity[row.advisory.disposition])
+    observed = state.publication.observed_at
+    return AdvisoriesView(
+        tile_view,
+        tuple(rows),
+        fmt_age(now - observed) if observed is not None else "Absent, no observation time",
+    )
+
+
 _SEVERITY_CODES = frozenset(d.value for d in Disposition)
 _SEVERITY = {
     Disposition.BLOCK: 3,
@@ -1151,18 +1209,32 @@ def _overall(
     program: TileView[Program],
     repos: Sequence[RepoView],
     aureon: AureonView,
-    agents: AgentsView,
+    external: tuple[AgentsView, AdvisoriesView],
     lifecycles: LifecycleView,
 ) -> tuple[Badge, tuple[Reason, ...]]:
     """Worst of: every source tile, CI on main, scheduled runs, Aureon stack, drift,
     the AUR-I-17 marker, blocked waves and Atreides agent activation. Open pull
     request checks are not included."""
     found: Found = []
+    agents, advisories = external
     _program_reasons(found, program)
     for repo in repos:
         _repo_reasons(found, repo)
     _aureon_reasons(found, aureon)
     _agents_reasons(found, agents)
+    if not advisories.tile.current:
+        found.append(
+            (Disposition.INDETERMINATE, f"Engine advisories: {advisories.tile.error_class}")
+        )
+    else:
+        for advisory_row in advisories.rows:
+            if advisory_row.advisory.disposition is not Disposition.PASS:
+                found.append(
+                    (
+                        advisory_row.advisory.disposition,
+                        f"Advisory {advisory_row.scenario_id}: {advisory_row.badge.label}",
+                    )
+                )
     if not lifecycles.tile.current:
         found.append(
             (
@@ -1171,10 +1243,15 @@ def _overall(
             )
         )
     else:
-        for row in lifecycles.rows:
-            disposition = Disposition(row.badge.code)
+        for lifecycle_row in lifecycles.rows:
+            disposition = Disposition(lifecycle_row.badge.code)
             if disposition is not Disposition.PASS:
-                found.append((disposition, f"Lifecycle {row.lifecycle_id}: {row.badge.label}"))
+                found.append(
+                    (
+                        disposition,
+                        f"Lifecycle {lifecycle_row.lifecycle_id}: {lifecycle_row.badge.label}",
+                    )
+                )
     if not found:
         return disposition_badge(Disposition.PASS, "All sources current; nothing failing"), ()
     worst = max((d for d, _ in found), key=lambda d: _SEVERITY[d])
@@ -1227,6 +1304,7 @@ def build_page(snapshot: Snapshot, now: datetime) -> PageView:
         pending_drop=tile(snapshot.aureon.pending_drop, now, pending_drop_badge),
     )
     agents = _agents_view(snapshot.agents, now)
+    advisories = _advisories_view(snapshot.advisories, now)
     lifecycles = _lifecycle_view(snapshot.lifecycles, now)
     escalations = _escalation_view(snapshot.escalations, now)
     breaks = _breaks_view(snapshot.breaks, now)
@@ -1294,7 +1372,7 @@ def build_page(snapshot: Snapshot, now: datetime) -> PageView:
     grc = GrcView(
         governance_tile, governance_rows, controls_tile, control_rows, risks_tile, risk_rows
     )
-    overall, reasons = _overall(program, repos, aureon, agents, lifecycles)
+    overall, reasons = _overall(program, repos, aureon, (agents, advisories), lifecycles)
     decisions: tuple[DecisionView, ...] = ()
     if program.current and program.value is not None:
         decisions = tuple(
@@ -1333,6 +1411,7 @@ def build_page(snapshot: Snapshot, now: datetime) -> PageView:
         repos=repos,
         aureon=aureon,
         agents=agents,
+        advisories=advisories,
         lifecycles=lifecycles,
         escalations=escalations,
         breaks=breaks,
