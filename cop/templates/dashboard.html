@@ -363,6 +363,44 @@
 </section>
 {% endif %}
 
+{% if 'advisories' in selected %}
+{% set av = page.advisories %}
+<section class="panel" id="advisories" data-panel="advisories">
+  <h2>Engine advisories (synthetic) {{ badge(av.tile.badge) }}</h2>
+  <p class="warning" role="alert"><strong>SYNTHETIC.</strong> These committed scenarios are invented test inputs, not any firm's position.</p>
+  <p class="lede">Display only. These rows do not route, acknowledge, authorize, release or submit anything.</p>
+  {{ provenance(av.tile) }}
+  {{ failure(av.tile) }}
+  {% if av.rows %}
+  <div class="repo-grid">
+    {% for row in av.rows %}
+    <article class="card tile" data-scenario="{{ row.scenario_id }}">
+      <h3>{{ row.scenario_id }} {{ badge(row.badge) }}</h3>
+      <p>{{ row.description }}</p>
+      <p><strong>{{ row.advisory.enforcement_status }}</strong> · <strong>{{ row.advisory.claim_label }}</strong></p>
+      {% if row.pass_limit %}<p>{{ row.pass_limit }}</p>{% endif %}
+      <dl class="fields">
+        <div class="field"><dt>Subject</dt><dd>{{ row.advisory.subject }}</dd></div>
+        <div class="field"><dt>As of</dt><dd>{{ row.advisory.as_of }}</dd></div>
+        <div class="field"><dt>Reasons</dt><dd>{{ row.advisory.reasons|join('; ') if row.advisory.reasons else 'None recorded' }}</dd></div>
+        <div class="field"><dt>Missing rules</dt><dd>{{ row.advisory.missing_rules|join('; ') if row.advisory.missing_rules else 'None recorded' }}</dd></div>
+        <div class="field"><dt>Missing inputs</dt><dd>{{ row.advisory.missing_inputs|join('; ') if row.advisory.missing_inputs else 'None recorded' }}</dd></div>
+        <div class="field"><dt>Advisory schema</dt><dd>{{ row.advisory.schema_version }}</dd></div>
+        <div class="field"><dt>Rule table version</dt><dd>{{ row.advisory.rule_table_version }}</dd></div>
+        <div class="field"><dt>Rule versions</dt><dd>{{ row.advisory.rule_versions|join('; ') if row.advisory.rule_versions else 'None recorded' }}</dd></div>
+        <div class="field"><dt>Rule table digest</dt><dd>{{ row.advisory.rule_table_digest }}</dd></div>
+        <div class="field"><dt>Input digest</dt><dd>{{ row.advisory.input_digest }}</dd></div>
+        <div class="field"><dt>Result digest</dt><dd>{{ row.advisory.result_digest }}</dd></div>
+      </dl>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="value">No advisory rows are shown because no current advisory publication was read. Nothing here describes an engine result.</p>
+  {% endif %}
+</section>
+{% endif %}
+
 {# 6 · Lifecycle board ---------------------------------------------------------------- #}
 {% if 'lifecycles' in selected %}
 {% set lc = page.lifecycles %}
