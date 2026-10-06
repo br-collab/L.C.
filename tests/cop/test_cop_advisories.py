@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
+from pathlib import Path
 
 import pytest
 from cop_fakes import Rig, advisory_body, login, section
@@ -130,3 +131,11 @@ def test_unread_advisory_source_never_renders_an_empty_clean_state() -> None:
     assert "NotConfigured" in body
     assert "No advisory rows are shown" in body
     assert "PASS" not in body
+
+
+def test_cross_domain_job_pins_and_exercises_the_advisory_producer() -> None:
+    workflow = Path(".github/workflows/ci.yml").read_text()
+    seam = Path("tests/test_atreides_handoff.py").read_text()
+    assert "1e5f4eb368980d5d1bdb204e92eab97e7e62f56e" in workflow
+    assert "publication_bytes" in seam
+    assert "parse_publication" in seam
