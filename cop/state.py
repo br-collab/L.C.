@@ -13,6 +13,7 @@ from datetime import datetime
 
 from cannae_kernel.disposition import Disposition
 
+from cop.advisories import AdvisoryPublication
 from cop.agents import AgentsSnapshot
 from cop.aureon import DEPLOY_SHA_UNSET, AureonSnapshot
 from cop.breaks import BreakRecord
@@ -157,6 +158,11 @@ class AgentsState:
 
 
 @dataclass(frozen=True)
+class AdvisoryState:
+    publication: Observation[AdvisoryPublication]
+
+
+@dataclass(frozen=True)
 class LayerClockState:
     clock: Observation[LayerClock]
 
@@ -212,6 +218,7 @@ class Snapshot:
     repos: tuple[RepoState, ...]
     aureon: AureonState
     agents: AgentsState
+    advisories: AdvisoryState
     lc_layer_clock: LayerClockState
     lifecycles: LifecycleState
     escalations: EscalationState

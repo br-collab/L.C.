@@ -23,6 +23,7 @@ from typing import Any, TypeVar, cast
 from cannae_kernel.provenance import Provenance
 
 from cop import github as gh
+from cop.advisories import AdvisoryPublication, AdvisorySource
 from cop.agents import AgentsSnapshot, AgentsSource
 from cop.aureon import AureonSnapshot, AureonSource
 from cop.breaks import BREAKS_SOURCE_LABEL, BreakRecord, BreakSource
@@ -52,6 +53,9 @@ from cop.observation import (
 )
 from cop.program import Program, load_program
 from cop.settings import (
+    ADVISORIES_SOURCE,
+    ADVISORIES_SOURCE_UNSET,
+    ADVISORIES_STALE_AFTER,
     AGENTS_SNAPSHOT_SOURCE,
     AGENTS_SOURCE_UNSET,
     AGENTS_STALE_AFTER,
@@ -73,6 +77,7 @@ from cop.settings import (
     STALE_AFTER,
 )
 from cop.state import (
+    AdvisoryState,
     AgentsState,
     AureonState,
     BreaksState,
@@ -131,6 +136,7 @@ class Sources:
     github: gh.GitHubSource
     aureon: AureonSource
     agents: AgentsSource | None = None
+    advisories: AdvisorySource | None = None
     lc_layer_clock: LayerClockSource | None = None
     lifecycles: LifecycleSource | None = None
     escalations: EscalationSource | None = None
@@ -163,6 +169,7 @@ class Refresher:
         # ``None`` means no activation snapshot is configured. That is a state the
         # panel reports, not an error it hides: see ``_refresh_agents``.
         self._agents = sources.agents
+        self._advisories = sources.advisories
         self._lc_layer_clock = sources.lc_layer_clock
         # ``None`` means no lifecycle publication address is configured.
         self._lifecycles = sources.lifecycles
@@ -228,6 +235,14 @@ class Refresher:
             agents=AgentsState(
                 snapshot=pending(
                     "agents:snapshot", AGENTS_SNAPSHOT_SOURCE, fact, AGENTS_STALE_AFTER
+                )
+            ),
+            advisories=AdvisoryState(
+                publication=pending(
+                    "advisories:publication",
+                    ADVISORIES_SOURCE,
+                    fact,
+                    ADVISORIES_STALE_AFTER,
                 )
             ),
             lc_layer_clock=LayerClockState(
@@ -452,6 +467,27 @@ class Refresher:
             )
         )
 
+    def _refresh_advisories(self) -> AdvisoryState:
+        if self._advisories is None:
+            publication: Observation[AdvisoryPublication] = not_configured(
+                "advisories:publication",
+                ADVISORIES_SOURCE,
+                Provenance.FACT_SYNTHETIC,
+                ADVISORIES_SOURCE_UNSET,
+                ADVISORIES_STALE_AFTER,
+            )
+            return AdvisoryState(publication=publication)
+        return AdvisoryState(
+            publication=self._observe(
+                "advisories:publication",
+                ADVISORIES_SOURCE,
+                Provenance.FACT_SYNTHETIC,
+                self._advisories.publication,
+                ADVISORIES_STALE_AFTER,
+                value_time=lambda value: value.taken_at,
+            )
+        )
+
     def _refresh_lifecycles(self) -> LifecycleState:
         """Read the lifecycle board, or record that nothing supplies one.
 
@@ -630,6 +666,7 @@ class Refresher:
             aureon_repo = next((r for r in repos if r.name == AUREON_REPOSITORY), None)
             aureon = self._refresh_aureon(aureon_repo)
             agents = self._refresh_agents()
+            advisories = self._refresh_advisories()
             lc_layer_clock = self._refresh_lc_layer_clock()
             lifecycles = self._refresh_lifecycles()
             escalations = self._refresh_escalations()
@@ -652,6 +689,7 @@ class Refresher:
                 repos=repos,
                 aureon=aureon,
                 agents=agents,
+                advisories=advisories,
                 lc_layer_clock=lc_layer_clock,
                 lifecycles=lifecycles,
                 escalations=escalations,
@@ -688,6 +726,7 @@ class Refresher:
                     repos=old.repos,
                     aureon=old.aureon,
                     agents=old.agents,
+                    advisories=old.advisories,
                     lc_layer_clock=old.lc_layer_clock,
                     lifecycles=old.lifecycles,
                     escalations=old.escalations,
