@@ -13,6 +13,8 @@ from cannae_kernel.clocks import EventTimes
 from cannae_kernel.disposition import Disposition
 from cannae_kernel.provenance import Provenance
 
+from cop.breaks import AtreidesBreakRecord, BreaksPublication, BreakState
+
 EXCEPTIONS_SOURCE = "demo exception register (no production producer)"
 
 
@@ -89,6 +91,70 @@ class ExceptionHealth:
     written_off: int
     repeat_root_causes: tuple[str, ...]
     trend: tuple[int, ...] | None
+
+
+_STATUS = {
+    BreakState.OPEN: ExceptionStatus.OPEN,
+    BreakState.INVESTIGATING: ExceptionStatus.INVESTIGATING,
+    BreakState.RESOLVED: ExceptionStatus.RESOLVED,
+    BreakState.WRITTEN_OFF: ExceptionStatus.WRITTEN_OFF,
+}
+
+
+def break_to_exception(record: AtreidesBreakRecord, observed_at: datetime) -> ExceptionRecord:
+    """Map a validated producer record without inventing owner or timing evidence."""
+    times = EventTimes(
+        event_time=record.originating_event_at,
+        observation_time=observed_at,
+        processing_time=observed_at,
+    )
+    trail = tuple(
+        TrailEntry(
+            layer="Atreides break investigation",
+            times=EventTimes(
+                event_time=action.occurred_at,
+                observation_time=observed_at,
+                processing_time=observed_at,
+            ),
+            disposition=Disposition.HOLD,
+            status_text=action.action,
+            evidence=action.action,
+            provenance=Provenance.FACT_SYNTHETIC,
+        )
+        for action in record.actions
+    )
+    resolution = record.resolution_evidence
+    return ExceptionRecord(
+        exception_id=record.break_id,
+        kind=ExceptionKind.BREAK,
+        lifecycle_id=record.operation_id,
+        title=record.symptom,
+        root_cause=record.cause_class,
+        disposition=Disposition.HOLD,
+        status=_STATUS[record.state],
+        status_text=(record.owner_absence_reason or record.state.value),
+        first_layer=f"Atreides {record.regime}/{record.leg}",
+        first_times=times,
+        sla_target=record.sla_target - record.originating_event_at,
+        owner=record.owner,
+        detail=record.difference,
+        close_condition="resolution evidence required",
+        authority_uri=record.dsor_record_id,
+        written_off=record.state is BreakState.WRITTEN_OFF,
+        resolved_at=None if resolution is None else resolution.recorded_at,
+        trail=trail,
+    )
+
+
+def publication_to_register(publication: BreaksPublication) -> ExceptionRegister:
+    """Map one complete publication to the display register."""
+    return ExceptionRegister(
+        taken_at=publication.taken_at,
+        synthetic=True,
+        records=tuple(
+            break_to_exception(record, publication.taken_at) for record in publication.records
+        ),
+    )
 
 
 def age(record: ExceptionRecord, now: datetime) -> timedelta:
