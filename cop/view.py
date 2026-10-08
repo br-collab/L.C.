@@ -1315,7 +1315,11 @@ def build_page(snapshot: Snapshot, now: datetime) -> PageView:
     exception_health = None
     if exception_register is not None:
         built = []
-        for record in exception_register.records:
+        ordered_records = sorted(
+            exception_register.records,
+            key=lambda record: (record.owner is not None, record.exception_id),
+        )
+        for record in ordered_records:
             elapsed = max(timedelta(), now - record.first_times.event_time)
             left = record.sla_target - elapsed
             utilisation = round(100 * elapsed.total_seconds() / record.sla_target.total_seconds())

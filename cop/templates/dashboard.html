@@ -98,7 +98,11 @@
   <p class="section-kicker">OPERATE · EXCEPTIONS</p>
   <h2>Exception register {{ badge(rail['exceptions'].badge) }}</h2>
   {% if ex.tile.current and ex.tile.shown %}
-  <p class="warning demo" role="alert"><strong>DEMO DATA.</strong> This register is illustrative. Production remains Absent until break, escalation, hold and override producers publish.</p>
+  {% if b.demo %}
+  <p class="warning demo" role="alert"><strong>DEMO DATA.</strong> This register is illustrative.</p>
+  {% else %}
+  <p class="warning" role="alert"><strong>SYNTHETIC, EXPERIMENTAL, ADVISORY_ONLY.</strong> These rows are published Atreides break evidence for display only.</p>
+  {% endif %}
   {% set health = ex.health %}
   <div class="exception-health" aria-label="Exception health">
     <article><strong>{{ health.under_1h }}</strong><span>&lt; 1 hour</span></article>
@@ -108,7 +112,7 @@
     <article><strong>{{ health.resolved_within_sla_percent ~ '%' if health.resolved_within_sla_percent is not none else 'Absent' }}</strong><span>resolved within SLA</span></article>
     <article><strong>{{ health.written_off }}</strong><span>written off · separate</span></article>
   </div>
-  <p><strong>Repeat root causes:</strong> {{ health.repeat_root_causes | join(', ') if health.repeat_root_causes else 'None in demo register' }} · <strong>Trend:</strong> {{ health.trend | join(' → ') if health.trend else 'Absent — no published history' }}</p>
+  <p><strong>Repeat root causes:</strong> {{ health.repeat_root_causes | join(', ') if health.repeat_root_causes else 'None in current register' }} · <strong>Trend:</strong> {{ health.trend | join(' → ') if health.trend else 'Absent — no published history' }}</p>
   <nav class="exception-filters" aria-label="Exception filters">
     {% for key, label in [('all','All'),('past-sla','Past SLA'),('no-owner','No owner'),('breaks','Breaks'),('decisions-overrides','Decisions & overrides')] %}
     <a href="{{ url_for('section', name='exceptions', filter=key) }}"{% if exception_filter == key %} aria-current="page"{% endif %}>{{ label }}</a>
@@ -126,7 +130,7 @@
       <td>{{ row.record.kind.value }}</td>
       <td>{{ row.age }} / {{ row.sla }}<div class="sla"><span class="util-{{ [[(row.utilisation // 10) * 10, 10] | max, 100] | min }} {{ 'past' if row.utilisation > 100 else 'near' if row.utilisation >= 75 }}"></span></div><small>{{ row.time_left }}</small></td>
       <td>{{ row.owner }}</td><td>{{ row.record.root_cause }}</td>
-      <td>{{ badge(row.badge) }}<small>{{ row.record.status_text }}</small></td>
+      <td>{{ badge(row.badge) }}<small>{{ row.record.status.value }} · {{ row.record.status_text }}</small></td>
     </tr>{% endif %}
     {% endfor %}
     </tbody>

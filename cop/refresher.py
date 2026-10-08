@@ -606,7 +606,7 @@ class Refresher:
         return ExceptionsState(
             register=self._observe(
                 "exceptions",
-                EXCEPTIONS_SOURCE,
+                self._exceptions.source_label,
                 Provenance.FACT_SYNTHETIC,
                 self._exceptions.register,
             )

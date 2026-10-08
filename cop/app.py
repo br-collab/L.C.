@@ -34,6 +34,7 @@ from cop.advisories import HttpxAdvisoryClient
 from cop.agents import HttpxAgentsClient
 from cop.aureon import HttpxAureonClient
 from cop.auth import LoginLimiter, key_fingerprint, keys_match
+from cop.breaks import HttpxBreaksClient
 from cop.demo import (
     DemoAgents,
     DemoAureon,
@@ -46,6 +47,7 @@ from cop.demo import (
     DemoLifecycles,
 )
 from cop.escalations import HttpxEscalationClient
+from cop.exceptions import PublishedBreakExceptionSource
 from cop.github import HttpxGitHubClient
 from cop.layer_clock import HttpxLayerClockClient
 from cop.lifecycle import HttpxLifecycleClient
@@ -205,7 +207,11 @@ def build_refresher(settings: Settings, clock: Clock = utc_now) -> Refresher:
             # synthetic break and /api/cashleg/demo values are demo-mode only.
             breaks=None,
             cash_leg=None,
-            exceptions=None,
+            exceptions=(
+                PublishedBreakExceptionSource(HttpxBreaksClient(settings.breaks_url))
+                if settings.breaks_url is not None
+                else None
+            ),
             governance=None,
             controls=None,
             risks=None,
