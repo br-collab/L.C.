@@ -14,6 +14,26 @@ The synthetic middle layer of Project Cannae Legion — a deliberately bounded O
 Aureon (pre-trade, approved intent)  →  L.C. (orders, fills, allocations, clearing, netting)  →  Atreides (settlement, finality, reconciliation)
 ```
 
+## Maturity and criticality
+
+The programme uses two separate descriptions. **Automation level** describes what
+the software does: 1 is Observe, 2 is Compare, 3 is Recommend, 4 is Execute with
+control, 5 is Exception led, and 6 is Straight through. **Criticality tier**
+describes the consequence-bearing function a component would touch: Tier 0 covers
+money, positions, regulatory calculations and clearing submission, Tier 1 covers
+production workflow or regulated records, Tier 2 covers shared decision support,
+and Tier 3 covers analysis and operator productivity. A tier is not an assurance
+rating.
+
+| Component | Automation level | Criticality tier |
+|---|---:|---:|
+| L.C. lifecycle and emulators | 2, Compare | 2 |
+| Common Operating Picture | 1, Observe | 2 |
+
+Both components are synthetic and advisory. Neither meets the assurance,
+operational control or authorization that its tier would require in production,
+and the table makes no compliance claim.
+
 ## Status
 
 `lc` is version 0.1.0. `import lc` exposes that version and no aggregate facade. The middle layer is the modules below. Each module's public names are its `__all__`. Inputs are synthetic or caller-supplied. Nothing here files with a regulator or connects to a clearing agency.
