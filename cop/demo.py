@@ -34,6 +34,7 @@ from cop.breaks import BreakRecord
 from cop.cash_leg import CashLeg
 from cop.escalations import EscalationPacket, EscalationQueue, Unknown
 from cop.exceptions import (
+    EXCEPTIONS_SOURCE,
     ExceptionKind,
     ExceptionRecord,
     ExceptionRegister,
@@ -494,6 +495,10 @@ class DemoExceptions:
 
     def __init__(self, clock: Callable[[], datetime]) -> None:
         self._clock = clock
+
+    @property
+    def source_label(self) -> str:
+        return EXCEPTIONS_SOURCE
 
     @staticmethod
     def _actor(name: str) -> ActorRef:

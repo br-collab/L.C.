@@ -11,6 +11,7 @@ from cannae_kernel.actor import ActorKind, ActorRef
 from cannae_kernel.canonical import canonical_bytes, digest_bytes
 from cannae_kernel.disposition import Disposition
 from cannae_kernel.ids import ActorId
+from cop_fakes import Rig, login, section
 
 from cop.breaks import (
     AtreidesBreakRecord,
@@ -18,7 +19,7 @@ from cop.breaks import (
     HttpxBreaksClient,
     parse_publication,
 )
-from cop.exceptions import age, publication_to_register
+from cop.exceptions import PublishedBreakExceptionSource, age, publication_to_register
 from cop.observation import SourceMalformedError
 
 URL = "https://example.invalid/breaks.json"
@@ -133,3 +134,28 @@ def test_missing_sla_target_fails_closed_instead_of_defaulting() -> None:
 
     with pytest.raises(SourceMalformedError, match="shape"):
         parse_publication(json.dumps(document).encode())
+
+
+def test_published_source_drives_the_read_only_board_with_unowned_first() -> None:
+    http = httpx.Client(
+        transport=httpx.MockTransport(lambda _request: httpx.Response(200, content=_wire()))
+    )
+    source = PublishedBreakExceptionSource(HttpxBreaksClient(URL, http=http))
+    rig = Rig()
+    rig.clock.now = datetime(2026, 10, 8, 17, 0, tzinfo=UTC)
+    rig.refresher._exceptions = source
+    snapshot = rig.refresher.refresh_once()
+
+    client = rig.app_client()
+    login(client)
+    body = section(client.get("/section/exceptions").get_data(as_text=True), "exceptions")
+
+    assert body.index("BRK-UNOWNED") < body.index("BRK-OWNED")
+    assert "Absent — no owner recorded" in body
+    assert "settlement operations" in body
+    assert "SYNTHETIC, EXPERIMENTAL, ADVISORY_ONLY" in body
+    assert "SYNTHETIC_DATA_MISMATCH" in body
+    assert "Open" in body and "Investigating" in body
+    assert "5 h" in body
+    assert snapshot.exceptions.register.source_url == URL
+    assert "Assign owner" not in body

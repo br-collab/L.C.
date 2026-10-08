@@ -153,6 +153,9 @@ class BreakSource(Protocol):
 
 
 class BreakPublicationSource(Protocol):
+    @property
+    def source_label(self) -> str: ...
+
     def publication(self) -> BreaksPublication: ...
 
 

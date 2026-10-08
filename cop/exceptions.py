@@ -13,7 +13,12 @@ from cannae_kernel.clocks import EventTimes
 from cannae_kernel.disposition import Disposition
 from cannae_kernel.provenance import Provenance
 
-from cop.breaks import AtreidesBreakRecord, BreaksPublication, BreakState
+from cop.breaks import (
+    AtreidesBreakRecord,
+    BreakPublicationSource,
+    BreaksPublication,
+    BreakState,
+)
 
 EXCEPTIONS_SOURCE = "demo exception register (no production producer)"
 
@@ -78,7 +83,24 @@ class ExceptionRegister:
 
 
 class ExceptionSource(Protocol):
+    @property
+    def source_label(self) -> str: ...
+
     def register(self) -> ExceptionRegister: ...
+
+
+class PublishedBreakExceptionSource:
+    """Adapt a validated Atreides publication to the display register."""
+
+    def __init__(self, source: BreakPublicationSource) -> None:
+        self._source = source
+
+    @property
+    def source_label(self) -> str:
+        return self._source.source_label
+
+    def register(self) -> ExceptionRegister:
+        return publication_to_register(self._source.publication())
 
 
 @dataclass(frozen=True)
