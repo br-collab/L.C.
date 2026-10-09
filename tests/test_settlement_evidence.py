@@ -82,8 +82,7 @@ def test_real_join_bytes_are_read_without_translation() -> None:
             pytest.fail("the settlement join boundary is required but Atreides is not installed")
         pytest.skip(
             "Atreides is not installed, so the real settlement-join bytes are not exercised "
-            "here. A skip is not a pass. The pinned handoff job is unchanged until the "
-            "reconciliation commit is an ancestor of Atreides origin/main."
+            "here. A skip is not a pass. The pinned handoff job exercises this seam."
         )
     raw = _real_join_bytes()
     payload = json.loads(raw)
