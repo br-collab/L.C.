@@ -116,6 +116,7 @@ class ExceptionHealth:
 
 
 _STATUS = {
+    BreakState.INTAKE_UNASSIGNED: ExceptionStatus.OPEN,
     BreakState.OPEN: ExceptionStatus.OPEN,
     BreakState.INVESTIGATING: ExceptionStatus.INVESTIGATING,
     BreakState.RESOLVED: ExceptionStatus.RESOLVED,
@@ -130,7 +131,22 @@ def break_to_exception(record: AtreidesBreakRecord, observed_at: datetime) -> Ex
         observation_time=observed_at,
         processing_time=observed_at,
     )
-    trail = tuple(
+    ownership_trail = tuple(
+        TrailEntry(
+            layer="Atreides break ownership",
+            times=EventTimes(
+                event_time=change.changed_at,
+                observation_time=observed_at,
+                processing_time=observed_at,
+            ),
+            disposition=Disposition.HOLD,
+            status_text=f"Owner assigned to {change.assigned_owner.role}",
+            evidence=f"Assigned by {change.changed_by.role}",
+            provenance=change.provenance,
+        )
+        for change in record.ownership_history
+    )
+    action_trail = tuple(
         TrailEntry(
             layer="Atreides break investigation",
             times=EventTimes(
@@ -146,6 +162,24 @@ def break_to_exception(record: AtreidesBreakRecord, observed_at: datetime) -> Ex
         for action in record.actions
     )
     resolution = record.resolution_evidence
+    resolution_trail = (
+        ()
+        if resolution is None
+        else (
+            TrailEntry(
+                layer="Atreides break closure",
+                times=EventTimes(
+                    event_time=resolution.recorded_at,
+                    observation_time=observed_at,
+                    processing_time=observed_at,
+                ),
+                disposition=Disposition.HOLD,
+                status_text=resolution.evidence_kind.value,
+                evidence=resolution.evidence_ref,
+                provenance=resolution.provenance,
+            ),
+        )
+    )
     return ExceptionRecord(
         exception_id=record.break_id,
         kind=ExceptionKind.BREAK,
@@ -164,7 +198,7 @@ def break_to_exception(record: AtreidesBreakRecord, observed_at: datetime) -> Ex
         authority_uri=record.dsor_record_id,
         written_off=record.state is BreakState.WRITTEN_OFF,
         resolved_at=None if resolution is None else resolution.recorded_at,
-        trail=trail,
+        trail=ownership_trail + action_trail + resolution_trail,
     )
 
 

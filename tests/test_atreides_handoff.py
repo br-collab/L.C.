@@ -22,6 +22,9 @@ if importlib.util.find_spec("atreides") is None:
     pytest.skip("runs in the pinned Atreides handoff CI job", allow_module_level=True)
 
 from atreides.acceptance.service import evaluate_candidate
+from atreides.cockpit.breaks_publication_writer import (
+    publication_bytes as break_publication_bytes,
+)
 from atreides.customer_protection.publication_writer import publication_bytes
 from atreides.rails.cato_cash import (
     CashRail,
@@ -33,7 +36,8 @@ from atreides.rails.cato_cash import (
     evaluate,
 )
 
-from cop.advisories import parse_publication
+from cop.advisories import parse_publication as parse_advisory_publication
+from cop.breaks import parse_publication as parse_break_publication
 from lc.events import LifecycleState
 from lc.lifecycle import replay
 from lc.obligation import CashLeg, FormedObligation, HandoffOutcome, record_atreides_handoff
@@ -43,7 +47,7 @@ AT = datetime(2026, 9, 28, 13, 0, tzinfo=UTC)
 
 def test_real_advisory_producer_bytes_are_consumed_without_translation() -> None:
     raw = publication_bytes(datetime(2026, 10, 6, 20, 0, tzinfo=UTC))
-    publication = parse_publication(raw)
+    publication = parse_advisory_publication(raw)
 
     assert publication.synthetic is True
     assert {
@@ -56,6 +60,22 @@ def test_real_advisory_producer_bytes_are_consumed_without_translation() -> None
         for scenario in publication.scenarios
         for advisory in scenario.advisories
     )
+
+
+def test_real_break_producer_bytes_preserve_ownership_and_closure_evidence() -> None:
+    raw = break_publication_bytes(datetime(2026, 10, 8, 16, 0, tzinfo=UTC))
+    publication = parse_break_publication(raw)
+
+    unassigned = next(record for record in publication.records if record.owner is None)
+    assigned = next(record for record in publication.records if record.owner is not None)
+    assert unassigned.state.value == "INTAKE_UNASSIGNED"
+    assert unassigned.owner_absence_reason == "awaiting production owner assignment"
+    assert assigned.ownership_history[-1].assigned_owner == assigned.owner
+    assert assigned.ownership_history[-1].provenance.value == "FACT_SYNTHETIC"
+    assert assigned.state.value == "RESOLVED"
+    assert assigned.resolution_evidence is not None
+    assert assigned.resolution_evidence.break_id == assigned.break_id
+    assert assigned.resolution_evidence.provenance.value == "FACT_SYNTHETIC"
 
 
 def _gate(
