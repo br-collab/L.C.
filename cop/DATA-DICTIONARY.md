@@ -113,8 +113,9 @@ Cato test-versus-production series difference on the glass.
 
 ## Exception register and drawer
 
-The production register remains `Absent` until the required producers publish. The types below
-define the reader contract; they do not authorize Legate to invent or write any field.
+The configured Atreides break source supplies a synthetic, experimental and advisory-only
+register. Other exception kinds remain `Absent` until their required producers publish. The
+types below define the reader contract; they do not authorize Legate to invent or write any field.
 
 | Field | Kernel type or kernel-backed rule | Repository and published document | If unread or absent |
 |---|---|---|---|
@@ -132,10 +133,11 @@ define the reader contract; they do not authorize Legate to invent or write any 
 | **Time left / past target** | Policy result `SLA target - age`, `Recorded[timedelta] \| Absent` | Computed from the two preceding recorded values | `Absent` if either input is absent or stale |
 | **SLA utilisation** | Policy result `age / target`, `Recorded[decimal] \| Absent`; amber at 75%, red past 100% | Computed | `Absent` if either input is absent; no zero-width success bar |
 | **Owner** | Kernel `ActorRef` wrapped as `Recorded[ActorRef] \| Absent` | Exception or DSOR actor record | Missing owner is shown as `Absent` evidence and forces the exception disposition to `BLOCK` |
+| **Ownership history** | Append-only assignments carrying prior owner, assigned `ActorRef`, authenticated changing actor, observation time and kernel `Provenance` | Atreides break publication | Missing or non-contiguous history rejects an assigned record; an ownerless record remains explicit fail-closed intake |
 | **What closes it** | `Recorded[str] \| Absent`; a specific closure condition, not an action in Legate | Exception producer | `Absent`; the drawer never invents a remedy |
 | **Authority link** | `Recorded[str] \| Absent` URI to the system where authority lives | C2 packet or DSOR publication | Link omitted and field shown `Absent`; Legate never substitutes a write control |
 | **Written-off marker** | `Recorded[bool] \| Absent` backed by an `AuthorityRecord`/DSOR decision | `dsor` | `Absent`; never inferred from a status string. Written off is counted separately from resolved |
-| **Resolution record** | `Recorded[AuthorityRecord] \| Absent` or other published domain closure record | `dsor` or exception producer | `Absent`; an exception cannot be counted resolved without it |
+| **Resolution record** | Break-bound evidence kind, authenticated actor, observation time, evidence reference, detail and kernel `Provenance` | Atreides break publication, `dsor`, or another exception producer | `Absent` or mismatched evidence rejects a resolved record; matching alone is not a closure evidence kind |
 | **Trail layer** | `Recorded[str] \| Absent` for each trail entry | The published record supplying that entry | Entry omitted if its source identity is malformed; expected-but-missing layer is an explicit `Absent` entry |
 | **Trail time** | Kernel `EventTimes` for each trail record | The published record supplying that entry | `Absent`; never replaced by COP observation time |
 | **Trail state** | Kernel `Disposition` plus separate status text | The published record supplying that entry | `INDETERMINATE` when unreadable; expected-but-unbuilt layer is `Absent` |

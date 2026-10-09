@@ -38,13 +38,15 @@ def _owner() -> dict[str, object]:
     return owner.model_dump(mode="json")
 
 
-def _record(*, owner: bool) -> dict[str, object]:
+def _record(*, owner: bool, resolved: bool = False) -> dict[str, object]:
+    break_id = "BRK-RESOLVED" if resolved else "BRK-OWNED" if owner else "BRK-UNOWNED"
+    assigned_at = EVENT_AT + timedelta(minutes=5)
     return {
         "schema_version": "atreides.break/0.1-experimental",
         "enforcement_status": "ADVISORY_ONLY",
         "experimental": True,
         "synthetic": True,
-        "break_id": "BRK-OWNED" if owner else "BRK-UNOWNED",
+        "break_id": break_id,
         "operation_id": "00000000-0000-0000-0000-000000000111",
         "regime": "CCP",
         "leg": "FUNDING",
@@ -55,17 +57,42 @@ def _record(*, owner: bool) -> dict[str, object]:
         "originating_event_ref": "synthetic:readback:funding",
         "cause_class": "SYNTHETIC_DATA_MISMATCH",
         "owner": _owner() if owner else None,
-        "owner_absence_reason": None if owner else "no owner recorded",
+        "owner_absence_reason": None if owner else "awaiting production owner assignment",
+        "ownership_history": (
+            [
+                {
+                    "changed_at": assigned_at.isoformat().replace("+00:00", "Z"),
+                    "changed_by": _owner(),
+                    "previous_owner": None,
+                    "assigned_owner": _owner(),
+                    "provenance": "FACT_SYNTHETIC",
+                }
+            ]
+            if owner
+            else []
+        ),
         "sla_target": (EVENT_AT + timedelta(hours=2)).isoformat().replace("+00:00", "Z"),
         "actions": [],
-        "resolution_evidence": None,
-        "state": "INVESTIGATING" if owner else "OPEN",
+        "resolution_evidence": (
+            {
+                "break_id": break_id,
+                "recorded_at": (EVENT_AT + timedelta(hours=1)).isoformat().replace("+00:00", "Z"),
+                "recorded_by": _owner(),
+                "provenance": "FACT_SYNTHETIC",
+                "evidence_kind": "CORRECTIVE_ACTION_VERIFIED",
+                "evidence_ref": "synthetic:corrective-action:1",
+                "detail": "cause corrected and replay verified",
+            }
+            if resolved
+            else None
+        ),
+        "state": "RESOLVED" if resolved else "INVESTIGATING" if owner else "INTAKE_UNASSIGNED",
         "dsor_record_id": "00000000-0000-0000-0000-000000000222",
     }
 
 
 def _wire() -> bytes:
-    records = [_record(owner=True), _record(owner=False)]
+    records = [_record(owner=True), _record(owner=False), _record(owner=True, resolved=True)]
     models = tuple(
         AtreidesBreakRecord.model_validate_json(json.dumps(record)) for record in records
     )
@@ -99,7 +126,7 @@ def test_http_source_names_the_real_url_and_maps_exact_bytes() -> None:
     register = publication_to_register(publication)
 
     assert client.source_label == URL
-    assert len(register.records) == 2
+    assert len(register.records) == 3
     assert register.synthetic is True
 
 
@@ -108,7 +135,7 @@ def test_missing_owner_is_block_and_age_uses_originating_time() -> None:
     unowned = next(record for record in register.records if record.owner is None)
 
     assert unowned.effective_disposition is Disposition.BLOCK
-    assert unowned.status_text == "no owner recorded"
+    assert unowned.status_text == "awaiting production owner assignment"
     assert age(unowned, EVENT_AT + timedelta(hours=3)) == timedelta(hours=3)
     assert unowned.sla_target == timedelta(hours=2)
 
@@ -118,6 +145,34 @@ def test_owned_break_remains_a_hold_not_a_clean_state() -> None:
     owned = next(record for record in register.records if record.owner is not None)
 
     assert owned.effective_disposition is Disposition.HOLD
+    assert owned.trail[0].layer == "Atreides break ownership"
+    assert owned.trail[0].provenance.value == "FACT_SYNTHETIC"
+
+
+def test_resolved_break_displays_attributable_closure_evidence() -> None:
+    register = publication_to_register(parse_publication(_wire()))
+    resolved = next(record for record in register.records if record.status.value == "Resolved")
+
+    assert resolved.effective_disposition is Disposition.HOLD
+    assert resolved.resolved_at == EVENT_AT + timedelta(hours=1)
+    assert resolved.trail[-1].layer == "Atreides break closure"
+    assert resolved.trail[-1].status_text == "CORRECTIVE_ACTION_VERIFIED"
+    assert resolved.trail[-1].evidence == "synthetic:corrective-action:1"
+    assert resolved.trail[-1].provenance.value == "FACT_SYNTHETIC"
+
+
+def test_incomplete_or_mismatched_closure_fails_closed() -> None:
+    document = json.loads(_wire())
+    resolved = next(row for row in document["records"] if row["state"] == "RESOLVED")
+    resolved["resolution_evidence"]["break_id"] = "BRK-ANOTHER"
+    with pytest.raises(SourceMalformedError, match="shape"):
+        parse_publication(json.dumps(document).encode())
+
+    document = json.loads(_wire())
+    resolved = next(row for row in document["records"] if row["state"] == "RESOLVED")
+    del resolved["resolution_evidence"]["provenance"]
+    with pytest.raises(SourceMalformedError, match="shape"):
+        parse_publication(json.dumps(document).encode())
 
 
 def test_tampered_record_fails_closed() -> None:
@@ -151,7 +206,7 @@ def test_published_source_drives_the_read_only_board_with_unowned_first() -> Non
     body = section(client.get("/section/exceptions").get_data(as_text=True), "exceptions")
 
     assert body.index("BRK-UNOWNED") < body.index("BRK-OWNED")
-    assert "Absent — no owner recorded" in body
+    assert "Absent — awaiting production owner assignment" in body
     assert "settlement operations" in body
     assert "SYNTHETIC, EXPERIMENTAL, ADVISORY_ONLY" in body
     assert "SYNTHETIC_DATA_MISMATCH" in body
@@ -159,3 +214,10 @@ def test_published_source_drives_the_read_only_board_with_unowned_first() -> Non
     assert "5 h" in body
     assert snapshot.exceptions.register.source_url == URL
     assert "Assign owner" not in body
+    drawer = section(
+        client.get("/section/exceptions?selected=BRK-RESOLVED").get_data(as_text=True),
+        "exceptions",
+    )
+    assert "CORRECTIVE_ACTION_VERIFIED" in drawer
+    assert "synthetic:corrective-action:1" in drawer
+    assert "FACT_SYNTHETIC" in drawer
