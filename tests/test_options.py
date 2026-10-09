@@ -37,7 +37,11 @@ from lc.options import (
     OptionSeries,
     PositionAccount,
     PositionAccountType,
+    PositionCapability,
+    PositionCapabilityRegistry,
+    PositionProduct,
     SharesComponent,
+    UnsupportedPositionError,
 )
 
 D = Decimal
@@ -246,6 +250,50 @@ def test_every_position_account_type(account_type: PositionAccountType) -> None:
         clearing_member_id="SYNTHETIC-CM", account_id="A-1", account_type=account_type
     )
     assert account.account_type is account_type
+
+
+def test_capability_inventory_covers_every_account_type_and_position_product() -> None:
+    entries = tuple(
+        PositionCapability(
+            account=PositionAccount(
+                clearing_member_id="SYNTHETIC-CM",
+                account_id=f"A-{account_type.value}",
+                account_type=account_type,
+            ),
+            products=frozenset(PositionProduct),
+        )
+        for account_type in PositionAccountType
+    )
+    registry = PositionCapabilityRegistry(entries=entries)
+    for entry in entries:
+        for position_product in PositionProduct:
+            registry.require(entry.account, position_product)
+
+
+def test_unknown_and_explicitly_unsupported_accounts_are_refused() -> None:
+    account = PositionAccount(
+        clearing_member_id="SYNTHETIC-CM",
+        account_id="A-NONE",
+        account_type=PositionAccountType.CUSTOMER,
+    )
+    product = PositionProduct.LISTED_OPTION
+    with pytest.raises(UnsupportedPositionError, match="no recorded position capability"):
+        PositionCapabilityRegistry(entries=()).require(account, product)
+    with pytest.raises(UnsupportedPositionError, match="cannot carry LISTED_OPTION"):
+        PositionCapabilityRegistry(
+            entries=(PositionCapability(account=account, products=frozenset()),)
+        ).require(account, product)
+
+
+def test_an_account_has_only_one_capability_record() -> None:
+    account = PositionAccount(
+        clearing_member_id="SYNTHETIC-CM",
+        account_id="A-DUPLICATE",
+        account_type=PositionAccountType.FIRM,
+    )
+    entry = PositionCapability(account=account, products=frozenset({PositionProduct.LISTED_OPTION}))
+    with pytest.raises(ValidationError, match="appears more than once"):
+        PositionCapabilityRegistry(entries=(entry, entry))
 
 
 def test_both_settlement_paths_are_admitted_as_data() -> None:
