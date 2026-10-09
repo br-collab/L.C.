@@ -75,6 +75,8 @@ from cop.settings import (
     MAIN_BRANCH,
     REPOSITORIES,
     STALE_AFTER,
+    TRACEABILITY_SOURCE,
+    TRACEABILITY_SOURCE_UNSET,
 )
 from cop.state import (
     AdvisoryState,
@@ -96,6 +98,7 @@ from cop.state import (
     RunSummary,
     Snapshot,
     TagInfo,
+    TraceabilityState,
     combine_ci,
     compute_drift,
     detect_pending_drop,
@@ -103,6 +106,7 @@ from cop.state import (
     merge_info,
     scheduled_summary,
 )
+from cop.traceability import TraceabilitySource
 
 T = TypeVar("T")
 Clock = Callable[[], datetime]
@@ -137,6 +141,7 @@ class Sources:
     aureon: AureonSource
     agents: AgentsSource | None = None
     advisories: AdvisorySource | None = None
+    traceability: TraceabilitySource | None = None
     lc_layer_clock: LayerClockSource | None = None
     lifecycles: LifecycleSource | None = None
     escalations: EscalationSource | None = None
@@ -170,6 +175,7 @@ class Refresher:
         # panel reports, not an error it hides: see ``_refresh_agents``.
         self._agents = sources.agents
         self._advisories = sources.advisories
+        self._traceability = sources.traceability
         self._lc_layer_clock = sources.lc_layer_clock
         # ``None`` means no lifecycle publication address is configured.
         self._lifecycles = sources.lifecycles
@@ -242,6 +248,14 @@ class Refresher:
                     "advisories:publication",
                     ADVISORIES_SOURCE,
                     fact,
+                    ADVISORIES_STALE_AFTER,
+                )
+            ),
+            traceability=TraceabilityState(
+                publication=pending(
+                    "traceability:publication",
+                    TRACEABILITY_SOURCE,
+                    Provenance.FACT_SYNTHETIC,
                     ADVISORIES_STALE_AFTER,
                 )
             ),
@@ -488,6 +502,28 @@ class Refresher:
             )
         )
 
+    def _refresh_traceability(self) -> TraceabilityState:
+        if self._traceability is None:
+            return TraceabilityState(
+                publication=not_configured(
+                    "traceability:publication",
+                    TRACEABILITY_SOURCE,
+                    Provenance.FACT_SYNTHETIC,
+                    TRACEABILITY_SOURCE_UNSET,
+                    ADVISORIES_STALE_AFTER,
+                )
+            )
+        return TraceabilityState(
+            publication=self._observe(
+                "traceability:publication",
+                TRACEABILITY_SOURCE,
+                Provenance.FACT_SYNTHETIC,
+                self._traceability.publication,
+                ADVISORIES_STALE_AFTER,
+                value_time=lambda value: value.run_timestamp,
+            )
+        )
+
     def _refresh_lifecycles(self) -> LifecycleState:
         """Read the lifecycle board, or record that nothing supplies one.
 
@@ -667,6 +703,7 @@ class Refresher:
             aureon = self._refresh_aureon(aureon_repo)
             agents = self._refresh_agents()
             advisories = self._refresh_advisories()
+            traceability = self._refresh_traceability()
             lc_layer_clock = self._refresh_lc_layer_clock()
             lifecycles = self._refresh_lifecycles()
             escalations = self._refresh_escalations()
@@ -690,6 +727,7 @@ class Refresher:
                 aureon=aureon,
                 agents=agents,
                 advisories=advisories,
+                traceability=traceability,
                 lc_layer_clock=lc_layer_clock,
                 lifecycles=lifecycles,
                 escalations=escalations,
@@ -727,6 +765,7 @@ class Refresher:
                     aureon=old.aureon,
                     agents=old.agents,
                     advisories=old.advisories,
+                    traceability=old.traceability,
                     lc_layer_clock=old.lc_layer_clock,
                     lifecycles=old.lifecycles,
                     escalations=old.escalations,

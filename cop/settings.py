@@ -41,6 +41,10 @@ ADVISORIES_SOURCE_UNSET = (
 )
 BREAKS_SOURCE = "Atreides synthetic breaks (ATREIDES_BREAKS_URL)"
 BREAKS_SOURCE_UNSET = "ATREIDES_BREAKS_URL is not set, so no synthetic break register is being read"
+TRACEABILITY_SOURCE = "Atreides requirement traceability (ATREIDES_TRACEABILITY_URL)"
+TRACEABILITY_SOURCE_UNSET = (
+    "ATREIDES_TRACEABILITY_URL is not set, so no requirement traceability is being read"
+)
 
 # COP-1 panel 8. In demo mode the rows are invented (cop/demo.py). In production,
 # unconfigured means no publication address was supplied; it never renders as an
@@ -103,6 +107,7 @@ ENV_DEMO = "LEGATE_DEMO"
 ENV_AGENTS_URL = "ATREIDES_AGENTS_URL"
 ENV_ADVISORIES_URL = "ATREIDES_ADVISORIES_URL"
 ENV_BREAKS_URL = "ATREIDES_BREAKS_URL"
+ENV_TRACEABILITY_URL = "ATREIDES_TRACEABILITY_URL"
 ENV_ESCALATIONS_URL = "C2_ESCALATIONS_URL"
 ENV_LC_LAYER_CLOCK_URL = "LC_LAYER_CLOCK_URL"
 ENV_LIFECYCLE_BASE_URL = "LC_LIFECYCLE_BASE_URL"
@@ -118,6 +123,7 @@ class Settings:
     agents_url: str | None
     advisories_url: str | None
     breaks_url: str | None
+    traceability_url: str | None
     escalations_url: str | None
     lc_layer_clock_url: str | None
     lifecycle_base_url: str | None
@@ -162,6 +168,7 @@ def load_settings(env: Mapping[str, str]) -> Settings:
     agents_url = _non_empty(env, ENV_AGENTS_URL)
     advisories_url = _non_empty(env, ENV_ADVISORIES_URL)
     breaks_url = _non_empty(env, ENV_BREAKS_URL)
+    traceability_url = _non_empty(env, ENV_TRACEABILITY_URL)
     escalations_url = _non_empty(env, ENV_ESCALATIONS_URL)
     lc_layer_clock_url = _non_empty(env, ENV_LC_LAYER_CLOCK_URL)
     lifecycle_base_url = _non_empty(env, ENV_LIFECYCLE_BASE_URL)
@@ -199,6 +206,7 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         agents_url=agents_url,
         advisories_url=advisories_url,
         breaks_url=breaks_url,
+        traceability_url=traceability_url,
         escalations_url=escalations_url,
         lc_layer_clock_url=lc_layer_clock_url,
         lifecycle_base_url=lifecycle_base_url,
