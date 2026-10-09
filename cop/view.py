@@ -1386,7 +1386,7 @@ def build_page(snapshot: Snapshot, now: datetime) -> PageView:
                     utilisation=utilisation,
                     owner=record.owner.role
                     if record.owner is not None
-                    else "Absent — no owner recorded",
+                    else f"Absent — {record.status_text}",
                     badge=disposition_badge(
                         record.effective_disposition, record.effective_disposition.value
                     ),

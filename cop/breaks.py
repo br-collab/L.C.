@@ -16,6 +16,7 @@ import httpx
 from cannae_kernel.actor import ActorRef
 from cannae_kernel.canonical import Digest, canonical_bytes, digest_bytes
 from cannae_kernel.disposition import Disposition
+from cannae_kernel.provenance import Provenance
 from pydantic import (
     AwareDatetime,
     BaseModel,
@@ -39,6 +40,7 @@ class _Frozen(BaseModel):
 
 
 class BreakState(StrEnum):
+    INTAKE_UNASSIGNED = "INTAKE_UNASSIGNED"
     OPEN = "OPEN"
     INVESTIGATING = "INVESTIGATING"
     RESOLVED = "RESOLVED"
@@ -51,9 +53,25 @@ class BreakAction(_Frozen):
     action: str = Field(min_length=1)
 
 
+class OwnershipChange(_Frozen):
+    changed_at: AwareDatetime
+    changed_by: ActorRef
+    previous_owner: ActorRef | None
+    assigned_owner: ActorRef
+    provenance: Provenance
+
+
+class ResolutionEvidenceKind(StrEnum):
+    CORRECTIVE_ACTION_VERIFIED = "CORRECTIVE_ACTION_VERIFIED"
+    AUTHORITY_CONFIRMATION = "AUTHORITY_CONFIRMATION"
+
+
 class ResolutionEvidence(_Frozen):
+    break_id: str = Field(min_length=1)
     recorded_at: AwareDatetime
     recorded_by: ActorRef
+    provenance: Provenance
+    evidence_kind: ResolutionEvidenceKind
     evidence_ref: str = Field(min_length=1)
     detail: str = Field(min_length=1)
 
@@ -91,6 +109,7 @@ class AtreidesBreakRecord(_Frozen):
     cause_class: str = Field(min_length=1)
     owner: ActorRef | None
     owner_absence_reason: str | None
+    ownership_history: tuple[OwnershipChange, ...]
     sla_target: AwareDatetime
     actions: tuple[BreakAction, ...]
     resolution_evidence: ResolutionEvidence | None
@@ -99,15 +118,39 @@ class AtreidesBreakRecord(_Frozen):
 
     @model_validator(mode="after")
     def _consistent(self) -> Self:
+        self._validate_ownership()
+        if self.state is BreakState.RESOLVED and self.resolution_evidence is None:
+            raise ValueError("a resolved break must carry resolution evidence")
+        if self.state is not BreakState.RESOLVED and self.resolution_evidence is not None:
+            raise ValueError("resolution evidence is set only on a resolved break")
+        if (
+            self.resolution_evidence is not None
+            and self.resolution_evidence.break_id != self.break_id
+        ):
+            raise ValueError("resolution evidence belongs to another break")
+        if self.sla_target < self.originating_event_at:
+            raise ValueError("sla_target precedes the originating event")
+        return self
+
+    def _validate_ownership(self) -> None:
         if self.owner is None and not self.owner_absence_reason:
             raise ValueError("an absent owner must carry an explicit absence reason")
         if self.owner is not None and self.owner_absence_reason is not None:
             raise ValueError("owner_absence_reason is set only when owner is absent")
-        if self.state is BreakState.RESOLVED and self.resolution_evidence is None:
-            raise ValueError("a resolved break must carry resolution evidence")
-        if self.sla_target < self.originating_event_at:
-            raise ValueError("sla_target precedes the originating event")
-        return self
+        if self.owner is None and self.state is not BreakState.INTAKE_UNASSIGNED:
+            raise ValueError("an ownerless break must remain in fail-closed intake")
+        if self.owner is not None:
+            if self.state is BreakState.INTAKE_UNASSIGNED:
+                raise ValueError("an assigned break cannot remain in unassigned intake")
+            if not self.ownership_history:
+                raise ValueError("an assigned break must preserve ownership history")
+            if self.ownership_history[-1].assigned_owner != self.owner:
+                raise ValueError("current owner must match the latest ownership change")
+        previous: ActorRef | None = None
+        for change in self.ownership_history:
+            if change.previous_owner != previous:
+                raise ValueError("ownership history is not contiguous")
+            previous = change.assigned_owner
 
     def canonical_bytes(self) -> bytes:
         return canonical_bytes(self)
