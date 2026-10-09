@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import importlib.util
 import os
 import uuid
@@ -22,9 +23,6 @@ if importlib.util.find_spec("atreides") is None:
     pytest.skip("runs in the pinned Atreides handoff CI job", allow_module_level=True)
 
 from atreides.acceptance.service import evaluate_candidate
-from atreides.cockpit.breaks_publication_writer import (
-    publication_bytes as break_publication_bytes,
-)
 from atreides.customer_protection.publication_writer import publication_bytes
 from atreides.rails.cato_cash import (
     CashRail,
@@ -63,7 +61,8 @@ def test_real_advisory_producer_bytes_are_consumed_without_translation() -> None
 
 
 def test_real_break_producer_bytes_preserve_ownership_and_closure_evidence() -> None:
-    raw = break_publication_bytes(datetime(2026, 10, 8, 16, 0, tzinfo=UTC))
+    writer = importlib.import_module("atreides.cockpit.breaks_publication_writer")
+    raw = writer.publication_bytes(datetime(2026, 10, 8, 16, 0, tzinfo=UTC))
     publication = parse_break_publication(raw)
 
     unassigned = next(record for record in publication.records if record.owner is None)

@@ -136,6 +136,6 @@ def test_unread_advisory_source_never_renders_an_empty_clean_state() -> None:
 def test_cross_domain_job_pins_and_exercises_the_advisory_producer() -> None:
     workflow = Path(".github/workflows/ci.yml").read_text()
     seam = Path("tests/test_atreides_handoff.py").read_text()
-    assert "a25794b8d046df815bb3eafb6e9a0e48d7b9dc0a" in workflow
+    assert "f0db87c7d65e7ffea5dba9358dadba75cc05b2ed" in workflow
     assert "publication_bytes" in seam
     assert "parse_publication" in seam
