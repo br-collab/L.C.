@@ -34,7 +34,12 @@ from cannae_kernel.canonical import canonical_bytes, digest_bytes
 from cannae_kernel.envelopes import ExecutionEvent
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from lc.options import PositionAccountType
+from lc.options import (
+    PositionAccount,
+    PositionAccountType,
+    PositionCapabilityRegistry,
+    PositionProduct,
+)
 
 __all__ = [
     "AdmittedNovation",
@@ -98,7 +103,12 @@ class AdmittedNovation(_Record):
     trade: NovatedTradeFact
 
 
-def admit_novation(event: ExecutionEvent, payload: bytes) -> AdmittedNovation:
+def admit_novation(
+    event: ExecutionEvent,
+    payload: bytes,
+    *,
+    capabilities: PositionCapabilityRegistry,
+) -> AdmittedNovation:
     """Verify ``payload`` against ``event`` and parse it, or say why not."""
     received = digest_bytes(payload)
     if received != event.payload_digest:
@@ -116,5 +126,14 @@ def admit_novation(event: ExecutionEvent, payload: bytes) -> AdmittedNovation:
         raise NovationNotAdmittedError(
             NovationRefusal.NOT_CANONICAL,
             "the parsed record does not re-serialise to the bytes received",
+        )
+    for party in (trade.buyer, trade.seller):
+        capabilities.require(
+            PositionAccount(
+                clearing_member_id=party.clearing_member_id,
+                account_id=party.account_id,
+                account_type=party.account_type,
+            ),
+            PositionProduct.LISTED_OPTION,
         )
     return AdmittedNovation(event=event, trade=trade)

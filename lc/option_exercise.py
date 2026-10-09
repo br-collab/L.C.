@@ -95,6 +95,8 @@ from lc.options import (
     OptionRight,
     OptionSeries,
     PositionAccount,
+    PositionCapabilityRegistry,
+    PositionProduct,
     SharesComponent,
 )
 
@@ -253,7 +255,7 @@ class AssignmentResult(_Record):
         return digest(self)
 
 
-def assign_exercises(  # noqa: PLR0911, PLR0913 - one return per refusal; inputs stay explicit
+def assign_exercises(  # noqa: PLR0911, PLR0912, PLR0913 - one return per refusal
     series: OptionSeries,
     exercised_contracts: int,
     shorts: tuple[ShortPositionEntry, ...],
@@ -261,12 +263,15 @@ def assign_exercises(  # noqa: PLR0911, PLR0913 - one return per refusal; inputs
     method: AssignmentMethod,
     start_position: int,
     table: OccRuleTable,
+    capabilities: PositionCapabilityRegistry,
 ) -> AssignmentResult:
     """Assign ``exercised_contracts`` of ``series`` across ``shorts``. Pure.
 
     Assigned plus unassigned equals the contracts on the wheel, in every account.
     """
     ordered = tuple(sorted(shorts, key=lambda entry: entry.wheel_id))
+    for entry in ordered:
+        capabilities.require(entry.account, PositionProduct.LISTED_OPTION)
     wheel_contracts = sum(entry.on_the_wheel for entry in ordered)
     increment, places = table.item(INCREMENT_ITEM), table.item(DECIMAL_PLACES_ITEM)
 
@@ -366,9 +371,14 @@ class ExerciseNotice(_Record):
 
 
 def check_exercise_notice(
-    notice: ExerciseNotice, series: OptionSeries, long_contracts: int
+    notice: ExerciseNotice,
+    series: OptionSeries,
+    long_contracts: int,
+    *,
+    capabilities: PositionCapabilityRegistry,
 ) -> tuple[Outcome, str]:
     """Whether a notice can be tendered: the series, the style, the date and the position."""
+    capabilities.require(notice.account, PositionProduct.LISTED_OPTION)
     if notice.series_osi != series.osi_identifier:
         return Outcome.REFUSED, "the notice names another series"
     if notice.tendered_on > series.expiry:
@@ -482,8 +492,12 @@ def exercise_at_expiration(
     positions: tuple[ExpiringLongPosition, ...],
     closing_price: ClosingPrice | None,
     table: OccRuleTable,
+    *,
+    capabilities: PositionCapabilityRegistry,
 ) -> ExpirationResult:
     """Apply Rule 805(d) to every long position in ``series`` at its expiration. Pure."""
+    for position in positions:
+        capabilities.require(position.account, PositionProduct.LISTED_OPTION)
     threshold = table.item(THRESHOLD_ITEM)
     decisions: list[ExerciseDecision] = []
     for position in positions:

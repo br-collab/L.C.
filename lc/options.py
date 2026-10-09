@@ -60,7 +60,11 @@ __all__ = [
     "OptionSeries",
     "PositionAccount",
     "PositionAccountType",
+    "PositionCapability",
+    "PositionCapabilityRegistry",
+    "PositionProduct",
     "SharesComponent",
+    "UnsupportedPositionError",
 ]
 
 _ROOT = r"^[A-Z0-9]{1,6}$"
@@ -224,10 +228,52 @@ class PositionAccountType(StrEnum):
     MARKET_MAKER = "MARKET_MAKER"
 
 
+class PositionProduct(StrEnum):
+    """Products for which L.C. currently carries typed position accounts."""
+
+    LISTED_OPTION = "LISTED_OPTION"
+
+
 class PositionAccount(_Record):
     clearing_member_id: str = Field(min_length=1)
     account_id: str = Field(min_length=1)
     account_type: PositionAccountType
+
+
+class PositionCapability(_Record):
+    """The products one identified position account is allowed to carry."""
+
+    account: PositionAccount
+    products: frozenset[PositionProduct]
+
+
+class UnsupportedPositionError(ValueError):
+    """An account is absent from the registry or cannot carry the requested product."""
+
+
+class PositionCapabilityRegistry(_Record):
+    """The sole account-to-product capability source for L.C. position boundaries."""
+
+    entries: tuple[PositionCapability, ...]
+
+    @model_validator(mode="after")
+    def _accounts_are_unique(self) -> Self:
+        accounts = tuple(entry.account for entry in self.entries)
+        if len(set(accounts)) != len(accounts):
+            raise ValueError("a position account appears more than once in the capability registry")
+        return self
+
+    def require(self, account: PositionAccount, product: PositionProduct) -> None:
+        for entry in self.entries:
+            if entry.account == account:
+                if product in entry.products:
+                    return
+                raise UnsupportedPositionError(
+                    f"account {account.account_id} cannot carry {product.value} positions"
+                )
+        raise UnsupportedPositionError(
+            f"account {account.account_id} has no recorded position capability"
+        )
 
 
 LISTED_OPTION_PREMIUM = AssetProfile(

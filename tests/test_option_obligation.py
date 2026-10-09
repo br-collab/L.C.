@@ -29,8 +29,20 @@ from cannae_kernel.canonical import canonical_bytes_of, digest, digest_bytes
 from cannae_kernel.delivery import DeliveryPattern
 from cannae_kernel.envelopes import ExecutionEvent
 from cannae_kernel.ids import LifecycleId
+from test_occ_boundary import CAPABILITIES as NOVATION_CAPABILITIES
 from test_occ_boundary import novated
-from test_option_exercise import ADJUSTED, TABLE, UNDERLYING, account, closing, series, shorts
+from test_option_exercise import (
+    ADJUSTED,
+    TABLE,
+    UNDERLYING,
+    account,
+    closing,
+    series,
+    shorts,
+)
+from test_option_exercise import (
+    CAPABILITIES as EXERCISE_CAPABILITIES,
+)
 
 from lc.obligation import (
     AccountRole,
@@ -82,6 +94,9 @@ ROUTE = SettlementRoute(
 CCP = SettlementParty(
     participant_id="SYNTHETIC-CCP", securities_account_id="CCP-SEC", cash_account_id="CCP-CASH"
 )
+CAPABILITIES = EXERCISE_CAPABILITIES.model_copy(
+    update={"entries": (*EXERCISE_CAPABILITIES.entries, *NOVATION_CAPABILITIES.entries)}
+)
 
 
 def party(member: str) -> SettlementParty:
@@ -98,7 +113,7 @@ def party(member: str) -> SettlementParty:
 def premium(side: NovationSide) -> tuple[FormedOptionObligation, ExecutionEvent, bytes]:
     buyer_event, seller_event, payload = novated()
     event = buyer_event if side is NovationSide.BUYER else seller_event
-    admitted = admit_novation(event, payload)
+    admitted = admit_novation(event, payload, capabilities=CAPABILITIES)
     member = admitted.trade.buyer if side is NovationSide.BUYER else admitted.trade.seller
     formed = form_premium_obligation(
         admitted,
@@ -117,7 +132,7 @@ def premium(side: NovationSide) -> tuple[FormedOptionObligation, ExecutionEvent,
 @pytest.mark.parametrize("side", list(NovationSide))
 def test_a_premium_obligation_is_bound_to_its_execution_event(side: NovationSide) -> None:
     formed, event, payload = premium(side)
-    trade = admit_novation(event, payload).trade
+    trade = admit_novation(event, payload, capabilities=CAPABILITIES).trade
     assert formed.purpose is ObligationPurpose.PREMIUM
     assert formed.payload.delivery_pattern is DeliveryPattern.PAYMENT_ONLY
     assert formed.payload.securities_leg is None
@@ -155,7 +170,7 @@ def test_premium_obligations_for_the_two_sides_are_distinct_and_deterministic() 
 
 def test_a_premium_needs_the_attested_bytes_and_the_right_member() -> None:
     buyer_event, _, payload = novated()
-    admitted = admit_novation(buyer_event, payload)
+    admitted = admit_novation(buyer_event, payload, capabilities=CAPABILITIES)
 
     def form(payload_bytes: bytes, member: str) -> FormedOptionObligation:
         return form_premium_obligation(
@@ -191,7 +206,9 @@ def expiration(chosen: OptionSeries) -> ExpirationResult:
         ExpiringLongPosition(account=HOLDERS[1], long_contracts=10, exercise_instruction=3),
     )
     price = "175" if chosen.right is OptionRight.CALL else "120"
-    return exercise_at_expiration(chosen, positions, closing(price), TABLE)
+    return exercise_at_expiration(
+        chosen, positions, closing(price), TABLE, capabilities=CAPABILITIES
+    )
 
 
 def assignment_for(chosen: OptionSeries, exercised: int) -> AssignmentResult:
@@ -202,6 +219,7 @@ def assignment_for(chosen: OptionSeries, exercised: int) -> AssignmentResult:
         method=AssignmentMethod.STANDARD,
         start_position=17,
         table=TABLE,
+        capabilities=CAPABILITIES,
     )
 
 
@@ -404,7 +422,11 @@ def test_inconsistent_exercise_and_assignment_are_refused() -> None:
             **common,  # type: ignore[arg-type]
         )
     undetermined = exercise_at_expiration(
-        chosen, (ExpiringLongPosition(account=HOLDERS[0], long_contracts=1),), None, TABLE
+        chosen,
+        (ExpiringLongPosition(account=HOLDERS[0], long_contracts=1),),
+        None,
+        TABLE,
+        capabilities=CAPABILITIES,
     )
     with pytest.raises(ValueError, match="INDETERMINATE"):
         form_exercise_obligations(

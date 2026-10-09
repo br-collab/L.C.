@@ -33,7 +33,28 @@ from lc.option_clearing import (
     NovationRefusal,
     admit_novation,
 )
-from lc.options import PositionAccountType
+from lc.options import (
+    PositionAccount,
+    PositionAccountType,
+    PositionCapability,
+    PositionCapabilityRegistry,
+    PositionProduct,
+    UnsupportedPositionError,
+)
+
+CAPABILITIES = PositionCapabilityRegistry(
+    entries=tuple(
+        PositionCapability(
+            account=PositionAccount(
+                clearing_member_id=member,
+                account_id=f"{member}-ACCT",
+                account_type=PositionAccountType.CUSTOMER,
+            ),
+            products=frozenset({PositionProduct.LISTED_OPTION}),
+        )
+        for member in ("CM-A", "CM-B")
+    )
+)
 
 
 def novated() -> tuple[ExecutionEvent, ExecutionEvent, bytes]:
@@ -50,7 +71,7 @@ def test_lc_admits_the_exact_bytes_the_emulator_attests() -> None:
     buyer_event, seller_event, payload = novated()
     assert type(buyer_event) is ExecutionEvent  # the real kernel type, not a look-alike
     for event in (buyer_event, seller_event):
-        admitted = admit_novation(event, payload)
+        admitted = admit_novation(event, payload, capabilities=CAPABILITIES)
         assert isinstance(admitted, AdmittedNovation)
         assert admitted.event == event
         trade_fact = admitted.trade
@@ -70,7 +91,7 @@ def test_what_lc_holds_is_byte_for_byte_what_was_attested() -> None:
     ccp.submit(buy_report)
     result = ccp.submit(sell_report)
     assert result.novation is not None and result.payload is not None
-    admitted = admit_novation(result.events[0], result.payload)
+    admitted = admit_novation(result.events[0], result.payload, capabilities=CAPABILITIES)
     assert admitted.trade.model_dump(mode="json") == result.novation.model_dump(mode="json")
 
 
@@ -90,7 +111,7 @@ def test_bytes_other_than_the_attested_ones_are_not_admitted(
 ) -> None:
     event, _, payload = novated()
     with pytest.raises(NovationNotAdmittedError) as refused:
-        admit_novation(event, alter(payload))
+        admit_novation(event, alter(payload), capabilities=CAPABILITIES)
     assert refused.value.refusal is refusal
 
 
@@ -99,7 +120,7 @@ def test_an_attested_but_unparseable_payload_is_malformed() -> None:
     garbage = b'{"not":"a novation"}'
     forged = event.model_copy(update={"payload_digest": digest_bytes(garbage)})
     with pytest.raises(NovationNotAdmittedError) as refused:
-        admit_novation(forged, garbage)
+        admit_novation(forged, garbage, capabilities=CAPABILITIES)
     assert refused.value.refusal is NovationRefusal.MALFORMED
 
 
@@ -110,8 +131,18 @@ def test_an_attested_but_reformatted_payload_is_not_canonical() -> None:
     reformatted = json.dumps(json.loads(payload), indent=2).encode()
     forged = event.model_copy(update={"payload_digest": digest_bytes(reformatted)})
     with pytest.raises(NovationNotAdmittedError) as refused:
-        admit_novation(forged, reformatted)
+        admit_novation(forged, reformatted, capabilities=CAPABILITIES)
     assert refused.value.refusal is NovationRefusal.NOT_CANONICAL
+
+
+def test_an_unregistered_position_account_cannot_enter_lc() -> None:
+    event, _, payload = novated()
+    with pytest.raises(UnsupportedPositionError, match="CM-A-ACCT has no recorded"):
+        admit_novation(
+            event,
+            payload,
+            capabilities=PositionCapabilityRegistry(entries=()),
+        )
 
 
 @pytest.mark.parametrize(

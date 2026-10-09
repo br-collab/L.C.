@@ -62,6 +62,9 @@ from lc.options import (
     OptionSeries,
     PositionAccount,
     PositionAccountType,
+    PositionCapability,
+    PositionCapabilityRegistry,
+    PositionProduct,
     SharesComponent,
 )
 
@@ -108,6 +111,17 @@ def account(n: int, kind: PositionAccountType = PositionAccountType.CUSTOMER) ->
     )
 
 
+CAPABILITIES = PositionCapabilityRegistry(
+    entries=tuple(
+        PositionCapability(
+            account=account(n, kind), products=frozenset({PositionProduct.LISTED_OPTION})
+        )
+        for n in range(400)
+        for kind in PositionAccountType
+    )
+)
+
+
 def shorts(*sizes: int) -> tuple[ShortPositionEntry, ...]:
     return tuple(
         ShortPositionEntry(account=account(i), wheel_id=1000 + i, short_contracts=size)
@@ -123,7 +137,13 @@ def assign(
     method: AssignmentMethod = AssignmentMethod.STANDARD,
 ) -> Any:
     return assign_exercises(
-        series(), exercised, entries, method=method, start_position=start, table=table
+        series(),
+        exercised,
+        entries,
+        method=method,
+        start_position=start,
+        table=table,
+        capabilities=CAPABILITIES,
     )
 
 
@@ -294,7 +314,9 @@ def held(n: int, instruction: int | None = None) -> ExpiringLongPosition:
 def test_exercise_by_exception_at_the_threshold(
     right: OptionRight, price: str, basis: ExerciseBasis
 ) -> None:
-    result = exercise_at_expiration(series(right=right), (held(1),), closing(price), TABLE)
+    result = exercise_at_expiration(
+        series(right=right), (held(1),), closing(price), TABLE, capabilities=CAPABILITIES
+    )
     assert result.outcome is Outcome.DETERMINED
     (decision,) = result.decisions
     assert decision.basis is basis
@@ -311,7 +333,9 @@ def test_exercise_by_exception_at_the_threshold(
     ids=["none-of-in-the-money", "fewer-than-all", "all-out-of-the-money", "some-out-of-the-money"],
 )
 def test_an_instruction_governs_in_both_directions(price: str, instruction: int) -> None:
-    result = exercise_at_expiration(series(), (held(1, instruction),), closing(price), TABLE)
+    result = exercise_at_expiration(
+        series(), (held(1, instruction),), closing(price), TABLE, capabilities=CAPABILITIES
+    )
     (decision,) = result.decisions
     assert decision.basis is ExerciseBasis.INSTRUCTION
     assert decision.exercised_contracts == instruction
@@ -324,7 +348,9 @@ def test_an_instruction_cannot_exceed_the_position() -> None:
 
 
 def test_without_a_closing_price_only_instructed_positions_are_determined() -> None:
-    result = exercise_at_expiration(series(), (held(1, 4), held(2)), None, TABLE)
+    result = exercise_at_expiration(
+        series(), (held(1, 4), held(2)), None, TABLE, capabilities=CAPABILITIES
+    )
     assert result.outcome is Outcome.INDETERMINATE
     instructed, uninstructed = result.decisions
     assert instructed.exercised_contracts == 4
@@ -335,20 +361,28 @@ def test_without_a_closing_price_only_instructed_positions_are_determined() -> N
 
 def test_an_adjusted_deliverable_needs_an_instruction() -> None:
     adjusted = series(deliverable=ADJUSTED)
-    result = exercise_at_expiration(adjusted, (held(1),), closing("500"), TABLE)
+    result = exercise_at_expiration(
+        adjusted, (held(1),), closing("500"), TABLE, capabilities=CAPABILITIES
+    )
     assert result.outcome is Outcome.INDETERMINATE and "adjusted deliverable" in result.reason
-    instructed = exercise_at_expiration(adjusted, (held(1, 10),), closing("500"), TABLE)
+    instructed = exercise_at_expiration(
+        adjusted, (held(1, 10),), closing("500"), TABLE, capabilities=CAPABILITIES
+    )
     assert instructed.outcome is Outcome.DETERMINED
 
 
 def test_a_closing_price_for_another_security_is_indeterminate() -> None:
-    result = exercise_at_expiration(series(), (held(1),), closing("200", "OTHER"), TABLE)
+    result = exercise_at_expiration(
+        series(), (held(1),), closing("200", "OTHER"), TABLE, capabilities=CAPABILITIES
+    )
     assert result.outcome is Outcome.INDETERMINATE and "another security" in result.reason
 
 
 def test_a_missing_threshold_is_indeterminate(tmp_path: Path) -> None:
     table = table_without(tmp_path, THRESHOLD_ITEM)
-    result = exercise_at_expiration(series(), (held(1),), closing("200"), table)
+    result = exercise_at_expiration(
+        series(), (held(1),), closing("200"), table, capabilities=CAPABILITIES
+    )
     assert result.outcome is Outcome.INDETERMINATE and THRESHOLD_ITEM in result.reason
 
 
@@ -365,9 +399,9 @@ def notice(contracts: int, on: date, osi: str | None = None) -> ExerciseNotice:
 
 
 def test_an_american_option_is_exercisable_before_expiration() -> None:
-    assert check_exercise_notice(notice(5, date(2026, 11, 2)), series(), 10)[0] is (
-        Outcome.DETERMINED
-    )
+    assert check_exercise_notice(
+        notice(5, date(2026, 11, 2)), series(), 10, capabilities=CAPABILITIES
+    )[0] is (Outcome.DETERMINED)
 
 
 @pytest.mark.parametrize(
@@ -380,18 +414,25 @@ def test_an_american_option_is_exercisable_before_expiration() -> None:
 def test_a_notice_that_cannot_be_tendered_is_refused(
     style: ExerciseStyle, contracts: int, on: date, said: str
 ) -> None:
-    outcome, reason = check_exercise_notice(notice(contracts, on), series(style=style), 10)
+    outcome, reason = check_exercise_notice(
+        notice(contracts, on), series(style=style), 10, capabilities=CAPABILITIES
+    )
     assert outcome is Outcome.REFUSED and said in reason
 
 
 def test_there_is_no_late_exercise() -> None:
-    outcome, reason = check_exercise_notice(notice(1, date(2026, 12, 19)), series(), 10)
+    outcome, reason = check_exercise_notice(
+        notice(1, date(2026, 12, 19)), series(), 10, capabilities=CAPABILITIES
+    )
     assert outcome is Outcome.REFUSED and "no late exercise" in reason
 
 
 def test_a_notice_for_another_series_is_refused() -> None:
     other = series(strike=D(160)).osi_identifier
-    assert check_exercise_notice(notice(1, EXPIRY, other), series(), 10)[0] is Outcome.REFUSED
+    assert (
+        check_exercise_notice(notice(1, EXPIRY, other), series(), 10, capabilities=CAPABILITIES)[0]
+        is Outcome.REFUSED
+    )
 
 
 # --- conservation ------------------------------------------------------------------------------
@@ -413,7 +454,9 @@ def test_exercising_n_contracts_delivers_n_times_the_deliverable(contracts: int)
 
 def test_expiration_through_assignment_conserves_contracts_and_shares() -> None:
     longs = (held(1), held(2, 3), held(3, 0), held(4))
-    expiration = exercise_at_expiration(series(), longs, closing("175"), TABLE)
+    expiration = exercise_at_expiration(
+        series(), longs, closing("175"), TABLE, capabilities=CAPABILITIES
+    )
     assert expiration.outcome is Outcome.DETERMINED
     for position, decision in zip(longs, expiration.decisions, strict=True):
         assert decision.exercised_contracts is not None and decision.expired_contracts is not None
