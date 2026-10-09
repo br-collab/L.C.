@@ -98,8 +98,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: br-collab/Project-Atreides
-          # C3 WP-2 delivery, ancestry verified against Project-Atreides main.
-          ref: f0db87c7d65e7ffea5dba9358dadba75cc05b2ed
+          # Ancestry verified against Project-Atreides main after G1, C3 and G2.
+          ref: a25794b8d046df815bb3eafb6e9a0e48d7b9dc0a
           path: .handoff/Project-Atreides
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
