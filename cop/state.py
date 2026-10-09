@@ -31,6 +31,7 @@ from cop.observation import (
     SourceMalformedError,
 )
 from cop.program import Program
+from cop.traceability import TraceabilityPublication
 
 # Workflow run conclusions, as GitHub reports them.
 _PASSING = frozenset({"success"})
@@ -163,6 +164,11 @@ class AdvisoryState:
 
 
 @dataclass(frozen=True)
+class TraceabilityState:
+    publication: Observation[TraceabilityPublication]
+
+
+@dataclass(frozen=True)
 class LayerClockState:
     clock: Observation[LayerClock]
 
@@ -219,6 +225,7 @@ class Snapshot:
     aureon: AureonState
     agents: AgentsState
     advisories: AdvisoryState
+    traceability: TraceabilityState
     lc_layer_clock: LayerClockState
     lifecycles: LifecycleState
     escalations: EscalationState

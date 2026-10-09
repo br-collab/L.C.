@@ -66,6 +66,7 @@ from cop.settings import (
     Settings,
     load_settings,
 )
+from cop.traceability import HttpxTraceabilityClient
 from cop.view import (
     WORK_STATUS_BADGES,
     build_page,
@@ -84,6 +85,7 @@ PANELS: dict[str, str] = {
     "aureon": "Live Aureon",
     "agents": "Atreides agents",
     "advisories": "Engine advisories (synthetic)",
+    "traceability": "Requirement coverage (synthetic)",
     "lifecycles": "Lifecycle board",
     "escalations": "Escalation queue",
     "breaks": "Breaks across layers",
@@ -105,7 +107,7 @@ SECTIONS: dict[str, tuple[str, ...]] = {
     "decisions": ("escalations", "governance", "decisions"),
     "controls": ("controls",),
     "risk": ("risk",),
-    "agents": ("agents", "advisories"),
+    "agents": ("agents", "advisories", "traceability"),
     "programme": ("waves", "repositories", "aureon", "scheduled"),
     "blind": ("blindspots",),
 }
@@ -153,6 +155,7 @@ def build_refresher(settings: Settings, clock: Clock = utc_now) -> Refresher:
                 aureon=DemoAureon(),
                 agents=DemoAgents(clock),
                 advisories=None,
+                traceability=None,
                 lc_layer_clock=None,
                 lifecycles=DemoLifecycles(clock),
                 escalations=DemoEscalations(clock),
@@ -183,6 +186,11 @@ def build_refresher(settings: Settings, clock: Clock = utc_now) -> Refresher:
             advisories=(
                 HttpxAdvisoryClient(settings.advisories_url)
                 if settings.advisories_url is not None
+                else None
+            ),
+            traceability=(
+                HttpxTraceabilityClient(settings.traceability_url)
+                if settings.traceability_url is not None
                 else None
             ),
             lc_layer_clock=(
@@ -405,6 +413,11 @@ def create_app(  # noqa: PLR0915 - route definitions read best in one place
                     [snapshot.advisories.publication],
                     now,
                     variable="ATREIDES_ADVISORIES_URL",
+                ),
+                "traceability": _health_source(
+                    [snapshot.traceability.publication],
+                    now,
+                    variable="ATREIDES_TRACEABILITY_URL",
                 ),
                 "lc-layer-clock": _health_source(
                     [snapshot.lc_layer_clock.clock], now, variable="LC_LAYER_CLOCK_URL"

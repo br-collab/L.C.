@@ -56,7 +56,9 @@ from cop.state import (
     RunSummary,
     Snapshot,
     TagInfo,
+    TraceabilityState,
 )
+from cop.traceability import CoverageStatus, RequirementCoverage, TraceabilityPublication
 
 T = TypeVar("T")
 
@@ -587,6 +589,19 @@ class AdvisoriesView:
 
 
 @dataclass(frozen=True)
+class TraceabilityRowView:
+    requirement: RequirementCoverage
+    badge: Badge
+
+
+@dataclass(frozen=True)
+class TraceabilityView:
+    tile: TileView[TraceabilityPublication]
+    rows: tuple[TraceabilityRowView, ...]
+    age_text: str
+
+
+@dataclass(frozen=True)
 class PageView:
     banner: BannerView
     program: TileView[Program]
@@ -595,6 +610,7 @@ class PageView:
     aureon: AureonView
     agents: AgentsView
     advisories: AdvisoriesView
+    traceability: TraceabilityView
     lifecycles: LifecycleView
     escalations: EscalationView
     breaks: BreaksView
@@ -698,6 +714,9 @@ def build_rail(page: PageView) -> dict[str, RailItemView]:
         "risk": RailItemView("risk", "Risk limits", risks_badge),
         "agents": RailItemView("agents", "Agents", source_badge(page.agents.tile)),
         "advisories": RailItemView("advisories", "Advisories", source_badge(page.advisories.tile)),
+        "traceability": RailItemView(
+            "traceability", "Requirements", source_badge(page.traceability.tile)
+        ),
         "programme": RailItemView(
             "programme", "Programme", _worst_badge(programme_badges, "Programme state")
         ),
@@ -1114,6 +1133,38 @@ def _advisories_view(state: AdvisoryState, now: datetime) -> AdvisoriesView:
     )
 
 
+def _traceability_view(state: TraceabilityState, now: datetime) -> TraceabilityView:
+    tile_view = tile(state.publication, now, lambda _: OBSERVED)
+    publication = tile_view.value if tile_view.current else None
+    if publication is None:
+        return TraceabilityView(tile_view, (), "Absent, no current traceability publication")
+    severity = {
+        CoverageStatus.UNTESTED: 0,
+        CoverageStatus.FAILING: 1,
+        CoverageStatus.NOT_RUN: 2,
+        CoverageStatus.COVERED: 3,
+    }
+    badges = {
+        CoverageStatus.UNTESTED: Badge("UNTESTED", "No marked test", Tone.UNKNOWN),
+        CoverageStatus.FAILING: Badge("FAILING", "A marked test failed", Tone.BAD),
+        CoverageStatus.NOT_RUN: Badge("NOT_RUN", "A marked test did not run", Tone.ATTENTION),
+        CoverageStatus.COVERED: Badge("COVERED", "Marked tests passed", Tone.NEUTRAL),
+    }
+    rows = tuple(
+        TraceabilityRowView(row, badges[row.status])
+        for row in sorted(
+            publication.requirements,
+            key=lambda row: (severity[row.status], row.requirement_id),
+        )
+    )
+    observed = state.publication.observed_at
+    return TraceabilityView(
+        tile_view,
+        rows,
+        fmt_age(now - observed) if observed is not None else "Absent, no observation time",
+    )
+
+
 _SEVERITY_CODES = frozenset(d.value for d in Disposition)
 _SEVERITY = {
     Disposition.BLOCK: 3,
@@ -1305,6 +1356,7 @@ def build_page(snapshot: Snapshot, now: datetime) -> PageView:
     )
     agents = _agents_view(snapshot.agents, now)
     advisories = _advisories_view(snapshot.advisories, now)
+    traceability = _traceability_view(snapshot.traceability, now)
     lifecycles = _lifecycle_view(snapshot.lifecycles, now)
     escalations = _escalation_view(snapshot.escalations, now)
     breaks = _breaks_view(snapshot.breaks, now)
@@ -1416,6 +1468,7 @@ def build_page(snapshot: Snapshot, now: datetime) -> PageView:
         aureon=aureon,
         agents=agents,
         advisories=advisories,
+        traceability=traceability,
         lifecycles=lifecycles,
         escalations=escalations,
         breaks=breaks,

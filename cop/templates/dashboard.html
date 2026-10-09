@@ -405,6 +405,34 @@
 </section>
 {% endif %}
 
+{% if 'traceability' in selected %}
+{% set tr = page.traceability %}
+<section class="panel" id="traceability" data-panel="traceability">
+  <h2>Requirement coverage (synthetic) {{ badge(tr.tile.badge) }}</h2>
+  <p class="warning" role="alert"><strong>SYNTHETIC.</strong> Test evidence only. COVERED does not mean compliant, approved, cleared or certified.</p>
+  <p class="lede">Display only. This panel cannot change a requirement, a test or a test result.</p>
+  {{ provenance(tr.tile) }}
+  {{ failure(tr.tile) }}
+  {% if tr.rows %}
+  <p><strong>{{ tr.tile.shown.enforcement_status }}</strong> · <strong>{{ tr.tile.shown.claim_label }}</strong> · full run at {{ tr.tile.shown.run_commit_sha }}</p>
+  <div class="repo-grid">
+    {% for row in tr.rows %}
+    <article class="card tile" data-requirement="{{ row.requirement.requirement_id }}">
+      <h3>{{ row.requirement.requirement_id }} {{ badge(row.badge) }}</h3>
+      <dl class="fields">
+        <div class="field"><dt>Marked tests</dt><dd>{{ row.requirement.test_node_ids|join('; ') if row.requirement.test_node_ids else 'None recorded' }}</dd></div>
+        <div class="field"><dt>Run timestamp</dt><dd>{{ tr.tile.shown.run_timestamp }}</dd></div>
+        <div class="field"><dt>Evidence digest</dt><dd>{{ tr.tile.shown.digest }}</dd></div>
+      </dl>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="value">No requirement rows are shown because no current traceability publication was read. Nothing here is a clean requirement state.</p>
+  {% endif %}
+</section>
+{% endif %}
+
 {# 6 · Lifecycle board ---------------------------------------------------------------- #}
 {% if 'lifecycles' in selected %}
 {% set lc = page.lifecycles %}

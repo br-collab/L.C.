@@ -28,9 +28,11 @@ from cop.github import HttpxGitHubClient
 from cop.layer_clock import LayerClock
 from cop.refresher import Refresher, RefresherOptions, Sources
 from cop.settings import AUREON_CASH_LEG_URL, AUREON_SNAPSHOT_URL, PROGRAM_FILE, load_settings
+from cop.traceability import HttpxTraceabilityClient
 
 AGENTS_URL = "https://atreides.example.invalid/api/activation"
 ADVISORIES_URL = "https://atreides.example.invalid/api/advisories"
+TRACEABILITY_URL = "https://atreides.example.invalid/traceability.json"
 
 START = datetime(2026, 9, 17, 15, 0, tzinfo=UTC)
 FAILURE_MODES = ("timeout", "http500", "malformed_json", "rate_limit")
@@ -492,6 +494,33 @@ class FakeAdvisories:
         return httpx.Response(200, json=self.body)
 
 
+def traceability_body() -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "synthetic": True,
+        "enforcement_status": "ADVISORY_ONLY",
+        "claim_label": "EXPERIMENTAL",
+        "run_scope": "FULL",
+        "run_commit_sha": "a" * 40,
+        "run_timestamp": "2026-10-08T20:10:32Z",
+        "requirements": [
+            {"requirement_id": "BR-01", "status": "COVERED", "test_node_ids": ["test_x"]},
+            {"requirement_id": "BR-02", "status": "UNTESTED", "test_node_ids": []},
+        ],
+        "digest": "b" * 64,
+    }
+
+
+class FakeTraceability:
+    def __init__(self) -> None:
+        self.body = traceability_body()
+
+    def handler(self, request: httpx.Request) -> httpx.Response:
+        if str(request.url) != TRACEABILITY_URL:
+            raise UnexpectedRequestError(f"unexpected request {request.url}")
+        return httpx.Response(200, json=self.body)
+
+
 class Rig:
     """A refresher wired to fake servers and a fake clock."""
 
@@ -502,6 +531,7 @@ class Rig:
         *,
         agents_configured: bool = True,
         advisories_configured: bool = True,
+        traceability_configured: bool = True,
         lifecycles_configured: bool = True,
         escalations_configured: bool = True,
         exceptions_configured: bool = False,
@@ -514,6 +544,7 @@ class Rig:
         self.cash_leg = FakeCashLeg()
         self.atreides = FakeAtreides()
         self.advisories = FakeAdvisories()
+        self.traceability = FakeTraceability()
         self.github_client = HttpxGitHubClient(
             token, http=httpx.Client(transport=httpx.MockTransport(self.github.handler))
         )
@@ -538,6 +569,14 @@ class Rig:
                         http=httpx.Client(transport=httpx.MockTransport(self.advisories.handler)),
                     )
                     if advisories_configured
+                    else None
+                ),
+                traceability=(
+                    HttpxTraceabilityClient(
+                        TRACEABILITY_URL,
+                        http=httpx.Client(transport=httpx.MockTransport(self.traceability.handler)),
+                    )
+                    if traceability_configured
                     else None
                 ),
                 lc_layer_clock=FakeLayerClock(self.clock) if layer_clock_configured else None,
