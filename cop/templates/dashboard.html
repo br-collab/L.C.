@@ -40,8 +40,12 @@
       <h1>{{ b.product_name }}</h1>
       <p class="lede">Common Operating Picture (COP) for the Cannae Legion program: build status, live Aureon health and Atreides agent activation. Read-only. Times are UTC (Coordinated Universal Time).</p>
     </div>
-    <form method="post" action="{{ url_for('logout') }}" class="logout"><button type="submit">Sign out</button></form>
+    {% if not public %}<form method="post" action="{{ url_for('logout') }}" class="logout"><button type="submit">Sign out</button></form>{% endif %}
   </div>
+
+  {% if public %}
+  <p class="warning" role="status"><strong>PUBLIC VIEW:</strong> read-only. Public sources only. Panels that depend on unpublished feeds read "not configured".</p>
+  {% endif %}
 
   {% if b.demo %}
   <p class="warning demo" role="alert"><strong>DEMO DATA.</strong> Every value on this page is invented. Demo mode is for local screenshots only.</p>
