@@ -2,7 +2,7 @@
 
 **Live deployment:** [lc-production-373f.up.railway.app](https://lc-production-373f.up.railway.app) · health: [`/healthz`](https://lc-production-373f.up.railway.app/healthz)
 
-Legate is a private, read-only web page: a COP (Common Operating Picture) for Project Cannae Legion. It shows the state of the build program, of the live Aureon service and of the Atreides agent family on one URL. "Legate" is a working name (decision JUM-D-27); in code it lives only in `cop/settings.py` as `PRODUCT_NAME`.
+Legate is a read-only COP (Common Operating Picture) for Project Cannae Legion. It can run as the private operator view or as a separately deployed public view with no login and no operator credentials. It shows the state of the build program, of the live Aureon service and of the Atreides agent family on one URL. "Legate" is a working name (decision JUM-D-27); in code it lives only in `cop/settings.py` as `PRODUCT_NAME`.
 
 It has no write routes and no controls. The halt control arrives in COP-1. The COP shows; the domains decide.
 
@@ -73,6 +73,18 @@ LEGATE_DEMO=1 LEGATE_INSECURE_LOCAL=1 LEGATE_OPERATOR_KEY=demo LEGATE_SESSION_SE
 ```
 
 Demo mode replaces GitHub, Aureon and Atreides with invented data (`cop/demo.py`) and shows a "DEMO DATA" warning in the banner. The data includes a failing nightly run, a pull request that needs an update, a timed-out source, deploy drift, and (from the second refresh, after 60 seconds) an AUR-I-17 pending drop. For the Agents panel it includes one agent reporting cleanly, one holding work for the operator, one stopped and therefore absent-with-reason, and the lateral-handoff probe being refused — every state the panel can show, because a demonstration that only showed the happy row would not tell anyone whether the unhappy ones render at all. Demo mode makes no network calls. Like the insecure flag, it is refused when a production marker is present.
+
+### Public mode
+
+Set `LEGATE_PUBLIC=1` to serve the same application as a public, read-only view without a login. Public mode is off unless the value is exactly `1`; when it is off, private-mode authentication and validation are unchanged.
+
+Public mode fails closed in three ways:
+
+- `LEGATE_OPERATOR_KEY` or `LEGATE_SESSION_SECRET` being set is refused, because a public service must not carry operator credentials.
+- `LEGATE_DEMO=1` is refused in every environment, so public pages never show invented data. The existing production refusals for demo and insecure-local mode still apply.
+- Any configured private feed (`ATREIDES_AGENTS_URL`, `ATREIDES_ADVISORIES_URL`, `ATREIDES_BREAKS_URL`, `ATREIDES_TRACEABILITY_URL`, `C2_ESCALATIONS_URL`, `LC_LAYER_CLOCK_URL` or `LC_LIFECYCLE_BASE_URL`) is refused unless `LEGATE_PUBLIC_ALLOW_FEEDS=1` explicitly permits publishing configured feeds.
+
+For a Railway public service, set only `LEGATE_PUBLIC=1` and the fine-grained, read-only `GITHUB_TOKEN`. No other variable is required. Keep the private service separate with its own operator key, session secret and feed variables; do not copy those variables to the public service.
 
 ### Tests and checks
 

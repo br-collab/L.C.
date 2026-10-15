@@ -104,6 +104,8 @@ ENV_SESSION_SECRET = "LEGATE_SESSION_SECRET"
 ENV_GITHUB_TOKEN = "GITHUB_TOKEN"
 ENV_INSECURE_LOCAL = "LEGATE_INSECURE_LOCAL"
 ENV_DEMO = "LEGATE_DEMO"
+ENV_PUBLIC = "LEGATE_PUBLIC"
+ENV_PUBLIC_ALLOW_FEEDS = "LEGATE_PUBLIC_ALLOW_FEEDS"
 ENV_AGENTS_URL = "ATREIDES_AGENTS_URL"
 ENV_ADVISORIES_URL = "ATREIDES_ADVISORIES_URL"
 ENV_BREAKS_URL = "ATREIDES_BREAKS_URL"
@@ -133,6 +135,7 @@ class Settings:
     which the Agents panel reports as INDETERMINATE rather than as a failure."""
     insecure_local: bool
     demo: bool
+    public: bool
     production: bool
     problems: tuple[str, ...]
 
@@ -160,6 +163,31 @@ def _flag(env: Mapping[str, str], name: str) -> bool:
     return env.get(name, "") == "1"
 
 
+def _public_problems(env: Mapping[str, str]) -> list[str]:
+    problems: list[str] = []
+    if _non_empty(env, ENV_OPERATOR_KEY) is not None or _non_empty(env, ENV_SESSION_SECRET):
+        problems.append(f"{ENV_OPERATOR_KEY} or {ENV_SESSION_SECRET} is set while {ENV_PUBLIC}=1")
+    if _flag(env, ENV_DEMO):
+        problems.append(f"{ENV_DEMO} is set while {ENV_PUBLIC}=1")
+    if _flag(env, ENV_PUBLIC_ALLOW_FEEDS):
+        return problems
+    public_feed_variables = (
+        ENV_AGENTS_URL,
+        ENV_ADVISORIES_URL,
+        ENV_BREAKS_URL,
+        ENV_TRACEABILITY_URL,
+        ENV_ESCALATIONS_URL,
+        ENV_LC_LAYER_CLOCK_URL,
+        ENV_LIFECYCLE_BASE_URL,
+    )
+    for name in public_feed_variables:
+        if _non_empty(env, name) is not None:
+            problems.append(
+                f"{name} is set while {ENV_PUBLIC}=1 without {ENV_PUBLIC_ALLOW_FEEDS}=1"
+            )
+    return problems
+
+
 def load_settings(env: Mapping[str, str]) -> Settings:
     """Read settings from ``env``. Never raises: problems are collected instead."""
     operator_key = _non_empty(env, ENV_OPERATOR_KEY)
@@ -174,26 +202,36 @@ def load_settings(env: Mapping[str, str]) -> Settings:
     lifecycle_base_url = _non_empty(env, ENV_LIFECYCLE_BASE_URL)
     insecure_local = _flag(env, ENV_INSECURE_LOCAL)
     demo = _flag(env, ENV_DEMO)
+    public = _flag(env, ENV_PUBLIC)
     production = any(name in env for name in PRODUCTION_MARKERS)
 
     problems: list[str] = []
-    if operator_key is None:
-        problems.append(f"{ENV_OPERATOR_KEY} is not set")
-    if session_secret is None:
-        problems.append(f"{ENV_SESSION_SECRET} is not set")
+    if public:
+        problems.extend(_public_problems(env))
+    else:
+        if operator_key is None:
+            problems.append(f"{ENV_OPERATOR_KEY} is not set")
+        if session_secret is None:
+            problems.append(f"{ENV_SESSION_SECRET} is not set")
     if production:
         if insecure_local:
             problems.append(f"{ENV_INSECURE_LOCAL} is set in a production environment")
         if demo:
             problems.append(f"{ENV_DEMO} is set in a production environment")
-        if session_secret is not None and (
-            len(session_secret) < PRODUCTION_MIN_SESSION_SECRET_LENGTH
+        if (
+            not public
+            and session_secret is not None
+            and (len(session_secret) < PRODUCTION_MIN_SESSION_SECRET_LENGTH)
         ):
             problems.append(
                 f"{ENV_SESSION_SECRET} is shorter than "
                 f"{PRODUCTION_MIN_SESSION_SECRET_LENGTH} characters"
             )
-        if operator_key is not None and len(operator_key) < PRODUCTION_MIN_OPERATOR_KEY_LENGTH:
+        if (
+            not public
+            and operator_key is not None
+            and len(operator_key) < PRODUCTION_MIN_OPERATOR_KEY_LENGTH
+        ):
             problems.append(
                 f"{ENV_OPERATOR_KEY} is shorter than "
                 f"{PRODUCTION_MIN_OPERATOR_KEY_LENGTH} characters"
@@ -212,6 +250,7 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         lifecycle_base_url=lifecycle_base_url,
         insecure_local=insecure_local,
         demo=demo,
+        public=public,
         production=production,
         problems=tuple(problems),
     )

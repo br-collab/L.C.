@@ -249,6 +249,14 @@ def _logged_in(state: CopState) -> bool:
     return hmac.compare_digest(stored, expected)
 
 
+def _public_guard() -> tuple[str, int, dict[str, str]] | None:
+    if request.endpoint in {"login_submit", "logout"}:
+        return "Not found", 404, {"Content-Type": "text/plain; charset=utf-8"}
+    if request.method not in {"GET", "HEAD", "OPTIONS"}:
+        return "Method not allowed", 405, {"Content-Type": "text/plain; charset=utf-8"}
+    return None
+
+
 def _health_source(
     observations: list[Observation[Any]], now: datetime, *, variable: str | None = None
 ) -> dict[str, object]:
@@ -351,6 +359,7 @@ def create_app(  # noqa: PLR0915 - route definitions read best in one place
         work_badges=WORK_STATUS_BADGES,
         stale_minutes=int(STALE_AFTER.total_seconds() // 60),
         reload_seconds=PAGE_RELOAD_SECONDS,
+        public=settings.public,
     )
 
     @app.before_request
@@ -363,6 +372,8 @@ def create_app(  # noqa: PLR0915 - route definitions read best in one place
         if state.refresher is None:
             body = f"{PRODUCT_NAME} is misconfigured and refuses to serve pages."
             return body, 503, {"Content-Type": "text/plain; charset=utf-8"}
+        if state.settings.public:
+            return _public_guard()
         if request.endpoint in _PUBLIC_ENDPOINTS:
             return None
         if not _logged_in(state):
@@ -375,6 +386,8 @@ def create_app(  # noqa: PLR0915 - route definitions read best in one place
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
+        if _state().settings.public:
+            response.headers["X-Robots-Tag"] = "noindex, nofollow, noarchive"
         if not _state().settings.insecure_local:
             response.headers["Strict-Transport-Security"] = "max-age=31536000"
         if request.endpoint != "static":
@@ -440,6 +453,8 @@ def create_app(  # noqa: PLR0915 - route definitions read best in one place
 
     @app.get("/login")
     def login_form() -> str | BaseResponse:
+        if _state().settings.public:
+            return redirect(url_for("dashboard"))
         if _logged_in(_state()):
             return redirect(url_for("dashboard"))
         return render_template("login.html", error=None)
