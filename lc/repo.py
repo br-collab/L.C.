@@ -68,6 +68,32 @@ class RepoDocument(_Wire):
     gcf_allocation: GcfAllocation | None
 
 
+class CatoRepoEvidence(_Wire):
+    """Stable citation to the CATO-D1 cleared-repo context, not a price observation."""
+
+    source_repository: Literal["br-collab/Cato-FICC-MCP"] = "br-collab/Cato-FICC-MCP"
+    source_commit: Literal["fa9d709384fe2d1a49f93e4ef24cb2b782037067"] = (
+        "fa9d709384fe2d1a49f93e4ef24cb2b782037067"
+    )
+    tool: Literal["get_cleared_repo_segments"] = "get_cleared_repo_segments"
+    source: Literal["OFR Short-term Funding Monitor"] = "OFR Short-term Funding Monitor"
+    context_only: Literal[True] = True
+    series_ids: tuple[str, ...] = (
+        "REPO-DVP_AR_OO-P",
+        "REPO-DVP_TV_OO-P",
+        "REPO-DVP_AR_TOT-P",
+        "REPO-DVP_TV_TOT-P",
+        "REPO-GCF_AR_OO-P",
+        "REPO-GCF_TV_OO-P",
+        "REPO-GCF_AR_TOT-P",
+        "REPO-GCF_TV_TOT-P",
+        "REPO-TRI_AR_OO-P",
+        "REPO-TRI_TV_OO-P",
+        "REPO-TRI_AR_TOT-P",
+        "REPO-TRI_TV_TOT-P",
+    )
+
+
 class RepoLifecycleDocument(_Wire):
     schema_version: Literal["harness_c2.ficc_repo_lifecycle/1"] = "harness_c2.ficc_repo_lifecycle/1"
     taken_at: datetime
@@ -75,7 +101,7 @@ class RepoLifecycleDocument(_Wire):
     lifecycle_id: LifecycleId
     synthetic: Literal[True] = True
     source_payload_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-    cato_evidence: None = None
+    cato_evidence: CatoRepoEvidence | None = None
     repo: RepoDocument
 
 
@@ -98,6 +124,7 @@ def repo_lifecycle_publication(
         scenario_id=scenario_id,
         lifecycle_id=lifecycle_id,
         source_payload_digest=source_payload_digest,
+        cato_evidence=CatoRepoEvidence(),
         repo=document,
     )
 
