@@ -1,0 +1,115 @@
+{
+  "schema_version": "lc.oms_orders_allocations/1",
+  "as_of": "2026-10-22T14:00:00Z",
+  "synthetic": true,
+  "orders": [
+    {
+      "order_id": "ord_11111111111111111111111111",
+      "terms": {
+        "account_id": "CUSTOMER-1",
+        "strategy_id": "OMS-1",
+        "issue": "ACME",
+        "side": "BUY",
+        "order_type": "LIMIT",
+        "time_in_force": "DAY",
+        "control_price": "100",
+        "limit_price": "100",
+        "stop_price": null,
+        "fractional_enabled": false,
+        "allocation_plan_digest": null
+      },
+      "states": [
+        "PARENT_ACTIVE",
+        "MARKET_ACCESS_PASSED",
+        "PARTIALLY_EXECUTED",
+        "EXECUTED",
+        "ALLOCATED"
+      ],
+      "gate_decisions": [
+        {
+          "order_id": "ord_11111111111111111111111111",
+          "order_event_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+          "disposition": "PASS",
+          "terminal": false,
+          "checks": [],
+          "limits_version": "OMS-1",
+          "limits_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+          "capacity_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+          "capacity_journal_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+          "capacity_margin_result_digest": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+          "locates_digest": "sha256:6666666666666666666666666666666666666666666666666666666666666666"
+        }
+      ]
+    }
+  ],
+  "allocations": [
+    {
+      "allocation_id": "alc_11111111111111111111111111",
+      "trade_ids": [
+        "T1",
+        "T2"
+      ],
+      "entries": [
+        {
+          "account": "A",
+          "quantity": "50",
+          "average_price": "101",
+          "consideration": "5050"
+        },
+        {
+          "account": "B",
+          "quantity": "30",
+          "average_price": "101",
+          "consideration": "3030"
+        },
+        {
+          "account": "C",
+          "quantity": "20",
+          "average_price": "101",
+          "consideration": "2020"
+        }
+      ],
+      "executed_quantity": "100",
+      "executed_consideration": "10100",
+      "average_price": "101",
+      "rule": "PRO_RATA",
+      "rounding_method": "LARGEST_REMAINDER",
+      "residual_assignments": [],
+      "allocation_plan_digest": "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+    }
+  ],
+  "firm_control_events": [
+    {
+      "halt_id": "HALT-OMS-1",
+      "scope": "FIRM",
+      "scope_id": null,
+      "authority": {
+        "actor_id": "act_11111111111111111111111111",
+        "actor_kind": "HUMAN",
+        "role": "firm-control-authority",
+        "entitlement_refs": [
+          "OMS_KILL_SWITCH"
+        ],
+        "authenticated": true
+      },
+      "recorded_at": "2026-10-22T14:00:00Z",
+      "released_at": null
+    },
+    {
+      "halt_id": "HALT-OMS-1",
+      "scope": "FIRM",
+      "scope_id": null,
+      "authority": {
+        "actor_id": "act_11111111111111111111111111",
+        "actor_kind": "HUMAN",
+        "role": "firm-control-authority",
+        "entitlement_refs": [
+          "OMS_KILL_SWITCH"
+        ],
+        "authenticated": true
+      },
+      "recorded_at": "2026-10-22T14:00:00Z",
+      "released_at": "2026-10-22T14:00:00Z"
+    }
+  ]
+}
