@@ -40,7 +40,10 @@ runs:
         cp "$RUNNER_TEMP/lifecycle-publication-output/"*.json "$publish_dir/"
         git -C "$publish_dir" config user.name "github-actions[bot]"
         git -C "$publish_dir" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-        git -C "$publish_dir" add funded.json unfunded.json
+        # The test suite is the single producer for this directory. Stage every
+        # validated lifecycle document it emits so new methods cannot pass CI
+        # while remaining absent from the human-visible publication branch.
+        git -C "$publish_dir" add -- '*.json'
         git -C "$publish_dir" diff --cached --quiet && exit 0
         git -C "$publish_dir" commit -m "Publish lifecycle documents"
         git -C "$publish_dir" push origin HEAD:lifecycle-document
