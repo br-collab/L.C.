@@ -82,14 +82,16 @@ class CapacityAccount(_Record):
     account_id: str
     buying_power: Decimal
     margin_excess: Decimal
+    margin_result_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
     positions: tuple[CapacityPosition, ...]
 
 
 class CapacityDocument(_Record):
-    schema_version: Literal["atreides.equities_account_capacity/1"]
+    schema_version: Literal["atreides.equities_account_capacity/2"]
     as_of: datetime
     maximum_age_seconds: int
     synthetic: Literal[True]
+    journal_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
     accounts: tuple[CapacityAccount, ...]
 
 
@@ -151,6 +153,8 @@ class MarketAccessDecision(_Record):
     limits_version: str
     limits_digest: str
     capacity_digest: str | None
+    capacity_journal_digest: str | None
+    capacity_margin_result_digest: str | None
     locates_digest: str | None
 
 
@@ -291,6 +295,8 @@ class MarketAccessGate:
             limits_version=limits.version,
             limits_digest=digest(limits),
             capacity_digest=capacity_input.payload_digest if capacity_input else None,
+            capacity_journal_digest=capacity.journal_digest if capacity else None,
+            capacity_margin_result_digest=account.margin_result_digest if account else None,
             locates_digest=locates_input.payload_digest if locates_input else None,
         )
         self.decisions.append(decision)

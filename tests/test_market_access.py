@@ -38,15 +38,17 @@ def attested(model: BaseModel) -> AttestedInput:
 def capacity(as_of: datetime = NOW) -> AttestedInput:
     return attested(
         CapacityDocument(
-            schema_version="atreides.equities_account_capacity/1",
+            schema_version="atreides.equities_account_capacity/2",
             as_of=as_of,
             maximum_age_seconds=300,
             synthetic=True,
+            journal_digest="sha256:" + "1" * 64,
             accounts=(
                 CapacityAccount(
                     account_id="A",
                     buying_power=Decimal(10000),
                     margin_excess=Decimal(5000),
+                    margin_result_digest="sha256:" + "2" * 64,
                     positions=(CapacityPosition(issue="ACME", quantity=Decimal(100)),),
                 ),
             ),
@@ -135,6 +137,8 @@ def test_pass_duplicate_and_limit_change_record() -> None:
     gate = MarketAccessGate()
     first = decide(gate, order())
     assert first.disposition is Disposition.PASS and not first.terminal
+    assert first.capacity_journal_digest == "sha256:" + "1" * 64
+    assert first.capacity_margin_result_digest == "sha256:" + "2" * 64
     failed(decide(gate, order()), "DUPLICATE", "DUPLICATE_ORDER")
     change = record_limit_change(limits(), limits(version="2"), NOW)
     assert change.previous_version == "1" and change.manifest_digest.startswith("sha256:")
