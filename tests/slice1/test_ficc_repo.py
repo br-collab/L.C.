@@ -127,6 +127,14 @@ def test_ci_publishes_dvp_gcf_and_mixed_cash_repo_documents() -> None:
             lifecycle_id=LID,
             taken_at=AT,
         )
+        assert repo_pub.cato_evidence is not None
+        assert repo_pub.cato_evidence.source == "OFR Short-term Funding Monitor"
+        assert repo_pub.cato_evidence.tool == "get_cleared_repo_segments"
+        assert {series_id.split("_")[0] for series_id in repo_pub.cato_evidence.series_ids} == {
+            "REPO-DVP",
+            "REPO-GCF",
+            "REPO-TRI",
+        }
         (path / name).write_bytes(repo_lifecycle_publication_bytes(repo_pub) + b"\n")
     dvp = repo(RepoService.DVP)
     cash = NovatedObligation(
