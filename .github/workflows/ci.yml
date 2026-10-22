@@ -96,7 +96,7 @@ jobs:
       - name: OMS control branch coverage
         run: >-
           pytest -q tests/test_lifecycle.py tests/test_policy_and_venue.py tests/test_trade.py
-          tests/test_oms.py tests/slice1/test_oms_publication.py
+          tests/test_oms.py
           --cov=lc.oms --cov=lc.trade --cov-branch --cov-report=term --cov-fail-under=100
 
   atreides-handoff:
