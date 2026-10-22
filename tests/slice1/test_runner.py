@@ -79,6 +79,7 @@ from lc.asset_profile import (
     AssetProfile,
 )
 from lc.clearing import GrossTrade, clear_gross
+from lc.events import LifecycleState
 from lc.lifecycle import (
     ChildOrder,
     EventInput,
@@ -87,6 +88,7 @@ from lc.lifecycle import (
     activate_parent,
     authorize_strategy,
     split_parent,
+    transition,
 )
 from lc.obligation import (
     AccountRole,
@@ -285,6 +287,14 @@ def _run(  # noqa: PLR0915 - the ordered lifecycle remains visible as one experi
     venue = VenueEmulator(seed=8).execute(venue_order, outcome=VenueOutcome.FILL, event_time=AT)
     assert isinstance(venue.event, Recorded) and isinstance(venue.report, Recorded)
     report = ExecutionReport.model_validate(venue.report.value.model_dump(mode="python"))
+    register = transition(
+        register,
+        order_id=child_id,
+        target=LifecycleState.MARKET_ACCESS_PASSED,
+        reason="pre-trade controls passed",
+        actor=ACTOR,
+        event=_event(20),
+    )
     applied = apply_execution(register, venue.event.value, report, actor=ACTOR, event=_event(21))
     register, captured = capture(applied.journal, report, internal, actor=ACTOR, event=_event(22))
     register, allocation = allocate(

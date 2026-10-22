@@ -15,7 +15,8 @@ from cannae_kernel.session import BusinessDate, MarketSession, SessionContext
 from test_lifecycle import NOW, _accepted, _actor, _event, _id, _payload
 
 from emulators.venue import VenueEmulator, VenueOrder, VenueOutcome
-from lc.lifecycle import ChildOrder, EventInput, LifecycleRegister, split_parent
+from lc.events import LifecycleState
+from lc.lifecycle import ChildOrder, EventInput, LifecycleRegister, split_parent, transition
 from lc.policy import (
     ExecutionPolicy,
     ExecutionReport,
@@ -52,7 +53,7 @@ def _evidence(
 
 
 def _child_register() -> LifecycleRegister:
-    return split_parent(
+    register = split_parent(
         _accepted(),
         actor=_actor(),
         children=(
@@ -63,6 +64,14 @@ def _child_register() -> LifecycleRegister:
             ),
         ),
     ).journal
+    return transition(
+        register,
+        order_id=OrderId(_id("ord_", 11)),
+        target=LifecycleState.MARKET_ACCESS_PASSED,
+        reason="pre-trade controls passed",
+        actor=_actor(),
+        event=_event(14),
+    )
 
 
 def _venue_order() -> VenueOrder:
@@ -183,4 +192,34 @@ def test_register_refuses_overfill_without_absorbing_it() -> None:
     )
     assert applied.disposition is Disposition.HOLD
     assert "exceeds remaining" in applied.reason
+    assert applied.journal.canonical_bytes() == before
+
+
+def test_execution_cannot_bypass_market_access() -> None:
+    register = split_parent(
+        _accepted(),
+        actor=_actor(),
+        children=(
+            ChildOrder(
+                order_id=OrderId(_id("ord_", 11)),
+                quantity=Decimal("100"),
+                event=_event(13),
+            ),
+        ),
+    ).journal
+    result = VenueEmulator(seed=7).execute(
+        _venue_order(), outcome=VenueOutcome.FILL, event_time=NOW
+    )
+    assert isinstance(result.event, Recorded) and isinstance(result.report, Recorded)
+    report = ExecutionReport.model_validate(result.report.value.model_dump(mode="python"))
+    before = register.canonical_bytes()
+    applied = apply_execution(
+        register,
+        result.event.value,
+        report,
+        actor=_actor(),
+        event=_event(20),
+    )
+    assert applied.disposition is Disposition.HOLD
+    assert applied.reason == "execution refused because market access has not passed"
     assert applied.journal.canonical_bytes() == before

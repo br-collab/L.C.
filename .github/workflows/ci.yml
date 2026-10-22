@@ -88,6 +88,9 @@ jobs:
           --ignore=tests/test_atreides_handoff.py --ignore=tests/test_option_handoff.py
           --ignore=tests/slice1
 
+      - name: Market access branch coverage
+        run: pytest -q tests/test_market_access.py --cov=lc.market_access --cov-branch --cov-report=term --cov-fail-under=100
+
   atreides-handoff:
     name: Atreides handoff (pinned real predicates)
     runs-on: ubuntu-24.04
@@ -180,8 +183,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: br-collab/Project-Atreides
-          # R16 producer commit; FIX-7 verified it is on Atreides main after PR #117.
-          ref: 123ce5a33a37f60cc40a7a436c4a7f993334331e
+          # EQ-1 producer commit; exact attested capacity, locate, books and protection bytes.
+          ref: e49669fbd0c84fc3ac597cd6a1b5e417149721e4
           path: .slice1/Project-Atreides
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7

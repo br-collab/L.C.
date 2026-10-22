@@ -442,7 +442,7 @@
 {% set lc = page.lifecycles %}
 <section class="panel" id="lifecycles" data-panel="lifecycles">
   <h2>Lifecycle board {{ badge(lc.tile.badge) }}</h2>
-  <p class="lede">One row per lifecycle object, one cell per contract checkpoint, then settled. The columns are the five frozen cross-domain contracts and are not a design choice: <code>ApprovedIntentEnvelope</code> &rarr; <code>ExecutionEvent</code> &rarr; <code>ClearingTransformation</code> &rarr; <code>SettlementObligationEnvelope</code> &rarr; <code>ObligationAcceptanceRecord</code>, then settled.</p>
+  <p class="lede">One row per lifecycle or clearing publication. Contract rows show the five frozen cross-domain checkpoints through settlement. EQ-1 rows show the published books, margin, market-access, capacity, locate and customer-protection evidence read from the same stable branch.</p>
 
   <p class="muted"><strong>Reading age:</strong> {{ lc.age_text }}.</p>
 

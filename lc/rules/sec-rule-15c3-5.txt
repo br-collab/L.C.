@@ -1,0 +1,4 @@
+Source: electronic Code of Federal Regulations, 17 CFR 240.15c3-5
+URL: https://www.ecfr.gov/current/title-17/chapter-II/part-240/section-240.15c3-5
+Retrieved: 2026-10-22
+Controls and supervisory procedures must be under the direct and exclusive control of the broker or dealer with market access. Controls must prevent orders exceeding credit thresholds, prevent erroneous orders, restrict access, and assure appropriate surveillance personnel receive post-trade execution reports. Annual review and chief executive certification are required.

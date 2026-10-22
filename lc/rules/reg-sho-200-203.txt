@@ -1,0 +1,4 @@
+Source: electronic Code of Federal Regulations, 17 CFR 242.200 and 242.203
+URL: https://www.ecfr.gov/current/title-17/chapter-II/part-242
+Retrieved: 2026-10-22
+Sell orders must be marked long, short, or short exempt. Before effecting a short sale, a broker-dealer must borrow, arrange to borrow, or have reasonable grounds to believe the security can be borrowed for delivery when due.
