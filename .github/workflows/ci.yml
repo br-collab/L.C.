@@ -183,8 +183,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: br-collab/Project-Atreides
-          # EQ-1 producer commit; exact attested capacity, locate, books and protection bytes.
-          ref: e49669fbd0c84fc3ac597cd6a1b5e417149721e4
+          # EQ-1B producer commit; exact journal-derived capacity, margin, books and protection bytes.
+          ref: b11048bc1dcc3adce6885e517312aacfe31cbf02
           path: .slice1/Project-Atreides
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7

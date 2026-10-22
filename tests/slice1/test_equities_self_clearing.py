@@ -29,7 +29,7 @@ def _order(number: str, **changes: object) -> ChildRelease:
         "account_id": "CUSTOMER-1",
         "issue": "ACME",
         "side": "BUY",
-        "quantity": Decimal(10),
+        "quantity": Decimal(1),
         "limit_price": Decimal(100),
         "reference_price": Decimal(100),
         "submitted_at": AT,
@@ -62,7 +62,7 @@ def _run() -> tuple[dict[str, bytes], bytes]:
     gate = MarketAccessGate()
     orders = (
         _order("1"),
-        _order("2", quantity=Decimal(60)),
+        _order("2", quantity=Decimal(2)),
         _order("3", limit_price=Decimal(120)),
         _order("4", side="SELL", sell_mark=SellMark.SHORT),
         _order("5", side="SELL", sell_mark=SellMark.SHORT, locate_id="LOC-EQ1-1"),
@@ -93,6 +93,16 @@ def test_eq1_real_crossing_and_required_decisions_replay() -> None:
     assert _run() == (publications, decisions)
     parsed = json.loads(decisions)
     outcomes = parsed["decisions"]
+    capacity_envelope = json.loads(publications["equities-account-capacity.json"])
+    capacity = json.loads(capacity_envelope["payload"])
+    books = json.loads(publications["equities-books.json"])
+    margin = json.loads(publications["equities-margin.json"])
+    assert capacity["journal_digest"] == books["journal_digest"] == margin["journal_digest"]
+    assert outcomes[0]["capacity_journal_digest"] == books["journal_digest"]
+    assert (
+        outcomes[0]["capacity_margin_result_digest"]
+        == capacity["accounts"][0]["margin_result_digest"]
+    )
     assert outcomes[0]["disposition"] == Disposition.PASS.value
     assert (
         next(c for c in outcomes[1]["checks"] if c["code"] == "ACCOUNT_CREDIT")["passed"] is False
