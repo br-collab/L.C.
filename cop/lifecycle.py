@@ -168,6 +168,7 @@ class LifecycleRow:
     lifecycle_id: str
     cells: tuple[LifecycleCell, ...]
     taken_at: datetime | None = None
+    clearing_method: str | None = None
 
     @property
     def disposition(self) -> Disposition:
@@ -329,6 +330,7 @@ class _LifecycleDocument(_WireModel):
     scenario_id: ScenarioId
     lifecycle_id: LifecycleId
     synthetic: Literal[True]
+    clearing_method: Literal["BILATERAL_GROSS"]
     stages: tuple[_StageRow, ...]
 
 
@@ -387,7 +389,10 @@ def parse_document(raw: bytes) -> LifecycleRow:
                 )
             )
     return LifecycleRow(
-        lifecycle_id=str(document.lifecycle_id), cells=tuple(cells), taken_at=document.taken_at
+        lifecycle_id=str(document.lifecycle_id),
+        cells=tuple(cells),
+        taken_at=document.taken_at,
+        clearing_method=document.clearing_method,
     )
 
 

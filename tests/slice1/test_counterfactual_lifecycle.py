@@ -50,6 +50,7 @@ def test_real_emitter_bytes_feed_the_real_parser_without_translation() -> None:
     document = parse_outcomes(raw)
     assert document.scenario_digest == digest(_market())
     assert len(document.candidates) == 2
+    assert {candidate.clearing_method for candidate in document.candidates} == {"BILATERAL_GROSS"}
 
 
 def test_same_scenario_produces_two_complete_attributable_outcome_vectors() -> None:
@@ -64,7 +65,10 @@ def test_same_scenario_produces_two_complete_attributable_outcome_vectors() -> N
     )
     assert result.price_only.selected_candidate_id == "venue-a"
     assert result.settlement_aware.selected_candidate_id == "venue-b"
-    assert set(result.differing_variables) == set(CandidateOutcome.model_fields) - {"candidate_id"}
+    assert set(result.differing_variables) == set(CandidateOutcome.model_fields) - {
+        "candidate_id",
+        "clearing_method",
+    }
     assert result.price_only.outcome.execution_price < (
         result.settlement_aware.outcome.execution_price
     )

@@ -86,10 +86,8 @@ def test_cash_perturbation_fails_loudly() -> None:
         assert_gross_conservation((trade,), (perturbed,))
 
 
-def test_novated_netted_names_the_deferred_slice() -> None:
-    with pytest.raises(
-        ClearingPathNotBuiltError, match="NOVATED_NETTED is unbuilt until Wave 5 slice 2"
-    ):
+def test_novated_netted_is_directed_to_the_distinct_ficc_consumer() -> None:
+    with pytest.raises(ClearingPathNotBuiltError, match="consume the attested FICC result"):
         clear_gross(
             lifecycle_id=LIFECYCLE_ID,
             trades=(_trade("trade-a", OBLIGATION_A, "100", "99750.25"),),
@@ -100,10 +98,10 @@ def test_novated_netted_names_the_deferred_slice() -> None:
 @pytest.mark.parametrize(
     "access_model", [AccessModel.SPONSORED, AccessModel.AGENT, AccessModel.FICC_DIRECT]
 )
-def test_non_bilateral_access_names_wave_5_and_atreides_t5(
+def test_non_bilateral_access_is_not_misrepresented_as_gross(
     access_model: AccessModel,
 ) -> None:
-    with pytest.raises(ClearingPathNotBuiltError, match="Wave 5 slice 2 and Atreides T5"):
+    with pytest.raises(ClearingPathNotBuiltError, match="not valid for bilateral gross"):
         clear_gross(
             lifecycle_id=LIFECYCLE_ID,
             trades=(_trade("trade-a", OBLIGATION_A, "100", "99750.25"),),
