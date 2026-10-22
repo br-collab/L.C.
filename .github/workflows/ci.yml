@@ -89,7 +89,15 @@ jobs:
           --ignore=tests/slice1
 
       - name: Market access branch coverage
-        run: pytest -q tests/test_market_access.py --cov=lc.market_access --cov-branch --cov-report=term --cov-fail-under=100
+        run: >-
+          pytest -q tests/test_market_access.py tests/test_oms.py
+          --cov=lc.market_access --cov-branch --cov-report=term --cov-fail-under=100
+
+      - name: OMS control branch coverage
+        run: >-
+          pytest -q tests/test_lifecycle.py tests/test_policy_and_venue.py tests/test_trade.py
+          tests/test_oms.py
+          --cov=lc.oms --cov=lc.trade --cov-branch --cov-report=term --cov-fail-under=100
 
   atreides-handoff:
     name: Atreides handoff (pinned real predicates)

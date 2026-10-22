@@ -16,7 +16,7 @@ from cannae_kernel.events import verify
 from cannae_kernel.ids import ActorId, EventId, IntentId, LifecycleId, OrderId
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from lc.events import LifecycleState, OrderEvent, OrderEventPayload, seal_order_event
+from lc.events import LifecycleState, OrderEvent, OrderEventPayload, OrderTerms, seal_order_event
 
 __all__ = [
     "ApprovedIntentPayload",
@@ -188,6 +188,7 @@ class ChildOrder(_Record):
     order_id: OrderId
     quantity: Decimal = Field(gt=0)
     event: EventInput
+    terms: OrderTerms | None = None
 
 
 class OrderSnapshot(_Record):
@@ -195,6 +196,7 @@ class OrderSnapshot(_Record):
     quantity: Decimal
     executed_quantity: Decimal = Decimal(0)
     parent_order_id: OrderId | None
+    terms: OrderTerms | None = None
 
 
 class RegisterSnapshot(_Record):
@@ -215,6 +217,7 @@ def _append(  # noqa: PLR0913 - every sealed-event field remains explicit
     reason: str,
     quantity: Decimal,
     rule_version: str,
+    terms: OrderTerms | None = None,
 ) -> LifecycleRegister:
     sealed = seal_order_event(
         event_id=event.event_id,
@@ -231,6 +234,7 @@ def _append(  # noqa: PLR0913 - every sealed-event field remains explicit
             state=state,
             reason=reason,
             quantity=Recorded[Decimal](value=quantity),
+            terms=terms,
         ),
         prior_event_digest=register.events[-1].envelope_digest if register.events else None,
     )
@@ -380,6 +384,7 @@ def split_parent(
             reason="child order activated from conserved parent split",
             quantity=child.quantity,
             rule_version="lc-m3-split/1.0",
+            terms=child.terms,
         )
     return outcome.model_copy(update={"journal": register})
 
@@ -388,14 +393,29 @@ _ALLOWED = {
     LifecycleState.PARENT_ACTIVE: {
         LifecycleState.MARKET_ACCESS_PASSED,
         LifecycleState.MARKET_ACCESS_REFUSED,
+        LifecycleState.CANCELLED,
+        LifecycleState.REPLACED,
+        LifecycleState.EXPIRED,
     },
     LifecycleState.MARKET_ACCESS_PASSED: {
         LifecycleState.PARTIALLY_EXECUTED,
         LifecycleState.EXECUTED,
+        LifecycleState.CANCELLED,
+        LifecycleState.REPLACED,
+        LifecycleState.EXPIRED,
     },
     LifecycleState.PARTIALLY_EXECUTED: {
         LifecycleState.PARTIALLY_EXECUTED,
         LifecycleState.EXECUTED,
+        LifecycleState.CANCELLED,
+        LifecycleState.REPLACED,
+        LifecycleState.EXPIRED,
+    },
+    LifecycleState.CANCELLED: {LifecycleState.EXCEPTION_OPEN},
+    LifecycleState.EXPIRED: {LifecycleState.EXCEPTION_OPEN},
+    LifecycleState.REPLACED: {
+        LifecycleState.MARKET_ACCESS_PASSED,
+        LifecycleState.MARKET_ACCESS_REFUSED,
     },
     LifecycleState.EXECUTED: {LifecycleState.TRADE_CAPTURED},
     LifecycleState.TRADE_CAPTURED: {LifecycleState.ALLOCATED},
@@ -420,6 +440,7 @@ def transition(  # noqa: PLR0913 - transition evidence is explicit at the call s
     actor: ActorRef,
     event: EventInput,
     quantity: Decimal | None = None,
+    terms: OrderTerms | None = None,
 ) -> LifecycleRegister:
     snapshot = replay(register.events)
     current = snapshot.orders[order_id]
@@ -442,6 +463,7 @@ def transition(  # noqa: PLR0913 - transition evidence is explicit at the call s
         reason=recorded_reason,
         quantity=quantity if quantity is not None else current.quantity,
         rule_version="lc-m3-lifecycle/1.0",
+        terms=terms if terms is not None else current.terms,
     )
 
 
@@ -473,6 +495,7 @@ def record_not_reached(  # noqa: PLR0913 - failed transition evidence stays expl
         reason=f"{requested.value} not reached: {reason}",
         quantity=current.quantity,
         rule_version="lc-m3-lifecycle/1.0",
+        terms=current.terms,
     )
 
 
@@ -499,6 +522,7 @@ def replay(events: tuple[OrderEvent, ...]) -> RegisterSnapshot:
                 else (prior.executed_quantity if prior is not None else Decimal(0))
             ),
             parent_order_id=payload.parent_order_id,
+            terms=payload.terms if payload.terms is not None else (prior.terms if prior else None),
         )
     return RegisterSnapshot(
         lifecycle_id=register.lifecycle_id,

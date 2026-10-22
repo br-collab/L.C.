@@ -9,9 +9,21 @@ from decimal import Decimal
 from importlib import import_module
 from pathlib import Path
 
+from cannae_kernel.absence import Recorded
+from cannae_kernel.actor import ActorKind, ActorRef
+from cannae_kernel.clocks import EventTimes
 from cannae_kernel.disposition import Disposition
-from cannae_kernel.ids import OrderId
+from cannae_kernel.ids import ActorId, EventId, IntentId, LifecycleId, OrderId
 
+from lc.events import (
+    LifecycleState,
+    OrderEventPayload,
+    OrderTerms,
+    OrderType,
+    TimeInForce,
+    seal_order_event,
+)
+from lc.lifecycle import LifecycleRegister
 from lc.market_access import (
     ChildRelease,
     LimitsManifest,
@@ -35,7 +47,64 @@ def _order(number: str, **changes: object) -> ChildRelease:
         "submitted_at": AT,
     }
     fields.update(changes)
-    return ChildRelease.model_validate(fields)
+    order_id = fields.pop("order_id")
+    quantity = fields.pop("quantity")
+    reference_price = fields.pop("reference_price")
+    submitted_at = fields.pop("submitted_at")
+    sell_mark = fields.pop("sell_mark", None)
+    locate_id = fields.pop("locate_id", None)
+    limit_price = fields.pop("limit_price")
+    terms = OrderTerms.model_validate(
+        {
+            "account_id": fields.pop("account_id"),
+            "strategy_id": "EQ1-STRATEGY",
+            "issue": fields.pop("issue"),
+            "side": fields.pop("side"),
+            "order_type": OrderType.LIMIT,
+            "time_in_force": TimeInForce.DAY,
+            "control_price": limit_price,
+            "limit_price": limit_price,
+        }
+    )
+    actor = ActorRef(
+        actor_id=ActorId("act_" + "7" * 26),
+        actor_kind=ActorKind.DETERMINISTIC_SERVICE,
+        role="eq1-market-access",
+        entitlement_refs=(),
+        authenticated=True,
+    )
+    times = EventTimes(event_time=AT, observation_time=AT, processing_time=AT, decision_time=AT)
+    event = seal_order_event(
+        event_id=EventId("evt_0" + number * 25),
+        lifecycle_id=LifecycleId("lif_" + number * 26),
+        parent_ids=(),
+        rule_version="eq1b-market-access/2",
+        times=times,
+        actor=actor,
+        idempotency_key=f"eq1-order-{number}",
+        payload=OrderEventPayload.model_validate(
+            {
+                "order_id": order_id,
+                "parent_order_id": None,
+                "intent_id": IntentId("int_" + number * 26),
+                "state": LifecycleState.PARENT_ACTIVE,
+                "reason": "sealed EQ-1 order terms",
+                "quantity": Recorded.model_validate({"value": quantity}),
+                "terms": terms,
+            }
+        ),
+        prior_event_digest=None,
+    )
+    return ChildRelease.model_validate(
+        {
+            "order_event": event,
+            "lifecycle_register": LifecycleRegister(lifecycle_id=event.lifecycle_id).append(event),
+            "reference_price": reference_price,
+            "sell_mark": sell_mark,
+            "locate_id": locate_id,
+            "submitted_at": submitted_at,
+        }
+    )
 
 
 def _run() -> tuple[dict[str, bytes], bytes]:
@@ -73,10 +142,8 @@ def _run() -> tuple[dict[str, bytes], bytes]:
             limits=limits,
             capacity_input=capacity,
             locates_input=locates,
-            firm_open_order_notional=Decimal(0),
-            account_open_order_notional=(Decimal(0) if index != 1 else Decimal(1)),
         )
-        for index, order in enumerate(orders)
+        for order in orders
     )
     document = {
         "schema_version": "lc.equities_market_access/1",

@@ -5,11 +5,22 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
+from cannae_kernel.absence import Recorded
 from cannae_kernel.canonical import canonical_bytes, digest_bytes
 from cannae_kernel.disposition import Disposition
-from cannae_kernel.ids import OrderId
+from cannae_kernel.ids import EventId, IntentId, LifecycleId, OrderId
 from pydantic import BaseModel
+from test_lifecycle import _actor, _event, _id
 
+from lc.events import (
+    LifecycleState,
+    OrderEventPayload,
+    OrderTerms,
+    OrderType,
+    TimeInForce,
+    seal_order_event,
+)
+from lc.lifecycle import LifecycleRegister
 from lc.market_access import (
     AttestedInput,
     CapacityAccount,
@@ -96,6 +107,7 @@ def order(**changes: object) -> ChildRelease:
     fields: dict[str, object] = {
         "order_id": ORDER,
         "account_id": "A",
+        "strategy_id": "STRATEGY-1",
         "issue": "ACME",
         "side": "BUY",
         "quantity": Decimal(10),
@@ -104,7 +116,57 @@ def order(**changes: object) -> ChildRelease:
         "submitted_at": NOW,
     }
     fields.update(changes)
-    return ChildRelease.model_validate(fields)
+    order_id = fields.pop("order_id")
+    quantity = fields.pop("quantity")
+    reference_price = fields.pop("reference_price")
+    submitted_at = fields.pop("submitted_at")
+    sell_mark = fields.pop("sell_mark", None)
+    locate_id = fields.pop("locate_id", None)
+    terms = OrderTerms.model_validate(
+        {
+            "account_id": fields.pop("account_id"),
+            "strategy_id": fields.pop("strategy_id"),
+            "issue": fields.pop("issue"),
+            "side": fields.pop("side"),
+            "order_type": OrderType.LIMIT,
+            "time_in_force": TimeInForce.DAY,
+            "limit_price": fields.pop("limit_price"),
+            "control_price": changes.get("limit_price", Decimal(100)),
+        }
+    )
+    assert not fields
+    event = seal_order_event(
+        event_id=EventId(_id("evt_", 90)),
+        lifecycle_id=LifecycleId(_id("lif_", 90)),
+        parent_ids=(),
+        rule_version="oms1-test/1",
+        times=_event(90).times,
+        actor=_actor(),
+        idempotency_key="oms1-order",
+        payload=OrderEventPayload.model_validate(
+            {
+                "order_id": order_id,
+                "parent_order_id": None,
+                "intent_id": IntentId(_id("int_", 90)),
+                "state": LifecycleState.PARENT_ACTIVE,
+                "reason": "sealed test order",
+                "quantity": Recorded.model_validate({"value": quantity}),
+                "terms": terms,
+            }
+        ),
+        prior_event_digest=None,
+    )
+    register = LifecycleRegister(lifecycle_id=event.lifecycle_id).append(event)
+    return ChildRelease.model_validate(
+        {
+            "order_event": event,
+            "lifecycle_register": register,
+            "reference_price": reference_price,
+            "sell_mark": sell_mark,
+            "locate_id": locate_id,
+            "submitted_at": submitted_at,
+        }
+    )
 
 
 def decide(
@@ -117,13 +179,12 @@ def decide(
     firm: Decimal = Decimal(0),
     account: Decimal = Decimal(0),
 ):
+    del firm, account
     return gate.evaluate(
         item,
         limits=lim or limits(),
         capacity_input=capacity() if cap is None else cap,
         locates_input=locates() if loc is None else loc,
-        firm_open_order_notional=firm,
-        account_open_order_notional=account,
     )
 
 
@@ -227,8 +288,6 @@ def test_capacity_missing_tampered_stale_and_unreadable() -> None:
         limits=limits(),
         capacity_input=None,
         locates_input=locates(),
-        firm_open_order_notional=Decimal(0),
-        account_open_order_notional=Decimal(0),
     )
     failed(missing, "CAPACITY_DOCUMENT", "DOCUMENT_MISSING")
     good = capacity()
@@ -265,8 +324,6 @@ def test_locate_refusals(loc_input, order_changes, reason) -> None:
         limits=limits(),
         capacity_input=capacity(),
         locates_input=loc_input,
-        firm_open_order_notional=Decimal(0),
-        account_open_order_notional=Decimal(0),
     )
     failed(decision, "LOCATE", reason)
 
@@ -279,8 +336,6 @@ def test_locate_consumes_and_cannot_be_reused_past_quantity() -> None:
         limits=limits(),
         capacity_input=capacity(),
         locates_input=document,
-        firm_open_order_notional=Decimal(0),
-        account_open_order_notional=Decimal(0),
     )
     assert first.disposition is Disposition.PASS
     second = gate.evaluate(
@@ -295,7 +350,5 @@ def test_locate_consumes_and_cannot_be_reused_past_quantity() -> None:
         limits=limits(),
         capacity_input=capacity(),
         locates_input=document,
-        firm_open_order_notional=Decimal(0),
-        account_open_order_notional=Decimal(0),
     )
     failed(second, "LOCATE", "LOCATE_INSUFFICIENT")
