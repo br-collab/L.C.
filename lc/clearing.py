@@ -4,23 +4,27 @@ from __future__ import annotations
 
 from decimal import Decimal
 from enum import StrEnum
-from typing import Self
+from typing import Literal, Self
 
-from cannae_kernel.canonical import digest
+from cannae_kernel.canonical import digest, digest_bytes
 from cannae_kernel.delivery import ClearingMethod
 from cannae_kernel.envelopes import ClearingTransformation
 from cannae_kernel.ids import LifecycleId, ObligationId
 from cannae_kernel.provenance import Provenance
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from lc.ficc import FiccGsdDocument, consume_ficc_gsd_result
+
 __all__ = [
     "AccessModel",
     "ClearingPathNotBuiltError",
     "ConservationResult",
+    "FiccClearingResult",
     "GrossClearingResult",
     "GrossTrade",
     "assert_gross_conservation",
     "clear_gross",
+    "consume_and_record_ficc",
 ]
 
 
@@ -36,7 +40,7 @@ class AccessModel(StrEnum):
 
 
 class ClearingPathNotBuiltError(ValueError):
-    """The requested clearing path belongs to a later, named programme slice."""
+    """The requested clearing path is unsupported by this specific operation."""
 
 
 class GrossTrade(_Record):
@@ -99,6 +103,73 @@ class GrossClearingResult(_Record):
         return self
 
 
+class FiccClearingResult(_Record):
+    """L.C.'s recorded reading of an attested Atreides FICC result."""
+
+    method: Literal[ClearingMethod.NOVATED_NETTED] = ClearingMethod.NOVATED_NETTED
+    method_label: Literal["FICC_GSD_NOVATED_NETTED"] = "FICC_GSD_NOVATED_NETTED"
+    access_model: AccessModel
+    clearing_agency: Literal["FICC_GSD"] = "FICC_GSD"
+    rule_set_version: str
+    processing_calendar_id: str
+    input_trade_ids: tuple[str, ...]
+    input_obligation_ids: tuple[str, ...]
+    output_position_count: int = Field(gt=0)
+    net_quantity: Decimal
+
+
+def _record_ficc_netted(
+    *, lifecycle_id: LifecycleId, document: FiccGsdDocument, source_payload_digest: str
+) -> tuple[ClearingTransformation, FiccClearingResult]:
+    """Record a verified FICC result; parsing and digest verification happen upstream."""
+
+    access_models = {
+        "FICC_DIRECT": AccessModel.FICC_DIRECT,
+        "FICC_SPONSORED": AccessModel.SPONSORED,
+        "FICC_AGENT": AccessModel.AGENT,
+    }
+    result = FiccClearingResult(
+        access_model=access_models[document.access_path],
+        rule_set_version=document.rule_set_version,
+        processing_calendar_id=document.processing_calendar_id,
+        input_trade_ids=tuple(
+            sorted(
+                trade_id
+                for obligation in document.novated_obligations
+                for trade_id in obligation.trade_ids
+            )
+        ),
+        input_obligation_ids=tuple(
+            sorted(obligation.obligation_id for obligation in document.novated_obligations)
+        ),
+        output_position_count=len(document.net_settlement_obligations),
+        net_quantity=sum(
+            (position.net_quantity for position in document.net_settlement_obligations), Decimal(0)
+        ),
+    )
+    transformation = ClearingTransformation(
+        lifecycle_id=lifecycle_id,
+        input_digests=(source_payload_digest,),
+        output_digest=digest(result),
+        rule_set_version=document.rule_set_version,
+        provenance=Provenance.POLICY_RESULT,
+    )
+    return transformation, result
+
+
+def consume_and_record_ficc(
+    *, lifecycle_id: LifecycleId, header_bytes: bytes, payload: bytes
+) -> tuple[ClearingTransformation, FiccClearingResult]:
+    """Verify exact Atreides bytes and record their FICC netting result atomically."""
+
+    document = consume_ficc_gsd_result(header_bytes, payload)
+    return _record_ficc_netted(
+        lifecycle_id=lifecycle_id,
+        document=document,
+        source_payload_digest=digest_bytes(payload),
+    )
+
+
 def assert_gross_conservation(
     trades: tuple[GrossTrade, ...], obligations: tuple[GrossObligation, ...]
 ) -> ConservationResult:
@@ -146,12 +217,15 @@ def clear_gross(
 ) -> tuple[ClearingTransformation, GrossClearingResult]:
     """Form exactly one bilateral obligation per trade and seal the frozen contract."""
     if method is ClearingMethod.NOVATED_NETTED:
-        raise ClearingPathNotBuiltError("NOVATED_NETTED is unbuilt until Wave 5 slice 2")
+        raise ClearingPathNotBuiltError(
+            "NOVATED_NETTED is not gross clearing; consume the attested FICC result "
+            "with record_ficc_netted"
+        )
     if method is not ClearingMethod.GROSS:
         raise ClearingPathNotBuiltError(f"{method.value} is not built in Wave 4")
     if access_model is not AccessModel.BILATERAL:
         raise ClearingPathNotBuiltError(
-            f"{access_model.value} access is unbuilt until Wave 5 slice 2 and Atreides T5"
+            f"{access_model.value} access is not valid for bilateral gross clearing"
         )
 
     obligations = tuple(

@@ -81,6 +81,7 @@ def _wire_document(
             "scenario_id": "scn_00000000000000000000000001",
             "lifecycle_id": "lif_03J0YY19FSPXWRSJ8ES4ZMMHSR",
             "synthetic": True,
+            "clearing_method": "BILATERAL_GROSS",
             "stages": stages,
         }
     ).encode()
@@ -91,6 +92,7 @@ class TestPublishedLifecycleReader:
         funded = parse_document(_wire_document())
         unfunded = parse_document(_wire_document(funded=False))
         assert funded.disposition is Disposition.PASS
+        assert funded.clearing_method == "BILATERAL_GROSS"
         assert unfunded.disposition is Disposition.INDETERMINATE
         acceptance = next(
             cell for cell in unfunded.cells if cell.checkpoint is Checkpoint.OBLIGATION_ACCEPTANCE

@@ -454,6 +454,7 @@
     {% for row in lc.rows %}
     <article class="card tile" data-lifecycle="{{ row.lifecycle_id }}">
       <h3><code>{{ row.lifecycle_id }}</code> {{ badge(row.badge) }}</h3>
+      <p class="muted"><strong>Clearing method:</strong> <code>{{ row.clearing_method }}</code></p>
       {% if row.unknown_count %}<p class="muted">{{ row.unknown_count }} of {{ row.cells | length }} cells not confirmed.</p>{% endif %}
       <dl class="fields">
         {% for cell in row.cells %}

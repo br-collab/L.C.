@@ -30,6 +30,7 @@ def emit_outcomes(market: CounterfactualMarketInput) -> bytes:
     candidates = (
         {
             "candidate_id": market.candidate_ids[0],
+            "clearing_method": "BILATERAL_GROSS",
             "execution_price": "99.40",
             "funding_peak": "9950",
             "collateral_requirement": "750",
@@ -39,6 +40,7 @@ def emit_outcomes(market: CounterfactualMarketInput) -> bytes:
         },
         {
             "candidate_id": market.candidate_ids[1],
+            "clearing_method": "BILATERAL_GROSS",
             "execution_price": "99.55",
             "funding_peak": "8000",
             "collateral_requirement": "500",

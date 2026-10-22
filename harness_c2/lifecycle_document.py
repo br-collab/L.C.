@@ -65,6 +65,7 @@ class LifecycleDocument(_DocumentModel):
     scenario_id: ScenarioId
     lifecycle_id: LifecycleId
     synthetic: bool = True
+    clearing_method: Literal["BILATERAL_GROSS"] = "BILATERAL_GROSS"
     stages: tuple[StageRow, ...]
 
 

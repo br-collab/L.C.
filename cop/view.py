@@ -425,6 +425,7 @@ class LifecycleCellView:
 @dataclass(frozen=True)
 class LifecycleRowView:
     lifecycle_id: str
+    clearing_method: str
     badge: Badge
     cells: tuple[LifecycleCellView, ...]
     unknown_count: int
@@ -1040,6 +1041,7 @@ def _lifecycle_view(state: LifecycleState, now: datetime) -> LifecycleView:
         rows=tuple(
             LifecycleRowView(
                 lifecycle_id=row.lifecycle_id,
+                clearing_method=row.clearing_method or "NOT_RECORDED",
                 badge=disposition_badge(row.disposition, _ROW_LABELS[row.disposition]),
                 cells=tuple(_cell_view(c) for c in row.cells),
                 unknown_count=len(row.unknown_cells),

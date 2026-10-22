@@ -28,6 +28,7 @@ class _Record(BaseModel):
 
 class CandidateOutcome(_Record):
     candidate_id: str = Field(min_length=1)
+    clearing_method: Literal["BILATERAL_GROSS", "FICC_GSD_NOVATED_NETTED", "EQUITIES_CNS_MODEL"]
     execution_price: Decimal = Field(gt=0)
     funding_peak: Decimal = Field(ge=0)
     collateral_requirement: Decimal = Field(ge=0)
