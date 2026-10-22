@@ -23,6 +23,19 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 from lc.events import LifecycleState, OrderEvent
 from lc.lifecycle import EventInput, LifecycleRegister, replay, transition
 
+# 17 CFR 240.15c3-5 and 17 CFR 242.200/203, quoted from the pinned sources
+# beside the market-access and short-sale controls that implement them.
+RULE_15C3_5_PARAGRAPH = (
+    "Controls must prevent orders exceeding credit thresholds, prevent erroneous orders, "
+    "restrict access, and assure appropriate surveillance personnel receive post-trade "
+    "execution reports."
+)
+REG_SHO_200_PARAGRAPH = "Sell orders must be marked long, short, or short exempt."
+REG_SHO_203_PARAGRAPH = (
+    "Before effecting a short sale, a broker-dealer must borrow, arrange to borrow, or have "
+    "reasonable grounds to believe the security can be borrowed for delivery when due."
+)
+
 
 class _Record(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
