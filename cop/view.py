@@ -429,6 +429,10 @@ class LifecycleRowView:
     badge: Badge
     cells: tuple[LifecycleCellView, ...]
     unknown_count: int
+    observation_seat: str | None
+    observed_member_id: str | None
+    ficc_facts: tuple[tuple[str, Badge, str], ...]
+    net_positions: tuple[tuple[str, str, str, str, str], ...]
 
 
 @dataclass(frozen=True)
@@ -1045,6 +1049,26 @@ def _lifecycle_view(state: LifecycleState, now: datetime) -> LifecycleView:
                 badge=disposition_badge(row.disposition, _ROW_LABELS[row.disposition]),
                 cells=tuple(_cell_view(c) for c in row.cells),
                 unknown_count=len(row.unknown_cells),
+                observation_seat=row.observation_seat,
+                observed_member_id=row.observed_member_id,
+                ficc_facts=tuple(
+                    (
+                        fact.stage,
+                        disposition_badge(fact.disposition, fact.detail),
+                        fact.detail,
+                    )
+                    for fact in row.ficc_facts
+                ),
+                net_positions=tuple(
+                    (
+                        position.member_id,
+                        position.cusip,
+                        position.settlement_date,
+                        str(position.net_quantity),
+                        f"{position.net_settlement_amount} {position.settlement_currency}",
+                    )
+                    for position in row.net_positions
+                ),
             )
             for row in rows
         ),

@@ -40,7 +40,8 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
+from decimal import Decimal
 from enum import StrEnum
 from typing import Literal, Protocol
 
@@ -61,6 +62,8 @@ __all__ = [
     "NOT_BUILT_REASON",
     "NOT_REACHED_REASON",
     "Checkpoint",
+    "FiccLifecycleFact",
+    "FiccNetPosition",
     "HttpxLifecycleClient",
     "Layer",
     "LayerReading",
@@ -69,6 +72,7 @@ __all__ = [
     "build_row",
     "cell_for",
     "parse_document",
+    "parse_ficc_document",
     "row_disposition",
 ]
 
@@ -162,6 +166,23 @@ class LifecycleCell:
 
 
 @dataclass(frozen=True)
+class FiccLifecycleFact:
+    stage: str
+    disposition: Disposition
+    detail: str
+
+
+@dataclass(frozen=True)
+class FiccNetPosition:
+    member_id: str
+    cusip: str
+    settlement_date: str
+    net_quantity: Decimal
+    net_settlement_amount: Decimal
+    settlement_currency: str
+
+
+@dataclass(frozen=True)
 class LifecycleRow:
     """One lifecycle object, across every layer."""
 
@@ -169,9 +190,15 @@ class LifecycleRow:
     cells: tuple[LifecycleCell, ...]
     taken_at: datetime | None = None
     clearing_method: str | None = None
+    observation_seat: str | None = None
+    observed_member_id: str | None = None
+    ficc_facts: tuple[FiccLifecycleFact, ...] = ()
+    net_positions: tuple[FiccNetPosition, ...] = ()
 
     @property
     def disposition(self) -> Disposition:
+        if self.ficc_facts:
+            return max((fact.disposition for fact in self.ficc_facts), key=lambda d: _SEVERITY[d])
         return row_disposition(self.cells)
 
     @property
@@ -306,6 +333,7 @@ def build_row(
 
 
 SUPPORTED_SCHEMA_VERSION = "harness_c2.lifecycle_document/1"
+SUPPORTED_FICC_SCHEMA_VERSION = "harness_c2.ficc_lifecycle_document/2"
 
 
 class _WireModel(BaseModel):
@@ -332,6 +360,48 @@ class _LifecycleDocument(_WireModel):
     synthetic: Literal[True]
     clearing_method: Literal["BILATERAL_GROSS"]
     stages: tuple[_StageRow, ...]
+
+
+class _FiccFact(_WireModel):
+    stage: Literal[
+        "CLEARING_ACCEPTANCE",
+        "NOVATION",
+        "NETTING",
+        "SETTLEMENT_INSTRUCTION",
+        "SETTLEMENT_FINALITY",
+    ]
+    status: Literal["RECORDED", "NOT_RECORDED"]
+    evidence_id: str | None = None
+    reason: str | None = None
+
+
+class _FiccPosition(_WireModel):
+    member_id: str
+    cusip: str
+    settlement_date: date
+    net_quantity: Decimal
+    net_settlement_amount: Decimal
+    settlement_currency: str
+    source_obligation_ids: tuple[str, ...]
+    source_trade_ids: tuple[str, ...]
+
+
+class _FiccLifecycleDocument(_WireModel):
+    schema_version: Literal["harness_c2.ficc_lifecycle_document/2"]
+    taken_at: datetime
+    scenario_id: ScenarioId
+    lifecycle_id: LifecycleId
+    synthetic: Literal[True]
+    source_payload_digest: str
+    clearing_agency: Literal["FICC_GSD"]
+    clearing_method: Literal["FICC_GSD_NOVATED_NETTED"]
+    observation_seat: Literal["FICC_MEMBER"]
+    observed_member_id: str
+    access_path: Literal["FICC_DIRECT", "FICC_SPONSORED", "FICC_AGENT"]
+    rule_set_version: str
+    processing_calendar_id: str
+    facts: tuple[_FiccFact, ...]
+    net_settlement_obligations: tuple[_FiccPosition, ...]
 
 
 class LifecycleSource(Protocol):
@@ -396,8 +466,71 @@ def parse_document(raw: bytes) -> LifecycleRow:
     )
 
 
+def parse_ficc_document(raw: bytes) -> LifecycleRow:
+    """Read the strict FICC member-seat publication without inferring lifecycle cells."""
+
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        raise SourceMalformedError("FICC lifecycle document is not valid JSON") from None
+    if not isinstance(data, dict):
+        raise SourceMalformedError("FICC lifecycle document is not a JSON object")
+    version = data.get("schema_version")
+    if version != SUPPORTED_FICC_SCHEMA_VERSION:
+        raise SourceMalformedError(
+            f"FICC lifecycle document is schema version {version!r}; this reader understands "
+            f"only {SUPPORTED_FICC_SCHEMA_VERSION!r}"
+        )
+    try:
+        document = _FiccLifecycleDocument.model_validate_json(raw)
+    except ValidationError as exc:
+        raise SourceMalformedError(
+            f"Unexpected FICC lifecycle document shape ({exc.error_count()} problems)"
+        ) from None
+    expected_stages = (
+        "CLEARING_ACCEPTANCE",
+        "NOVATION",
+        "NETTING",
+        "SETTLEMENT_INSTRUCTION",
+        "SETTLEMENT_FINALITY",
+    )
+    if tuple(fact.stage for fact in document.facts) != expected_stages:
+        raise SourceMalformedError("FICC facts are absent, duplicated, or unordered")
+    facts = tuple(
+        FiccLifecycleFact(
+            stage=fact.stage,
+            disposition=(
+                Disposition.PASS if fact.status == "RECORDED" else Disposition.INDETERMINATE
+            ),
+            detail=fact.evidence_id or fact.reason or "required evidence is absent",
+        )
+        for fact in document.facts
+    )
+    positions = tuple(
+        FiccNetPosition(
+            member_id=position.member_id,
+            cusip=position.cusip,
+            settlement_date=position.settlement_date.isoformat(),
+            net_quantity=position.net_quantity,
+            net_settlement_amount=position.net_settlement_amount,
+            settlement_currency=position.settlement_currency,
+        )
+        for position in document.net_settlement_obligations
+    )
+    return LifecycleRow(
+        lifecycle_id=str(document.lifecycle_id),
+        cells=(),
+        taken_at=document.taken_at,
+        clearing_method=document.clearing_method,
+        observation_seat=document.observation_seat,
+        observed_member_id=document.observed_member_id,
+        ficc_facts=facts,
+        net_positions=positions,
+    )
+
+
 class HttpxLifecycleClient:
-    """Read the funded and unfunded stable publication instances over HTTPS."""
+    """Read the stable bilateral and FICC publication instances over HTTPS."""
 
     def __init__(self, base_url: str, http: httpx.Client | None = None) -> None:
         self._base_url = base_url.rstrip("/")
@@ -405,7 +538,11 @@ class HttpxLifecycleClient:
 
     def rows(self) -> tuple[LifecycleRow, ...]:
         headers = {"Accept": "application/json", "User-Agent": PRODUCT_NAME}
-        return tuple(
+        bilateral = tuple(
             parse_document(get_bytes(self._http, f"{self._base_url}/{name}.json", headers=headers))
             for name in ("funded", "unfunded")
         )
+        ficc = parse_ficc_document(
+            get_bytes(self._http, f"{self._base_url}/ficc-netted.json", headers=headers)
+        )
+        return (*bilateral, ficc)

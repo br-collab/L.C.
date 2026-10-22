@@ -13,7 +13,7 @@ from cannae_kernel.ids import LifecycleId, ObligationId
 from cannae_kernel.provenance import Provenance
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from lc.ficc import FiccGsdDocument, consume_ficc_gsd_result
+from lc.ficc import FiccGsdDocument, FiccNetObligation, consume_ficc_gsd_result
 
 __all__ = [
     "AccessModel",
@@ -110,12 +110,15 @@ class FiccClearingResult(_Record):
     method_label: Literal["FICC_GSD_NOVATED_NETTED"] = "FICC_GSD_NOVATED_NETTED"
     access_model: AccessModel
     clearing_agency: Literal["FICC_GSD"] = "FICC_GSD"
+    observation_seat: Literal["FICC_MEMBER"] = "FICC_MEMBER"
+    observed_member_id: str
     rule_set_version: str
     processing_calendar_id: str
     input_trade_ids: tuple[str, ...]
     input_obligation_ids: tuple[str, ...]
     output_position_count: int = Field(gt=0)
     net_quantity: Decimal
+    net_settlement_obligations: tuple[FiccNetObligation, ...]
 
 
 def _record_ficc_netted(
@@ -130,6 +133,7 @@ def _record_ficc_netted(
     }
     result = FiccClearingResult(
         access_model=access_models[document.access_path],
+        observed_member_id=document.observed_member_id,
         rule_set_version=document.rule_set_version,
         processing_calendar_id=document.processing_calendar_id,
         input_trade_ids=tuple(
@@ -146,6 +150,7 @@ def _record_ficc_netted(
         net_quantity=sum(
             (position.net_quantity for position in document.net_settlement_obligations), Decimal(0)
         ),
+        net_settlement_obligations=document.net_settlement_obligations,
     )
     transformation = ClearingTransformation(
         lifecycle_id=lifecycle_id,

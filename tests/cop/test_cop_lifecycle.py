@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from decimal import Decimal
 
 import httpx
 import pytest
@@ -26,6 +27,7 @@ from cop.lifecycle import (
     LayerReading,
     build_row,
     parse_document,
+    parse_ficc_document,
     row_disposition,
 )
 from cop.observation import SourceMalformedError
@@ -87,7 +89,63 @@ def _wire_document(
     ).encode()
 
 
+def _ficc_wire_document() -> bytes:
+    return json.dumps(
+        {
+            "schema_version": "harness_c2.ficc_lifecycle_document/2",
+            "taken_at": "2026-10-21T21:00:00Z",
+            "scenario_id": "scn_00000000000000000000000015",
+            "lifecycle_id": "lif_03J0YY19FSPXWRSJ8ES4ZMMR15",
+            "synthetic": True,
+            "source_payload_digest": "sha256:" + "a" * 64,
+            "clearing_agency": "FICC_GSD",
+            "clearing_method": "FICC_GSD_NOVATED_NETTED",
+            "observation_seat": "FICC_MEMBER",
+            "observed_member_id": "member-a",
+            "access_path": "FICC_DIRECT",
+            "rule_set_version": "synthetic-r15b-rule-set",
+            "processing_calendar_id": "synthetic-r15b-calendar",
+            "facts": [
+                {
+                    "stage": stage,
+                    "status": "RECORDED",
+                    "evidence_id": f"evidence-{stage}",
+                    "reason": None,
+                }
+                for stage in (
+                    "CLEARING_ACCEPTANCE",
+                    "NOVATION",
+                    "NETTING",
+                    "SETTLEMENT_INSTRUCTION",
+                    "SETTLEMENT_FINALITY",
+                )
+            ],
+            "net_settlement_obligations": [
+                {
+                    "member_id": "member-a",
+                    "cusip": "91282CJL6",
+                    "settlement_date": "2026-10-22",
+                    "net_quantity": "65",
+                    "net_settlement_amount": "-64.35",
+                    "settlement_currency": "USD",
+                    "source_obligation_ids": ["obligation-1", "obligation-2"],
+                    "source_trade_ids": ["trade-1", "trade-2"],
+                }
+            ],
+        }
+    ).encode()
+
+
 class TestPublishedLifecycleReader:
+    def test_ficc_document_exposes_the_member_seat_and_both_legs(self) -> None:
+        row = parse_ficc_document(_ficc_wire_document())
+        assert row.disposition is Disposition.PASS
+        assert row.observation_seat == "FICC_MEMBER"
+        assert row.observed_member_id == "member-a"
+        assert row.net_positions[0].net_quantity == 65
+        assert row.net_positions[0].net_settlement_amount == Decimal("-64.35")
+        assert row.net_positions[0].settlement_currency == "USD"
+
     def test_funded_and_unfunded_documents_render_without_inference(self) -> None:
         funded = parse_document(_wire_document())
         unfunded = parse_document(_wire_document(funded=False))
@@ -112,6 +170,8 @@ class TestPublishedLifecycleReader:
 
         def respond(request: httpx.Request) -> httpx.Response:
             requested.append(str(request.url))
+            if request.url.path.endswith("ficc-netted.json"):
+                return httpx.Response(200, content=_ficc_wire_document())
             return httpx.Response(
                 200,
                 content=_wire_document(
@@ -125,10 +185,11 @@ class TestPublishedLifecycleReader:
             http=httpx.Client(transport=httpx.MockTransport(respond)),
         )
         rows = client.rows()
-        assert len(rows) == 2
+        assert len(rows) == 3
         assert requested == [
             "https://example.invalid/lifecycle/funded.json",
             "https://example.invalid/lifecycle/unfunded.json",
+            "https://example.invalid/lifecycle/ficc-netted.json",
         ]
 
     def test_unset_configuration_names_the_variable(self) -> None:
@@ -142,6 +203,15 @@ class TestPublishedLifecycleReader:
         login(client)
         html = section(client.get("/section/trades").get_data(as_text=True), "lifecycles")
         assert "Reading age:" in html and "0 s" in html
+
+    def test_cop_labels_the_ficc_seat_and_both_net_legs(self) -> None:
+        rig = Rig()
+        rig.refresher.refresh_once()
+        client = rig.app_client()
+        login(client)
+        html = section(client.get("/section/trades").get_data(as_text=True), "lifecycles")
+        assert "FICC_MEMBER" in html
+        assert "Member member-a: par 65; money -64.35 USD" in html
 
     def test_past_lifecycle_cadence_holds_the_board_and_names_the_source(self) -> None:
         rig = Rig()

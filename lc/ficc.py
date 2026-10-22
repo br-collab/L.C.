@@ -56,6 +56,8 @@ class FiccNovatedObligation(_WireModel):
     cusip: str
     settlement_date: date
     signed_quantity: Decimal
+    signed_settlement_amount: Decimal
+    settlement_currency: str
     novation_evidence_id: str
 
 
@@ -64,14 +66,18 @@ class FiccNetObligation(_WireModel):
     cusip: str
     settlement_date: date
     net_quantity: Decimal
+    net_settlement_amount: Decimal
+    settlement_currency: str
     source_obligation_ids: tuple[str, ...]
     source_trade_ids: tuple[str, ...]
 
 
 class FiccGsdDocument(_WireModel):
-    schema_version: Literal["atreides.ficc_gsd_netting/1"]
+    schema_version: Literal["atreides.ficc_gsd_netting/2"]
     clearing_agency: Literal["FICC_GSD"]
     clearing_method: Literal["FICC_GSD_NOVATED_NETTED"]
+    observation_seat: Literal["FICC_MEMBER"]
+    observed_member_id: str
     access_path: Literal["FICC_DIRECT", "FICC_SPONSORED", "FICC_AGENT"]
     rule_set_version: str
     processing_calendar_id: str
@@ -88,7 +94,7 @@ class FiccGsdDocument(_WireModel):
 
 
 class _FiccHeader(_WireModel):
-    schema_version: Literal["atreides.ficc_gsd_netting_header/1"]
+    schema_version: Literal["atreides.ficc_gsd_netting_header/2"]
     payload_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
     clearing_agency: Literal["FICC_GSD"]
     clearing_method: Literal["FICC_GSD_NOVATED_NETTED"]
@@ -97,8 +103,8 @@ class _FiccHeader(_WireModel):
 class FiccLifecycleDocument(_WireModel):
     """Person-readable publication of the five independent FICC lifecycle facts."""
 
-    schema_version: Literal["harness_c2.ficc_lifecycle_document/1"] = (
-        "harness_c2.ficc_lifecycle_document/1"
+    schema_version: Literal["harness_c2.ficc_lifecycle_document/2"] = (
+        "harness_c2.ficc_lifecycle_document/2"
     )
     taken_at: datetime
     scenario_id: ScenarioId
@@ -107,6 +113,8 @@ class FiccLifecycleDocument(_WireModel):
     source_payload_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
     clearing_agency: Literal["FICC_GSD"] = "FICC_GSD"
     clearing_method: Literal["FICC_GSD_NOVATED_NETTED"] = "FICC_GSD_NOVATED_NETTED"
+    observation_seat: Literal["FICC_MEMBER"] = "FICC_MEMBER"
+    observed_member_id: str
     access_path: Literal["FICC_DIRECT", "FICC_SPONSORED", "FICC_AGENT"]
     rule_set_version: str
     processing_calendar_id: str
@@ -143,6 +151,7 @@ def ficc_lifecycle_publication(
         scenario_id=scenario_id,
         lifecycle_id=lifecycle_id,
         source_payload_digest=source_payload_digest,
+        observed_member_id=document.observed_member_id,
         access_path=document.access_path,
         rule_set_version=document.rule_set_version,
         processing_calendar_id=document.processing_calendar_id,

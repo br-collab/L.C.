@@ -40,13 +40,15 @@ and the table makes no compliance claim.
 
 - Accept an approved intent, run the order lifecycle, and replay it (`lc/lifecycle.py`).
 - Capture a trade, allocate it, record a match, and affirm it (`lc/trade.py`).
-- Clear a gross bilateral trade and check that quantity and cash are conserved (`lc/clearing.py`). Consume Atreides' attested FICC GSD bytes without translation, then record the distinct `FICC_GSD_NOVATED_NETTED` result (`lc/ficc.py`, `lc/clearing.py`). Direct, sponsored and agent access are built through that FICC path; CME Securities Clearing is declared in Atreides but its rules are not built. FICC fails, close out, buy in and intraday funding are not built.
+- Clear a gross bilateral trade and check that quantity and cash are conserved (`lc/clearing.py`). Consume Atreides' attested FICC GSD bytes without translation, then record the distinct `FICC_GSD_NOVATED_NETTED` result (`lc/ficc.py`, `lc/clearing.py`). The result is explicitly observed from the FICC member seat and carries conserved net par and signed settlement money with currency. Direct, sponsored and agent access are built through that FICC path; CME Securities Clearing is declared in Atreides but its rules are not built. FICC fails, close out, buy in and intraday funding are not built.
 - Form a settlement obligation and record whether Atreides accepted those bytes (`lc/obligation.py`). The `lc` package does not submit that obligation to a rail.
 - Listed options. Series and position accounts (`lc/options.py`). Admit a novation only when the bytes match the attested digest (`lc/option_clearing.py`). Exercise, assign, and expire (`lc/option_exercise.py`). Form premium and exercise obligations (`lc/option_obligation.py`). Ingest an Options Clearing Corporation (OCC) margin or clearing-fund report, and compare it with an estimate labelled an approximation (`lc/occ_margin.py`). Check OCC Rule 301(b)(1) on figures the caller supplies (`lc/occ_membership.py`). Ingest a contract adjustment by reference identifier (`lc/option_adjustment.py`).
 - A synthetic OCC (`emulators/occ.py`) novates two matching trade reports. It does not import `lc`.
 - The synthetic entitled member (`emulators/settlement.py`) is the component that submits, and it submits only to the synthetic rail.
 - The `lifecycle-document` publication branch exposes `ficc-netted.json`, whose five independent
-  facts and `FICC_GSD_NOVATED_NETTED` method label come from exact attested Atreides bytes.
+  facts, `FICC_GSD_NOVATED_NETTED` method, `FICC_MEMBER` seat and both net settlement legs come
+  from exact attested Atreides bytes. The Common Operating Picture reads that same document and
+  labels the seat, observed member, net par and signed settlement money.
 
 The read-only Common Operating Picture (COP), the Command and Control (C2) harness, and the Thifur-H experiment are separate surfaces. The joint upgrade map exists, and the first cross-domain contracts are frozen in `cannae-kernel`.
 
