@@ -162,7 +162,7 @@ other_work:
   - id: EQ-1
     name: Equities self-clearing spine
     status: DONE
-    evidence: [Project-Atreides#EQ-1, L.C.#EQ-1]
+    evidence: [Project-Atreides#119, L.C.#109]
 
 decisions:
   - {id: JUM-D-27, title: Final product name (the current name is a working name), owner: Bill, opened: 2026-09-17}
