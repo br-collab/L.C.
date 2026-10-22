@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
+from random import Random
 from typing import Any
 
 import pytest
@@ -37,6 +38,7 @@ from lc.oms import (
 from lc.policy import ExecutionReport, apply_execution
 from lc.trade import (
     AllocationPlan,
+    AllocationRefusalError,
     AllocationRule,
     AllocationTarget,
     allocate,
@@ -85,7 +87,7 @@ def _register(
 
 
 def _append_order(
-    register: LifecycleRegister, *, number: int, quantity: Decimal, terms: OrderTerms
+    register: LifecycleRegister, *, number: int, quantity: Decimal, terms: OrderTerms | None
 ) -> tuple[LifecycleRegister, OrderEvent]:
     event = seal_order_event(
         event_id=EventId(_id("evt_", number)),
@@ -295,6 +297,29 @@ def test_firm_notional_includes_other_accounts_without_charging_account_limit() 
     )
 
 
+def test_live_order_without_terms_refuses_credit_and_names_order() -> None:
+    register = _register(quantity=Decimal(1), terms=_terms(account_id="B"))
+    register, _ = _append_order(register, number=81, quantity=Decimal(1), terms=None)
+    register, candidate = _append_order(
+        register, number=82, quantity=Decimal(1), terms=_terms(account_id="A")
+    )
+    decision = MarketAccessGate().evaluate(
+        ChildRelease(
+            order_event=candidate,
+            lifecycle_register=register,
+            reference_price=Decimal(100),
+            submitted_at=NOW,
+        ),
+        limits=limits(),
+        capacity_input=capacity(),
+        locates_input=locates(),
+    )
+    check = next(item for item in decision.checks if item.code == "OPEN_ORDER_TERMS")
+    assert check.passed is False
+    assert str(OrderId(_id("ord_", 81))) in check.reason
+    assert decision.disposition.value == "HOLD"
+
+
 def test_targeted_allocation_and_two_fill_average_price_conserve() -> None:
     journal = _child_register()
     report = ExecutionReport(
@@ -404,6 +429,13 @@ def test_allocation_plan_and_rounding_refusal_paths_are_explicit() -> None:
         AllocationPlan(
             targets=(target,), rule=AllocationRule.ROTATION, rounding_method="LARGEST_REMAINDER"
         )
+    with pytest.raises(ValueError, match="ROUND_HALF_EVEN"):
+        AllocationPlan(
+            targets=(target,),
+            rule=AllocationRule.PRO_RATA,
+            rounding_method="LARGEST_REMAINDER",
+            average_price_rounding="ROUND_DOWN",
+        )
     plan = AllocationPlan(
         targets=(
             AllocationTarget(account="A", target_quantity=Decimal(2)),
@@ -501,19 +533,210 @@ def test_allocation_plan_and_rounding_refusal_paths_are_explicit() -> None:
         )
     repeating = small.model_copy(update={"quantity": Decimal(1), "price": Decimal(100)})
     other = small.model_copy(
-        update={"trade_id": "OTHER", "quantity": Decimal(2), "price": Decimal(101)}
+        update={"trade_id": "OTHER", "quantity": Decimal(2), "price": Decimal("100.50")}
     )
-    fractional_plan = plan.model_copy(update={"fractional_enabled": True})
-    with pytest.raises(AssertionError, match="consideration"):
+    fractional_plan = AllocationPlan(
+        targets=(
+            AllocationTarget(account="A", target_quantity=Decimal(1)),
+            AllocationTarget(account="B", target_quantity=Decimal(1)),
+            AllocationTarget(account="C", target_quantity=Decimal(1)),
+        ),
+        rule=AllocationRule.PRO_RATA,
+        rounding_method="LARGEST_REMAINDER",
+        fractional_enabled=True,
+    )
+    _, repeating_allocation = allocate(
+        journal,
+        (repeating, other),
+        _payload(),
+        allocation_id=AllocationId(_id("alc_", 96)),
+        actor=_actor(),
+        event=_event(97),
+        plan=fractional_plan,
+    )
+    assert repeating_allocation.average_price == Decimal("100.333333")
+    assert sum(
+        (entry.consideration for entry in repeating_allocation.entries), Decimal(0)
+    ) == Decimal("301.00")
+    assert repeating_allocation.money_residuals
+    with pytest.raises(AllocationRefusalError, match="declared plan"):
         allocate(
             journal,
-            (repeating, other),
+            repeating,
             _payload(),
-            allocation_id=AllocationId(_id("alc_", 96)),
+            allocation_id=AllocationId(_id("alc_", 97)),
             actor=_actor(),
-            event=_event(97),
-            plan=fractional_plan,
+            event=_event(101),
         )
+
+
+def test_allocation_conserves_quantity_and_money_for_200_random_examples() -> None:
+    rng = Random(20261022)
+    journal = _child_register()
+    order_id = OrderId(_id("ord_", 11))
+    journal = transition(
+        journal,
+        order_id=order_id,
+        target=LifecycleState.EXECUTED,
+        reason="property allocation setup",
+        actor=_actor(),
+        event=_event(101),
+        quantity=Decimal(100),
+    )
+    base_report = ExecutionReport(
+        execution_id="PROPERTY",
+        order_id=order_id,
+        intent_id=_payload().intent_id,
+        quantity=Decimal(100),
+        price=Decimal(100),
+        venue="VENUE-SYNTHETIC",
+        outcome="FILL",
+    )
+    journal, captured = capture(journal, base_report, _payload(), actor=_actor(), event=_event(102))
+    for example in range(200):
+        total = rng.randint(3, 100)
+        first_fill = rng.randint(1, total - 1)
+        quantities = (Decimal(first_fill), Decimal(total - first_fill))
+        prices = (
+            Decimal(rng.randint(1, 50000)) / 100,
+            Decimal(rng.randint(1, 50000)) / 100,
+        )
+        target_a = rng.randint(1, total - 2)
+        target_b = rng.randint(1, total - target_a - 1)
+        target_c = total - target_a - target_b
+        plan = AllocationPlan(
+            targets=(
+                AllocationTarget(account="A", target_quantity=Decimal(target_a)),
+                AllocationTarget(account="B", target_quantity=Decimal(target_b)),
+                AllocationTarget(account="C", target_quantity=Decimal(target_c)),
+            ),
+            rule=AllocationRule.PRO_RATA,
+            rounding_method="LARGEST_REMAINDER",
+        )
+        fills = tuple(
+            captured.model_copy(
+                update={"trade_id": f"P{example}-{index}", "quantity": quantity, "price": price}
+            )
+            for index, (quantity, price) in enumerate(zip(quantities, prices, strict=True))
+        )
+        _, allocation = allocate(
+            journal,
+            fills,
+            _payload(),
+            allocation_id=AllocationId(_id("alc_", 103)),
+            actor=_actor(),
+            event=_event(103),
+            plan=plan,
+        )
+        expected_money = sum(
+            (quantity * price for quantity, price in zip(quantities, prices, strict=True)),
+            Decimal(0),
+        ).quantize(Decimal("0.01"))
+        assert sum((entry.quantity for entry in allocation.entries), Decimal(0)) == total
+        assert (
+            sum((entry.consideration for entry in allocation.entries), Decimal(0)) == expected_money
+        )
+
+
+def test_large_repeating_average_allocates_without_error() -> None:
+    journal = _register(quantity=Decimal(300))
+    order_id = OrderId(_id("ord_", 80))
+    journal = transition(
+        journal,
+        order_id=order_id,
+        target=LifecycleState.MARKET_ACCESS_PASSED,
+        reason="large repeating-average controls passed",
+        actor=_actor(),
+        event=_event(107),
+    )
+    journal = transition(
+        journal,
+        order_id=order_id,
+        target=LifecycleState.EXECUTED,
+        reason="large repeating-average setup",
+        actor=_actor(),
+        event=_event(108),
+        quantity=Decimal(300),
+    )
+    report = ExecutionReport(
+        execution_id="REPEAT-LARGE",
+        order_id=order_id,
+        intent_id=_payload().intent_id,
+        quantity=Decimal(300),
+        price=Decimal("100.01"),
+        venue="VENUE-SYNTHETIC",
+        outcome="FILL",
+    )
+    journal, captured = capture(journal, report, _payload(), actor=_actor(), event=_event(109))
+    fills = (
+        captured.model_copy(
+            update={"trade_id": "L1", "quantity": Decimal(100), "price": Decimal("100.01")}
+        ),
+        captured.model_copy(
+            update={"trade_id": "L2", "quantity": Decimal(200), "price": Decimal("100.02")}
+        ),
+    )
+    plan = AllocationPlan(
+        targets=(
+            AllocationTarget(account="A", target_quantity=Decimal(200)),
+            AllocationTarget(account="B", target_quantity=Decimal(100)),
+        ),
+        rule=AllocationRule.PRO_RATA,
+        rounding_method="LARGEST_REMAINDER",
+    )
+    _, allocation = allocate(
+        journal,
+        fills,
+        _payload(),
+        allocation_id=AllocationId(_id("alc_", 110)),
+        actor=_actor(),
+        event=_event(110),
+        plan=plan,
+    )
+    assert allocation.average_price == Decimal("100.016667")
+    assert sum((entry.consideration for entry in allocation.entries), Decimal(0)) == Decimal(
+        "30005.00"
+    )
+
+
+def test_ioc_cancels_remainder_and_fok_refuses_partial_fill() -> None:
+    result = VenueEmulator(seed=7).execute(
+        _venue_order(), outcome=VenueOutcome.PARTIAL_FILL, event_time=NOW
+    )
+    assert isinstance(result.event, Recorded) and isinstance(result.report, Recorded)
+    report = ExecutionReport.model_validate(result.report.value.model_dump(mode="python"))
+    ioc = apply_execution(
+        _child_register(terms=_terms(time_in_force=TimeInForce.IMMEDIATE_OR_CANCEL)),
+        result.event.value,
+        report,
+        actor=_actor(),
+        event=_event(104),
+        remainder_event=_event(105),
+    )
+    ioc_order = replay(ioc.journal.events).orders[report.order_id]
+    assert ioc.disposition.value == "PASS"
+    assert ioc_order.state is LifecycleState.CANCELLED
+    assert ioc_order.executed_quantity == report.quantity
+    fok = apply_execution(
+        _child_register(terms=_terms(time_in_force=TimeInForce.FILL_OR_KILL)),
+        result.event.value,
+        report,
+        actor=_actor(),
+        event=_event(106),
+    )
+    fok_order = replay(fok.journal.events).orders[report.order_id]
+    assert fok.disposition.value == "HOLD"
+    assert fok_order.state is LifecycleState.CANCELLED
+    assert fok_order.executed_quantity == 0
+    missing_cancel_event = apply_execution(
+        _child_register(terms=_terms(time_in_force=TimeInForce.IMMEDIATE_OR_CANCEL)),
+        result.event.value,
+        report,
+        actor=_actor(),
+        event=_event(107),
+    )
+    assert missing_cancel_event.disposition.value == "HOLD"
+    assert "distinct event" in missing_cancel_event.reason
 
 
 def test_kill_switch_cancels_scope_refuses_new_order_and_release_replays() -> None:

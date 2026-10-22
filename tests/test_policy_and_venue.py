@@ -15,7 +15,7 @@ from cannae_kernel.session import BusinessDate, MarketSession, SessionContext
 from test_lifecycle import NOW, _accepted, _actor, _event, _id, _payload
 
 from emulators.venue import VenueEmulator, VenueOrder, VenueOutcome
-from lc.events import LifecycleState
+from lc.events import LifecycleState, OrderTerms
 from lc.lifecycle import ChildOrder, EventInput, LifecycleRegister, split_parent, transition
 from lc.policy import (
     ExecutionPolicy,
@@ -52,15 +52,18 @@ def _evidence(
     )
 
 
-def _child_register() -> LifecycleRegister:
+def _child_register(
+    *, terms: OrderTerms | None = None, quantity: Decimal = Decimal("100")
+) -> LifecycleRegister:
     register = split_parent(
         _accepted(),
         actor=_actor(),
         children=(
             ChildOrder(
                 order_id=OrderId(_id("ord_", 11)),
-                quantity=Decimal("100"),
+                quantity=quantity,
                 event=_event(13),
+                terms=terms,
             ),
         ),
     ).journal

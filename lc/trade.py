@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from decimal import Decimal
+from decimal import ROUND_HALF_EVEN, Decimal
 from enum import StrEnum
 from typing import Self
 
@@ -26,8 +26,10 @@ from lc.policy import ExecutionReport
 
 __all__ = [
     "AllocationEntry",
+    "AllocationMoneyResidual",
     "AllocationPlan",
     "AllocationRecord",
+    "AllocationRefusalError",
     "AllocationRule",
     "AllocationTarget",
     "CaptureRecord",
@@ -63,6 +65,16 @@ class AllocationEntry(_Record):
     consideration: Decimal = Field(gt=0)
 
 
+class AllocationMoneyResidual(_Record):
+    account: str = Field(min_length=1)
+    amount: Decimal
+    reason: str = Field(min_length=1)
+
+
+class AllocationRefusalError(ValueError):
+    """The declared allocation cannot conserve quantity or money."""
+
+
 class AllocationRule(StrEnum):
     PRO_RATA = "PRO_RATA"
     ROTATION = "ROTATION"
@@ -78,6 +90,8 @@ class AllocationPlan(_Record):
     rule: AllocationRule
     rounding_method: str = Field(min_length=1)
     fractional_enabled: bool = False
+    average_price_decimal_places: int = Field(default=6, ge=0, le=12)
+    average_price_rounding: str = "ROUND_HALF_EVEN"
 
     @model_validator(mode="after")
     def _unique_accounts(self) -> Self:
@@ -86,6 +100,8 @@ class AllocationPlan(_Record):
         expected = "LARGEST_REMAINDER" if self.rule is AllocationRule.PRO_RATA else "TARGET_ORDER"
         if self.rounding_method != expected:
             raise ValueError(f"{self.rule.value} allocation requires {expected}")
+        if self.average_price_rounding != "ROUND_HALF_EVEN":
+            raise ValueError("average price rounding must be ROUND_HALF_EVEN")
         return self
 
 
@@ -96,9 +112,13 @@ class AllocationRecord(_Record):
     executed_quantity: Decimal = Field(gt=0)
     executed_consideration: Decimal = Field(gt=0)
     average_price: Decimal = Field(gt=0)
+    average_price_decimal_places: int = Field(ge=0, le=12)
+    average_price_rounding: str
+    consideration_rounding: str
     rule: AllocationRule
     rounding_method: str
     residual_assignments: tuple[str, ...]
+    money_residuals: tuple[AllocationMoneyResidual, ...]
     allocation_plan_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
 
 
@@ -168,38 +188,33 @@ def allocate(  # noqa: PLR0913 - allocation evidence is explicit at the call sit
 ) -> tuple[LifecycleRegister, AllocationRecord]:
     captures = capture_record if isinstance(capture_record, tuple) else (capture_record,)
     if not captures:
-        raise ValueError("allocation requires at least one execution capture")
+        raise AllocationRefusalError("allocation requires at least one execution capture")
+    if plan is None:
+        raise AllocationRefusalError("allocation requires a declared plan before the order")
     total_quantity = sum((item.quantity for item in captures), Decimal(0))
     total_money = sum((item.quantity * item.price for item in captures), Decimal(0))
-    average_price = total_money / total_quantity
-    plan = plan or AllocationPlan(
-        targets=tuple(
-            AllocationTarget(
-                account=account,
-                target_quantity=total_quantity / Decimal(len(intent.allocation_accounts)),
-            )
-            for account in intent.allocation_accounts
-        ),
-        rule=AllocationRule.PRO_RATA,
-        rounding_method="LARGEST_REMAINDER",
-        fractional_enabled=True,
-    )
+    price_quantum = Decimal(1).scaleb(-plan.average_price_decimal_places)
+    average_price = (total_money / total_quantity).quantize(price_quantum, rounding=ROUND_HALF_EVEN)
     order = replay(register.events).orders[captures[0].order_id]
     if (
         order.terms is not None
         and order.terms.allocation_plan_digest is not None
         and order.terms.allocation_plan_digest != digest(plan)
     ):
-        raise ValueError("allocation plan does not match the plan sealed before the order")
+        raise AllocationRefusalError(
+            "allocation plan does not match the plan sealed before the order"
+        )
     target_total = sum((item.target_quantity for item in plan.targets), Decimal(0))
     if total_quantity > target_total:
-        raise ValueError("executed quantity exceeds declared allocation targets")
+        raise AllocationRefusalError("executed quantity exceeds declared allocation targets")
     exact = [total_quantity * item.target_quantity / target_total for item in plan.targets]
     quantities = list(exact)
     residual_accounts: list[str] = []
     if not plan.fractional_enabled:
         if total_quantity != total_quantity.to_integral_value():
-            raise ValueError("whole-share allocation cannot consume a fractional execution")
+            raise AllocationRefusalError(
+                "whole-share allocation cannot consume a fractional execution"
+            )
         quantities = [value.to_integral_value(rounding="ROUND_FLOOR") for value in exact]
         residual = int(total_quantity - sum(quantities, Decimal(0)))
         rounding_order = (
@@ -214,29 +229,70 @@ def allocate(  # noqa: PLR0913 - allocation evidence is explicit at the call sit
         for index in rounding_order[:residual]:
             quantities[index] += 1
             residual_accounts.append(plan.targets[index].account)
+    active = [
+        (target, quantity, exact_quantity)
+        for target, quantity, exact_quantity in zip(plan.targets, quantities, exact, strict=True)
+        if quantity > 0
+    ]
+    total = sum((quantity for _, quantity, _ in active), Decimal(0))
+    if total != total_quantity:  # pragma: no cover - guarded by allocation arithmetic
+        raise AllocationRefusalError("declared allocation cannot conserve execution quantity")
+    cent = Decimal("0.01")
+    executed_consideration = total_money.quantize(cent, rounding=ROUND_HALF_EVEN)
+    considerations = [
+        (quantity * average_price).quantize(cent, rounding=ROUND_HALF_EVEN)
+        for _, quantity, _ in active
+    ]
+    money_difference = executed_consideration - sum(considerations, Decimal(0))
+    money_residuals: tuple[AllocationMoneyResidual, ...] = ()
+    if money_difference:
+        if not active:  # pragma: no cover - positive captures and targets guarantee a recipient
+            raise AllocationRefusalError("monetary residual has no eligible allocation target")
+        money_order = (
+            sorted(
+                range(len(active)),
+                key=lambda index: (active[index][2] - active[index][1], -index),
+                reverse=True,
+            )
+            if plan.rule is AllocationRule.PRO_RATA
+            else list(range(len(active)))
+        )
+        recipient = money_order[0]
+        considerations[recipient] += money_difference
+        money_residuals = (
+            AllocationMoneyResidual(
+                account=active[recipient][0].account,
+                amount=money_difference,
+                reason=f"{plan.rule.value}:{plan.rounding_method}",
+            ),
+        )
     entries = tuple(
         AllocationEntry(
             account=target.account,
             quantity=quantity,
             average_price=average_price,
-            consideration=quantity * average_price,
+            consideration=consideration,
         )
-        for target, quantity in zip(plan.targets, quantities, strict=True)
-        if quantity > 0
+        for (target, quantity, _), consideration in zip(active, considerations, strict=True)
     )
-    total = sum((entry.quantity for entry in entries), Decimal(0))
-    if sum((entry.consideration for entry in entries), Decimal(0)) != total_money:
-        raise AssertionError("allocated consideration must equal execution consideration")
+    if (  # pragma: no cover - residual assignment above makes this a defensive invariant
+        sum((entry.consideration for entry in entries), Decimal(0)) != executed_consideration
+    ):
+        raise AllocationRefusalError("declared allocation cannot conserve execution consideration")
     allocation = AllocationRecord(
         allocation_id=allocation_id,
         trade_ids=tuple(item.trade_id for item in captures),
         entries=entries,
         executed_quantity=total_quantity,
-        executed_consideration=total_money,
+        executed_consideration=executed_consideration,
         average_price=average_price,
+        average_price_decimal_places=plan.average_price_decimal_places,
+        average_price_rounding=plan.average_price_rounding,
+        consideration_rounding="ROUND_HALF_EVEN_TO_CENT",
         rule=plan.rule,
         rounding_method=plan.rounding_method,
         residual_assignments=tuple(residual_accounts),
+        money_residuals=money_residuals,
         allocation_plan_digest=digest(plan),
     )
     journal = transition(

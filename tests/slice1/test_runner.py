@@ -104,7 +104,16 @@ from lc.obligation import (
     form_obligation,
 )
 from lc.policy import ExecutionReport, apply_execution
-from lc.trade import MatchFact, affirm, allocate, capture, record_match
+from lc.trade import (
+    AllocationPlan,
+    AllocationRule,
+    AllocationTarget,
+    MatchFact,
+    affirm,
+    allocate,
+    capture,
+    record_match,
+)
 
 AUREON_COMMIT = "b22ed26050021468b5cd9a638636a2828c2afd54"
 ATREIDES_COMMIT = "123ce5a33a37f60cc40a7a436c4a7f993334331e"
@@ -304,6 +313,14 @@ def _run(  # noqa: PLR0915 - the ordered lifecycle remains visible as one experi
         allocation_id=AllocationId(_id("alc_", 23)),
         actor=ACTOR,
         event=_event(23),
+        plan=AllocationPlan(
+            targets=tuple(
+                AllocationTarget(account=account, target_quantity=captured.quantity)
+                for account in internal.allocation_accounts
+            ),
+            rule=AllocationRule.PRO_RATA,
+            rounding_method="LARGEST_REMAINDER",
+        ),
     )
     response = MatchingEmulator(seed=9).respond(
         MatchRequest(

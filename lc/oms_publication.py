@@ -95,9 +95,13 @@ def build_synthetic_oms_publication(as_of: datetime) -> bytes:
         executed_quantity=Decimal(100),
         executed_consideration=Decimal(10100),
         average_price=Decimal(101),
+        average_price_decimal_places=6,
+        average_price_rounding="ROUND_HALF_EVEN",
+        consideration_rounding="ROUND_HALF_EVEN_TO_CENT",
         rule=AllocationRule.PRO_RATA,
         rounding_method="LARGEST_REMAINDER",
         residual_assignments=(),
+        money_residuals=(),
         allocation_plan_digest="sha256:" + "7" * 64,
     )
     actor = ActorRef(

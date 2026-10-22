@@ -232,8 +232,12 @@ class MarketAccessGate:
         }
         firm_open_order_notional = Decimal(0)
         account_open_order_notional = Decimal(0)
+        termless_live_orders: list[str] = []
         for item_id, item in snapshot.orders.items():
-            if item_id == order_id or item.state not in live or item.terms is None:
+            if item_id == order_id or item.state not in live:
+                continue
+            if item.terms is None:
+                termless_live_orders.append(str(item_id))
                 continue
             open_notional = (item.quantity - item.executed_quantity) * item.terms.control_price
             firm_open_order_notional += open_notional
@@ -245,6 +249,16 @@ class MarketAccessGate:
 
         def check(code: str, passed: bool, reason: str) -> None:
             checks.append(CheckResult(code=code, passed=passed, reason=reason))
+
+        check(
+            "OPEN_ORDER_TERMS",
+            not termless_live_orders,
+            (
+                "OK"
+                if not termless_live_orders
+                else f"LIVE_ORDER_TERMS_MISSING:{','.join(termless_live_orders)}"
+            ),
+        )
 
         now = order.submitted_at
         capacity_fresh = capacity is not None and now - capacity.as_of <= timedelta(
