@@ -469,6 +469,9 @@
         {% endfor %}
       </dl>
       {% endif %}
+      {% if row.repo_summary %}
+      <p class="muted"><strong>Repo:</strong> {{ row.repo_summary | join(' · ') }}</p>
+      {% endif %}
       {% if row.ficc_facts %}
       <dl class="fields">
         {% for stage, fact_badge, detail in row.ficc_facts %}
