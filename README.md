@@ -39,6 +39,13 @@ and the table makes no compliance claim.
 `lc` is version 0.1.0. `import lc` exposes that version and no aggregate facade. The middle layer is the modules below. Each module's public names are its `__all__`. Inputs are synthetic or caller-supplied. Nothing here files with a regulator or connects to a clearing agency.
 
 - Accept an approved intent, run the order lifecycle, and replay it (`lc/lifecycle.py`).
+- Apply a separate firm market-access gate before every child-order release
+  (`lc/market_access.py`). It verifies attested Atreides account-capacity and locate bytes,
+  records every pass or refusal and its limits version, and refuses missing, stale or tampered
+  evidence. Sell orders require a long, short or short-exempt mark; short sales consume a
+  quantity-limited synthetic locate. The gate is advisory infrastructure and has no venue
+  submission capability. Annual review, chief executive certification, Rule 201, bona fide
+  market making, and threshold-security Rule 203(b)(3) close-out are declared, not built.
 - Capture a trade, allocate it, record a match, and affirm it (`lc/trade.py`).
 - Clear a gross bilateral trade and check that quantity and cash are conserved (`lc/clearing.py`). Consume Atreides' attested FICC GSD bytes without translation, then record the distinct `FICC_GSD_NOVATED_NETTED` result (`lc/ficc.py`, `lc/clearing.py`). The result is explicitly observed from the FICC member seat and carries conserved net par and signed settlement money with currency. Direct, sponsored and agent access are built through that FICC path; CME Securities Clearing is declared in Atreides but its rules are not built. FICC fails, close out, buy in and intraday funding are not built.
 - Form a settlement obligation and record whether Atreides accepted those bytes (`lc/obligation.py`). The `lc` package does not submit that obligation to a rail.
@@ -55,6 +62,9 @@ and the table makes no compliance claim.
   netting or GCF tri-party method. Haircut is an input and member margin is a
   labelled synthetic approximation; fails, closeout, real FICC VaR,
   cross-margining, and participant submission are not built.
+  EQ-1 adds `equities-books.json`, `equities-margin.json`,
+  `equities-market-access.json`, `equities-protection-from-books.json`,
+  `equities-account-capacity.json`, and `equities-locates.json`; all are synthetic and replayable.
 
 The read-only Common Operating Picture (COP), the Command and Control (C2) harness, and the Thifur-H experiment are separate surfaces. The joint upgrade map exists, and the first cross-domain contracts are frozen in `cannae-kernel`.
 

@@ -386,6 +386,10 @@ def split_parent(
 
 _ALLOWED = {
     LifecycleState.PARENT_ACTIVE: {
+        LifecycleState.MARKET_ACCESS_PASSED,
+        LifecycleState.MARKET_ACCESS_REFUSED,
+    },
+    LifecycleState.MARKET_ACCESS_PASSED: {
         LifecycleState.PARTIALLY_EXECUTED,
         LifecycleState.EXECUTED,
     },

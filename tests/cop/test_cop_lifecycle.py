@@ -27,6 +27,7 @@ from cop.lifecycle import (
     LayerReading,
     build_row,
     parse_document,
+    parse_equities_document,
     parse_ficc_document,
     row_disposition,
 )
@@ -182,6 +183,35 @@ def _repo_wire_document(method: str) -> bytes:
     ).encode()
 
 
+def _equities_wire_document(name: str) -> bytes:
+    if name == "equities-account-capacity":
+        payload = json.dumps(
+            {"as_of": "2026-10-22T14:00:00+00:00", "maximum_age_seconds": 300, "accounts": []}
+        )
+        return json.dumps({"payload": payload}).encode()
+    if name == "equities-locates":
+        payload = json.dumps({"as_of": "2026-10-22T14:00:00+00:00", "locates": []})
+        return json.dumps({"payload": payload}).encode()
+    base: dict[str, object] = {"as_of": "2026-10-22T14:00:00+00:00"}
+    if name == "equities-books":
+        base.update({"balanced": True, "posting_sources": ["CNS_SETTLEMENT"]})
+    elif name == "equities-margin":
+        base.update(
+            {"initial": {"disposition": "PASS"}, "after_price_move": {"disposition": "HOLD"}}
+        )
+    elif name == "equities-market-access":
+        base["decisions"] = [{"disposition": "PASS"}, {"disposition": "HOLD"}]
+    else:
+        base.update(
+            {
+                "reserve": {"disposition": "HOLD"},
+                "net_capital": {"disposition": "PASS"},
+                "possession_or_control": {"disposition": "PASS"},
+            }
+        )
+    return json.dumps(base).encode()
+
+
 class TestPublishedLifecycleReader:
     def test_ficc_document_exposes_the_member_seat_and_both_legs(self) -> None:
         row = parse_ficc_document(_ficc_wire_document())
@@ -222,6 +252,9 @@ class TestPublishedLifecycleReader:
                 return httpx.Response(200, content=_repo_wire_document("FICC_GSD_DVP_REPO"))
             if request.url.path.endswith("ficc-repo-gcf.json"):
                 return httpx.Response(200, content=_repo_wire_document("FICC_GCF_REPO"))
+            stem = request.url.path.rsplit("/", 1)[-1].removesuffix(".json")
+            if stem.startswith("equities-"):
+                return httpx.Response(200, content=_equities_wire_document(stem))
             return httpx.Response(
                 200,
                 content=_wire_document(
@@ -235,14 +268,33 @@ class TestPublishedLifecycleReader:
             http=httpx.Client(transport=httpx.MockTransport(respond)),
         )
         rows = client.rows()
-        assert len(rows) == 5
+        assert len(rows) == 11
         assert requested == [
             "https://example.invalid/lifecycle/funded.json",
             "https://example.invalid/lifecycle/unfunded.json",
             "https://example.invalid/lifecycle/ficc-netted.json",
             "https://example.invalid/lifecycle/ficc-repo-dvp.json",
             "https://example.invalid/lifecycle/ficc-repo-gcf.json",
+            "https://example.invalid/lifecycle/equities-account-capacity.json",
+            "https://example.invalid/lifecycle/equities-locates.json",
+            "https://example.invalid/lifecycle/equities-books.json",
+            "https://example.invalid/lifecycle/equities-margin.json",
+            "https://example.invalid/lifecycle/equities-market-access.json",
+            "https://example.invalid/lifecycle/equities-protection-from-books.json",
         ]
+
+    def test_equities_publications_are_person_visible_rows(self) -> None:
+        for name in (
+            "equities-account-capacity",
+            "equities-locates",
+            "equities-books",
+            "equities-margin",
+            "equities-market-access",
+            "equities-protection-from-books",
+        ):
+            row = parse_equities_document(_equities_wire_document(name), name)
+            assert row.disposition is Disposition.PASS
+            assert row.clearing_method == "EQ1_EQUITIES_SELF_CLEARING"
 
     def test_unset_configuration_names_the_variable(self) -> None:
         settings = load_settings({"LEGATE_OPERATOR_KEY": "k", "LEGATE_SESSION_SECRET": "s"})

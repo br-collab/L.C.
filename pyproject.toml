@@ -82,6 +82,7 @@ target-version = "py311"
 select = ["E", "F", "W", "I", "B", "UP", "N", "PL", "RUF"]
 
 [tool.ruff.lint.per-file-ignores]
+"tests/test_market_access.py" = ["PLR0913", "PLR0917"]
 # Tests compare against literal expected values (status codes, counts) by design.
 "tests/**" = ["PLR2004"]
 

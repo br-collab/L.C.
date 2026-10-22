@@ -561,6 +561,56 @@ def parse_repo_document(raw: bytes) -> LifecycleRow:
     )
 
 
+def parse_equities_document(raw: bytes, name: str) -> LifecycleRow:
+    """Render one EQ-1 publication without inferring anything absent from it."""
+    try:
+        document = json.loads(raw)
+        if name in {"equities-account-capacity", "equities-locates"}:
+            payload = json.loads(document["payload"])
+            taken_at = datetime.fromisoformat(payload["as_of"])
+            detail = (
+                f"accounts={len(payload['accounts'])}; maximum_age_seconds="
+                f"{payload['maximum_age_seconds']}"
+                if name.endswith("capacity")
+                else f"locates={len(payload['locates'])}; quantity limited and synthetic"
+            )
+        else:
+            taken_at = datetime.fromisoformat(document["as_of"])
+            if name == "equities-books":
+                detail = (
+                    f"balanced={document['balanced']}; sources="
+                    f"{','.join(document['posting_sources'])}"
+                )
+            elif name == "equities-margin":
+                detail = (
+                    f"initial={document['initial']['disposition']}; price_move="
+                    f"{document['after_price_move']['disposition']}"
+                )
+            elif name == "equities-market-access":
+                decisions = document["decisions"]
+                passed = sum(item["disposition"] == "PASS" for item in decisions)
+                detail = (
+                    f"decisions={len(decisions)}; passed={passed}; "
+                    f"refused={len(decisions) - passed}"
+                )
+            elif name == "equities-protection-from-books":
+                detail = "; ".join(
+                    f"{key}={document[key]['disposition']}"
+                    for key in ("reserve", "net_capital", "possession_or_control")
+                )
+            else:
+                raise ValueError("unsupported equities document")
+    except (ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        raise SourceMalformedError(f"{name} publication is malformed") from exc
+    return LifecycleRow(
+        lifecycle_id=name,
+        cells=(),
+        taken_at=taken_at,
+        clearing_method="EQ1_EQUITIES_SELF_CLEARING",
+        ficc_facts=(FiccLifecycleFact(stage=name, disposition=Disposition.PASS, detail=detail),),
+    )
+
+
 class HttpxLifecycleClient:
     """Read the stable bilateral and FICC publication instances over HTTPS."""
 
@@ -583,4 +633,17 @@ class HttpxLifecycleClient:
             )
             for name in ("ficc-repo-dvp", "ficc-repo-gcf")
         )
-        return (*bilateral, ficc, *repo_rows)
+        equities_rows = tuple(
+            parse_equities_document(
+                get_bytes(self._http, f"{self._base_url}/{name}.json", headers=headers), name
+            )
+            for name in (
+                "equities-account-capacity",
+                "equities-locates",
+                "equities-books",
+                "equities-margin",
+                "equities-market-access",
+                "equities-protection-from-books",
+            )
+        )
+        return (*bilateral, ficc, *repo_rows, *equities_rows)

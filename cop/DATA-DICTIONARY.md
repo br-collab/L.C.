@@ -36,6 +36,7 @@ System of Record. SLA means service-level agreement.
 | `lc-layer-clock` | `br-collab/L.C.`, versioned layer-clock document configured by `LC_LAYER_CLOCK_URL` | Live request | 5 minutes | Producer and reader exist; deployment URL may be absent; an empty register cannot publish |
 | `c2-escalations` | `br-collab/L.C.`, C2 escalation queue configured by `C2_ESCALATIONS_URL` | Live request | 5 minutes | Reader and demo producer exist; live publication may be absent |
 | `lifecycle` | Versioned funded, unfunded and FICC-netted slice documents published from real CI executions; the FICC document labels its member seat and both net settlement legs | `LC_LIFECYCLE_BASE_URL` over HTTPS | 26 hours | `NotConfigured` when the variable is unset; malformed, failed or stale documents hold at `INDETERMINATE` |
+| `EQ-1 equities` | Six synthetic publications: books, margin, market-access decisions, protection projections, account capacity and locates | `LC_LIFECYCLE_BASE_URL` over HTTPS | 26 hours | Every document is required; a missing or malformed document makes the lifecycle source `INDETERMINATE` |
 | `breaks` | Atreides cross-layer break records | Live request when connected | 5 minutes | No producer |
 | `holds` | Aureon hold records | No producer | Not applicable | No aggregate producer |
 | `dsor` | Aureon decision system of record authority-decision feed | No producer | Not applicable | No published feed |

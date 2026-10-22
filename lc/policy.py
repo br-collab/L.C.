@@ -183,6 +183,12 @@ def apply_execution(
         )
     snapshot = replay(register.events)
     order = snapshot.orders[report.order_id]
+    if order.state is not LifecycleState.MARKET_ACCESS_PASSED:
+        return ExecutionApplication(
+            journal=register,
+            disposition=Disposition.HOLD,
+            reason="execution refused because market access has not passed",
+        )
     remaining = order.quantity - order.executed_quantity
     if report.quantity > remaining:
         return ExecutionApplication(
