@@ -136,6 +136,52 @@ def _ficc_wire_document() -> bytes:
     ).encode()
 
 
+def _repo_wire_document(method: str) -> bytes:
+    path = "DVP_NETTING" if method == "FICC_GSD_DVP_REPO" else "GCF_TRIPARTY"
+    return json.dumps(
+        {
+            "schema_version": "harness_c2.ficc_repo_lifecycle/1",
+            "taken_at": "2026-10-21T23:30:00+00:00",
+            "scenario_id": "scn_00000000000000000000000016",
+            "lifecycle_id": "lif_03J0YY19FSPXWRSJ8ES4ZMMR16",
+            "synthetic": True,
+            "source_payload_digest": "sha256:" + "a" * 64,
+            "cato_evidence": None,
+            "repo": {
+                "schema_version": "atreides.ficc_repo/1",
+                "clearing_agency": "FICC_GSD",
+                "clearing_method": method,
+                "observation_seat": "FICC_MEMBER",
+                "observed_member_id": "member-a",
+                "access_path": "FICC_DIRECT",
+                "sponsored_execution": None,
+                "repo_rate_percent": "5",
+                "day_count_basis": 360,
+                "term": "TERM",
+                "haircut_percent": "1",
+                "member_margin_approximation": "0.25",
+                "member_margin_method": "SYNTHETIC_APPROXIMATION_NOT_FICC_VAR",
+                "legs": [
+                    {
+                        "leg": "START",
+                        "signed_par": "100",
+                        "signed_money": "-99",
+                        "currency": "USD",
+                        "settlement_path": path,
+                    },
+                    {
+                        "leg": "CLOSE",
+                        "signed_par": "-100",
+                        "signed_money": "99.01375",
+                        "currency": "USD",
+                        "settlement_path": path,
+                    },
+                ],
+            },
+        }
+    ).encode()
+
+
 class TestPublishedLifecycleReader:
     def test_ficc_document_exposes_the_member_seat_and_both_legs(self) -> None:
         row = parse_ficc_document(_ficc_wire_document())
@@ -172,6 +218,10 @@ class TestPublishedLifecycleReader:
             requested.append(str(request.url))
             if request.url.path.endswith("ficc-netted.json"):
                 return httpx.Response(200, content=_ficc_wire_document())
+            if request.url.path.endswith("ficc-repo-dvp.json"):
+                return httpx.Response(200, content=_repo_wire_document("FICC_GSD_DVP_REPO"))
+            if request.url.path.endswith("ficc-repo-gcf.json"):
+                return httpx.Response(200, content=_repo_wire_document("FICC_GCF_REPO"))
             return httpx.Response(
                 200,
                 content=_wire_document(
@@ -185,11 +235,13 @@ class TestPublishedLifecycleReader:
             http=httpx.Client(transport=httpx.MockTransport(respond)),
         )
         rows = client.rows()
-        assert len(rows) == 3
+        assert len(rows) == 5
         assert requested == [
             "https://example.invalid/lifecycle/funded.json",
             "https://example.invalid/lifecycle/unfunded.json",
             "https://example.invalid/lifecycle/ficc-netted.json",
+            "https://example.invalid/lifecycle/ficc-repo-dvp.json",
+            "https://example.invalid/lifecycle/ficc-repo-gcf.json",
         ]
 
     def test_unset_configuration_names_the_variable(self) -> None:

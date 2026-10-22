@@ -433,6 +433,7 @@ class LifecycleRowView:
     observed_member_id: str | None
     ficc_facts: tuple[tuple[str, Badge, str], ...]
     net_positions: tuple[tuple[str, str, str, str, str], ...]
+    repo_summary: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -1069,6 +1070,7 @@ def _lifecycle_view(state: LifecycleState, now: datetime) -> LifecycleView:
                     )
                     for position in row.net_positions
                 ),
+                repo_summary=row.repo_summary,
             )
             for row in rows
         ),

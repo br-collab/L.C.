@@ -73,6 +73,7 @@ __all__ = [
     "cell_for",
     "parse_document",
     "parse_ficc_document",
+    "parse_repo_document",
     "row_disposition",
 ]
 
@@ -194,6 +195,7 @@ class LifecycleRow:
     observed_member_id: str | None = None
     ficc_facts: tuple[FiccLifecycleFact, ...] = ()
     net_positions: tuple[FiccNetPosition, ...] = ()
+    repo_summary: tuple[str, ...] = ()
 
     @property
     def disposition(self) -> Disposition:
@@ -529,6 +531,36 @@ def parse_ficc_document(raw: bytes) -> LifecycleRow:
     )
 
 
+def parse_repo_document(raw: bytes) -> LifecycleRow:
+    try:
+        publication = json.loads(raw)
+        if publication["schema_version"] != "harness_c2.ficc_repo_lifecycle/1":
+            raise ValueError("unsupported schema")
+        repo = publication["repo"]
+    except (ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        raise SourceMalformedError("repo lifecycle publication is malformed") from exc
+    legs = ", ".join(
+        f"{leg['leg']} {leg['signed_par']} par / "
+        f"{leg['signed_money']} {leg['currency']} via {leg['settlement_path']}"
+        for leg in repo["legs"]
+    )
+    return LifecycleRow(
+        lifecycle_id=str(publication["lifecycle_id"]),
+        cells=(),
+        taken_at=datetime.fromisoformat(publication["taken_at"]),
+        clearing_method=repo["clearing_method"],
+        observation_seat=repo["observation_seat"],
+        observed_member_id=repo["observed_member_id"],
+        repo_summary=(
+            f"term={repo['term']}",
+            f"rate={repo['repo_rate_percent']}%/{repo['day_count_basis']}",
+            f"access={repo['access_path']}",
+            f"legs={legs}",
+            f"margin={repo['member_margin_method']}",
+        ),
+    )
+
+
 class HttpxLifecycleClient:
     """Read the stable bilateral and FICC publication instances over HTTPS."""
 
@@ -545,4 +577,10 @@ class HttpxLifecycleClient:
         ficc = parse_ficc_document(
             get_bytes(self._http, f"{self._base_url}/ficc-netted.json", headers=headers)
         )
-        return (*bilateral, ficc)
+        repo_rows = tuple(
+            parse_repo_document(
+                get_bytes(self._http, f"{self._base_url}/{name}.json", headers=headers)
+            )
+            for name in ("ficc-repo-dvp", "ficc-repo-gcf")
+        )
+        return (*bilateral, ficc, *repo_rows)

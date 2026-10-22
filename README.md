@@ -49,6 +49,12 @@ and the table makes no compliance claim.
   facts, `FICC_GSD_NOVATED_NETTED` method, `FICC_MEMBER` seat and both net settlement legs come
   from exact attested Atreides bytes. The Common Operating Picture reads that same document and
   labels the seat, observed member, net par and signed settlement money.
+  The same branch exposes `ficc-repo-dvp.json`, `ficc-repo-gcf.json`, and
+  `ficc-cash-repo-netted.json`. Repo views show the member seat, both dated
+  securities/money legs, rate, day-count term, access, and the distinct DVP
+  netting or GCF tri-party method. Haircut is an input and member margin is a
+  labelled synthetic approximation; fails, closeout, real FICC VaR,
+  cross-margining, and participant submission are not built.
 
 The read-only Common Operating Picture (COP), the Command and Control (C2) harness, and the Thifur-H experiment are separate surfaces. The joint upgrade map exists, and the first cross-domain contracts are frozen in `cannae-kernel`.
 

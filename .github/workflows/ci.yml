@@ -180,8 +180,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: br-collab/Project-Atreides
-          # Ancestry verified against Project-Atreides main.
-          ref: 27704bdbcb57782d2a01d984305ae4be2037ec26
+          # R16 producer commit; becomes ancestry-verified when Atreides PR #117 merges.
+          ref: 123ce5a33a37f60cc40a7a436c4a7f993334331e
           path: .slice1/Project-Atreides
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
