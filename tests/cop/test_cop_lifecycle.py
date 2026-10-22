@@ -212,6 +212,33 @@ def _equities_wire_document(name: str) -> bytes:
     return json.dumps(base).encode()
 
 
+def _oms_wire_document() -> bytes:
+    return json.dumps(
+        {
+            "schema_version": "lc.oms_orders_allocations/1",
+            "as_of": "2026-10-22T14:00:00+00:00",
+            "synthetic": True,
+            "orders": [
+                {
+                    "order_id": "O1",
+                    "terms": {"order_type": "LIMIT", "time_in_force": "DAY"},
+                    "states": ["PARENT_ACTIVE", "MARKET_ACCESS_PASSED", "EXECUTED"],
+                    "gate_decisions": [],
+                }
+            ],
+            "allocations": [
+                {
+                    "allocation_id": "A1",
+                    "average_price": "101",
+                    "rule": "PRO_RATA",
+                    "entries": [{"account": "A", "quantity": "100"}],
+                }
+            ],
+            "firm_control_events": [],
+        }
+    ).encode()
+
+
 class TestPublishedLifecycleReader:
     def test_ficc_document_exposes_the_member_seat_and_both_legs(self) -> None:
         row = parse_ficc_document(_ficc_wire_document())
@@ -255,6 +282,8 @@ class TestPublishedLifecycleReader:
             stem = request.url.path.rsplit("/", 1)[-1].removesuffix(".json")
             if stem.startswith("equities-"):
                 return httpx.Response(200, content=_equities_wire_document(stem))
+            if stem == "oms-orders-allocations":
+                return httpx.Response(200, content=_oms_wire_document())
             return httpx.Response(
                 200,
                 content=_wire_document(
@@ -268,7 +297,7 @@ class TestPublishedLifecycleReader:
             http=httpx.Client(transport=httpx.MockTransport(respond)),
         )
         rows = client.rows()
-        assert len(rows) == 11
+        assert len(rows) == 12
         assert requested == [
             "https://example.invalid/lifecycle/funded.json",
             "https://example.invalid/lifecycle/unfunded.json",
@@ -281,6 +310,7 @@ class TestPublishedLifecycleReader:
             "https://example.invalid/lifecycle/equities-margin.json",
             "https://example.invalid/lifecycle/equities-market-access.json",
             "https://example.invalid/lifecycle/equities-protection-from-books.json",
+            "https://example.invalid/lifecycle/oms-orders-allocations.json",
         ]
 
     def test_equities_publications_are_person_visible_rows(self) -> None:

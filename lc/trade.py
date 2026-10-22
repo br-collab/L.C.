@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from enum import StrEnum
+from typing import Self
 
 from cannae_kernel.actor import ActorRef
 from cannae_kernel.canonical import digest
 from cannae_kernel.disposition import Disposition
 from cannae_kernel.ids import AllocationId, OrderId
 from cannae_kernel.provenance import Provenance
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from lc.events import LifecycleState
 from lc.lifecycle import (
@@ -24,7 +26,10 @@ from lc.policy import ExecutionReport
 
 __all__ = [
     "AllocationEntry",
+    "AllocationPlan",
     "AllocationRecord",
+    "AllocationRule",
+    "AllocationTarget",
     "CaptureRecord",
     "MatchFact",
     "OpenException",
@@ -54,13 +59,47 @@ class CaptureRecord(_Record):
 class AllocationEntry(_Record):
     account: str = Field(min_length=1)
     quantity: Decimal = Field(gt=0)
+    average_price: Decimal = Field(gt=0)
+    consideration: Decimal = Field(gt=0)
+
+
+class AllocationRule(StrEnum):
+    PRO_RATA = "PRO_RATA"
+    ROTATION = "ROTATION"
+
+
+class AllocationTarget(_Record):
+    account: str = Field(min_length=1)
+    target_quantity: Decimal = Field(gt=0)
+
+
+class AllocationPlan(_Record):
+    targets: tuple[AllocationTarget, ...]
+    rule: AllocationRule
+    rounding_method: str = Field(min_length=1)
+    fractional_enabled: bool = False
+
+    @model_validator(mode="after")
+    def _unique_accounts(self) -> Self:
+        if not self.targets or len({item.account for item in self.targets}) != len(self.targets):
+            raise ValueError("allocation targets must name unique accounts")
+        expected = "LARGEST_REMAINDER" if self.rule is AllocationRule.PRO_RATA else "TARGET_ORDER"
+        if self.rounding_method != expected:
+            raise ValueError(f"{self.rule.value} allocation requires {expected}")
+        return self
 
 
 class AllocationRecord(_Record):
     allocation_id: AllocationId
-    trade_id: str = Field(min_length=1)
+    trade_ids: tuple[str, ...]
     entries: tuple[AllocationEntry, ...]
     executed_quantity: Decimal = Field(gt=0)
+    executed_consideration: Decimal = Field(gt=0)
+    average_price: Decimal = Field(gt=0)
+    rule: AllocationRule
+    rounding_method: str
+    residual_assignments: tuple[str, ...]
+    allocation_plan_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
 
 
 class MatchFact(_Record):
@@ -119,38 +158,90 @@ def capture(
 
 def allocate(  # noqa: PLR0913 - allocation evidence is explicit at the call site
     register: LifecycleRegister,
-    capture_record: CaptureRecord,
+    capture_record: CaptureRecord | tuple[CaptureRecord, ...],
     intent: ApprovedIntentPayload,
     *,
     allocation_id: AllocationId,
     actor: ActorRef,
     event: EventInput,
+    plan: AllocationPlan | None = None,
 ) -> tuple[LifecycleRegister, AllocationRecord]:
-    accounts = intent.allocation_accounts
-    each = capture_record.quantity / Decimal(len(accounts))
+    captures = capture_record if isinstance(capture_record, tuple) else (capture_record,)
+    if not captures:
+        raise ValueError("allocation requires at least one execution capture")
+    total_quantity = sum((item.quantity for item in captures), Decimal(0))
+    total_money = sum((item.quantity * item.price for item in captures), Decimal(0))
+    average_price = total_money / total_quantity
+    plan = plan or AllocationPlan(
+        targets=tuple(
+            AllocationTarget(
+                account=account,
+                target_quantity=total_quantity / Decimal(len(intent.allocation_accounts)),
+            )
+            for account in intent.allocation_accounts
+        ),
+        rule=AllocationRule.PRO_RATA,
+        rounding_method="LARGEST_REMAINDER",
+        fractional_enabled=True,
+    )
+    order = replay(register.events).orders[captures[0].order_id]
+    if (
+        order.terms is not None
+        and order.terms.allocation_plan_digest is not None
+        and order.terms.allocation_plan_digest != digest(plan)
+    ):
+        raise ValueError("allocation plan does not match the plan sealed before the order")
+    target_total = sum((item.target_quantity for item in plan.targets), Decimal(0))
+    if total_quantity > target_total:
+        raise ValueError("executed quantity exceeds declared allocation targets")
+    exact = [total_quantity * item.target_quantity / target_total for item in plan.targets]
+    quantities = list(exact)
+    residual_accounts: list[str] = []
+    if not plan.fractional_enabled:
+        if total_quantity != total_quantity.to_integral_value():
+            raise ValueError("whole-share allocation cannot consume a fractional execution")
+        quantities = [value.to_integral_value(rounding="ROUND_FLOOR") for value in exact]
+        residual = int(total_quantity - sum(quantities, Decimal(0)))
+        rounding_order = (
+            sorted(
+                range(len(exact)),
+                key=lambda index: (exact[index] - quantities[index], -index),
+                reverse=True,
+            )
+            if plan.rule is AllocationRule.PRO_RATA
+            else list(range(len(exact)))
+        )
+        for index in rounding_order[:residual]:
+            quantities[index] += 1
+            residual_accounts.append(plan.targets[index].account)
     entries = tuple(
         AllocationEntry(
-            account=account,
-            quantity=(
-                capture_record.quantity - each * Decimal(len(accounts) - 1)
-                if index == len(accounts) - 1
-                else each
-            ),
+            account=target.account,
+            quantity=quantity,
+            average_price=average_price,
+            consideration=quantity * average_price,
         )
-        for index, account in enumerate(accounts)
+        for target, quantity in zip(plan.targets, quantities, strict=True)
+        if quantity > 0
     )
     total = sum((entry.quantity for entry in entries), Decimal(0))
-    if total != capture_record.quantity:
-        raise AssertionError("allocated quantity must equal executed quantity")
+    if sum((entry.consideration for entry in entries), Decimal(0)) != total_money:
+        raise AssertionError("allocated consideration must equal execution consideration")
     allocation = AllocationRecord(
         allocation_id=allocation_id,
-        trade_id=capture_record.trade_id,
+        trade_ids=tuple(item.trade_id for item in captures),
         entries=entries,
-        executed_quantity=capture_record.quantity,
+        executed_quantity=total_quantity,
+        executed_consideration=total_money,
+        average_price=average_price,
+        rule=plan.rule,
+        rounding_method=plan.rounding_method,
+        residual_assignments=tuple(residual_accounts),
+        allocation_plan_digest=digest(plan),
     )
     journal = transition(
         register,
-        order_id=capture_record.order_id,
+        order_id=captures[0].order_id,
         target=LifecycleState.ALLOCATED,
         reason=f"allocation intent applied; quantity conserved in {allocation_id}",
         actor=actor,

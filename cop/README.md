@@ -121,7 +121,7 @@ Legate runs as its **own Railway service**, separate from Aureon's. Deploying or
    - `ATREIDES_AGENTS_URL` (optional): where the Atreides Phase A activation snapshot is published. Leave it unset until that document is actually served; the Agents panel then reports "not configured" rather than failing against a guessed address.
    - `ATREIDES_BREAKS_URL`: `https://raw.githubusercontent.com/br-collab/Project-Atreides/breaks-snapshot/breaks.json`
    - `ATREIDES_TRACEABILITY_URL`: `https://raw.githubusercontent.com/br-collab/Project-Atreides/traceability-snapshot/traceability.json`
-   - `LC_LIFECYCLE_BASE_URL`: `https://raw.githubusercontent.com/br-collab/L.C./lifecycle-document` (the reader fetches funded, unfunded, FICC and EQ-1 equities publications beneath this base URL).
+   - `LC_LIFECYCLE_BASE_URL`: `https://raw.githubusercontent.com/br-collab/L.C./lifecycle-document` (the reader fetches funded, unfunded, FICC, EQ-1 equities and OMS-1 order/allocation publications beneath this base URL).
    - Leave `C2_ESCALATIONS_URL` and `LC_LAYER_CLOCK_URL` unset until their producers publish stable documents. Their panels correctly report `not_configured`; do not substitute a feature-branch or guessed URL.
    - Do **not** set `LEGATE_DEMO` or `LEGATE_INSECURE_LOCAL`. If either is set, the service refuses to serve.
 4. Under **Networking**, generate a Railway domain. Railway serves it over HTTPS (encrypted HTTP), which the `Secure` session cookie requires. **The generated domain is `lc-production-373f.up.railway.app`** — recorded here because a service whose address lives only in somebody's memory cannot be checked by anybody else.

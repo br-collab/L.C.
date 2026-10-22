@@ -183,7 +183,24 @@ def apply_execution(
         )
     snapshot = replay(register.events)
     order = snapshot.orders[report.order_id]
-    if order.state is not LifecycleState.MARKET_ACCESS_PASSED:
+    if order.state in {LifecycleState.CANCELLED, LifecycleState.EXPIRED}:
+        exception_journal = transition(
+            register,
+            order_id=report.order_id,
+            target=LifecycleState.EXCEPTION_OPEN,
+            reason=f"late fill {report.execution_id} received after {order.state.value}",
+            actor=actor,
+            event=event,
+        )
+        return ExecutionApplication(
+            journal=exception_journal,
+            disposition=Disposition.HOLD,
+            reason=f"late fill after {order.state.value} opened an exception",
+        )
+    if order.state not in {
+        LifecycleState.MARKET_ACCESS_PASSED,
+        LifecycleState.PARTIALLY_EXECUTED,
+    }:
         return ExecutionApplication(
             journal=register,
             disposition=Disposition.HOLD,

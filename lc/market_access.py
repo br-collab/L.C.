@@ -11,16 +11,17 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from decimal import Decimal
 from enum import StrEnum
-from typing import Literal, TypeVar
+from typing import Literal, Self, TypeVar
 
+from cannae_kernel.absence import require_recorded
 from cannae_kernel.actor import ActorRef
 from cannae_kernel.canonical import digest, digest_bytes
 from cannae_kernel.disposition import Disposition
 from cannae_kernel.ids import OrderId
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from lc.events import LifecycleState
-from lc.lifecycle import EventInput, LifecycleRegister, transition
+from lc.events import LifecycleState, OrderEvent
+from lc.lifecycle import EventInput, LifecycleRegister, replay, transition
 
 
 class _Record(BaseModel):
@@ -31,6 +32,38 @@ class SellMark(StrEnum):
     LONG = "LONG"
     SHORT = "SHORT"
     SHORT_EXEMPT = "SHORT_EXEMPT"
+
+
+class HaltScope(StrEnum):
+    FIRM = "FIRM"
+    ACCOUNT = "ACCOUNT"
+    STRATEGY = "STRATEGY"
+
+
+class FirmHalt(_Record):
+    halt_id: str = Field(min_length=1)
+    scope: HaltScope
+    scope_id: str | None
+    authority: ActorRef
+    recorded_at: datetime
+    released_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def _authority_and_scope(self) -> Self:
+        if not self.authority.authenticated:
+            raise ValueError("firm halt authority must be authenticated")
+        if (self.scope is HaltScope.FIRM) != (self.scope_id is None):
+            raise ValueError("firm scope has no id; account and strategy scopes require one")
+        return self
+
+    def applies(self, *, account_id: str, strategy_id: str) -> bool:
+        if self.released_at is not None:
+            return False
+        return (
+            self.scope is HaltScope.FIRM
+            or (self.scope is HaltScope.ACCOUNT and self.scope_id == account_id)
+            or (self.scope is HaltScope.STRATEGY and self.scope_id == strategy_id)
+        )
 
 
 class CheckResult(_Record):
@@ -133,12 +166,8 @@ def consume_producer_attestation(raw: bytes, expected_type: str) -> AttestedInpu
 
 
 class ChildRelease(_Record):
-    order_id: OrderId
-    account_id: str
-    issue: str
-    side: Literal["BUY", "SELL"]
-    quantity: Decimal = Field(gt=0)
-    limit_price: Decimal = Field(gt=0)
+    order_event: OrderEvent
+    lifecycle_register: LifecycleRegister
     reference_price: Decimal = Field(gt=0)
     sell_mark: SellMark | None = None
     locate_id: str | None = None
@@ -147,6 +176,7 @@ class ChildRelease(_Record):
 
 class MarketAccessDecision(_Record):
     order_id: OrderId
+    order_event_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
     disposition: Disposition
     terminal: bool
     checks: tuple[CheckResult, ...]
@@ -178,16 +208,37 @@ class MarketAccessGate:
         self._locate_used: dict[str, Decimal] = {}
         self.decisions: list[MarketAccessDecision] = []
 
-    def evaluate(  # noqa: PLR0913,PLR0915 - each control input/check is explicit evidence
+    def evaluate(  # noqa: PLR0912, PLR0915 - controls remain explicit evidence
         self,
         order: ChildRelease,
         *,
         limits: LimitsManifest,
         capacity_input: AttestedInput | None,
         locates_input: AttestedInput | None,
-        firm_open_order_notional: Decimal,
-        account_open_order_notional: Decimal,
+        halts: tuple[FirmHalt, ...] = (),
     ) -> MarketAccessDecision:
+        terms = order.order_event.payload.terms
+        if terms is None:
+            raise ValueError("market access requires terms sealed in the order event")
+        order_id = order.order_event.payload.order_id
+        quantity = require_recorded(order.order_event.payload.quantity)
+        snapshot = replay(order.lifecycle_register.events)
+        if order_id not in snapshot.orders:
+            raise ValueError("sealed order event is not in the lifecycle register")
+        live = {
+            LifecycleState.PARENT_ACTIVE,
+            LifecycleState.MARKET_ACCESS_PASSED,
+            LifecycleState.PARTIALLY_EXECUTED,
+        }
+        firm_open_order_notional = Decimal(0)
+        account_open_order_notional = Decimal(0)
+        for item_id, item in snapshot.orders.items():
+            if item_id == order_id or item.state not in live or item.terms is None:
+                continue
+            open_notional = (item.quantity - item.executed_quantity) * item.terms.control_price
+            firm_open_order_notional += open_notional
+            if item.terms.account_id == terms.account_id:
+                account_open_order_notional += open_notional
         capacity, capacity_status = _parse_attested(capacity_input, CapacityDocument)
         locates, locates_status = _parse_attested(locates_input, LocateDocument)
         checks: list[CheckResult] = []
@@ -205,12 +256,12 @@ class MarketAccessGate:
             capacity_status if capacity is None else ("OK" if capacity_fresh else "DOCUMENT_STALE"),
         )
         account = (
-            next((item for item in capacity.accounts if item.account_id == order.account_id), None)
+            next((item for item in capacity.accounts if item.account_id == terms.account_id), None)
             if capacity
             else None
         )
-        notional = order.quantity * order.limit_price
-        credit_limit = limits.account_credit_limits.get(order.account_id)
+        notional = quantity * terms.control_price
+        credit_limit = limits.account_credit_limits.get(terms.account_id)
         check(
             "ACCOUNT_CREDIT",
             account is not None
@@ -223,39 +274,50 @@ class MarketAccessGate:
             firm_open_order_notional + notional <= limits.firm_aggregate_threshold,
             "FIRM_AGGREGATE_LIMIT",
         )
-        collar = abs(order.limit_price - order.reference_price) / order.reference_price
+        collar = abs(terms.control_price - order.reference_price) / order.reference_price
         check("PRICE_COLLAR", collar <= limits.price_collar_percent, "ERRONEOUS_PRICE")
-        check("MAXIMUM_QUANTITY", order.quantity <= limits.maximum_quantity, "MAXIMUM_QUANTITY")
+        check("MAXIMUM_QUANTITY", quantity <= limits.maximum_quantity, "MAXIMUM_QUANTITY")
         check("MAXIMUM_NOTIONAL", notional <= limits.maximum_notional, "MAXIMUM_NOTIONAL")
-        key = (order.account_id, order.issue, order.side, order.quantity, order.limit_price)
+        key = (terms.account_id, terms.issue, terms.side, quantity, terms.control_price)
         duplicate = (
             key in self._seen
             and (now - self._seen[key]).total_seconds() <= limits.duplicate_window_seconds
         )
         check("DUPLICATE", not duplicate, "DUPLICATE_ORDER")
-        check("RESTRICTED_LIST", order.issue not in limits.restricted_issues, "RESTRICTED_ISSUE")
-        check("TRADING_HALT", order.issue not in limits.halted_issues, "TRADING_HALT")
+        check("RESTRICTED_LIST", terms.issue not in limits.restricted_issues, "RESTRICTED_ISSUE")
+        check("TRADING_HALT", terms.issue not in limits.halted_issues, "TRADING_HALT")
         check(
             "ACCOUNT_RESTRICTION",
-            order.account_id not in limits.restricted_accounts,
+            terms.account_id not in limits.restricted_accounts,
             "ACCOUNT_RESTRICTED",
         )
-        marking_ok = order.side != "SELL" or order.sell_mark is not None
+        active_halt = next(
+            (
+                halt
+                for halt in halts
+                if halt.applies(account_id=terms.account_id, strategy_id=terms.strategy_id)
+            ),
+            None,
+        )
+        check(
+            "FIRM_HALT",
+            active_halt is None,
+            f"FIRM_HALT:{active_halt.halt_id}" if active_halt else "NO_ACTIVE_HALT",
+        )
+        marking_ok = terms.side != "SELL" or order.sell_mark is not None
         check("SELL_MARKING", marking_ok, "SELL_MARK_MISSING")
         position = (
-            next((p.quantity for p in account.positions if p.issue == order.issue), Decimal(0))
+            next((p.quantity for p in account.positions if p.issue == terms.issue), Decimal(0))
             if account
             else Decimal(0)
         )
         long_ok = (
-            order.side != "SELL"
-            or order.sell_mark is not SellMark.LONG
-            or position >= order.quantity
+            terms.side != "SELL" or order.sell_mark is not SellMark.LONG or position >= quantity
         )
         check("LONG_OWNERSHIP", long_ok, "LONG_POSITION_INSUFFICIENT")
         locate_ok = True
         locate_reason = "NOT_REQUIRED"
-        if order.side == "SELL" and order.sell_mark in {SellMark.SHORT, SellMark.SHORT_EXEMPT}:
+        if terms.side == "SELL" and order.sell_mark in {SellMark.SHORT, SellMark.SHORT_EXEMPT}:
             locate = (
                 next((item for item in locates.locates if item.locate_id == order.locate_id), None)
                 if locates
@@ -265,14 +327,11 @@ class MarketAccessGate:
                 locate_ok, locate_reason = False, locates_status
             elif locate is None:
                 locate_ok, locate_reason = False, "LOCATE_MISSING"
-            elif locate.issue != order.issue:
+            elif locate.issue != terms.issue:
                 locate_ok, locate_reason = False, "LOCATE_ISSUE_MISMATCH"
             elif now > locate.expires_at:
                 locate_ok, locate_reason = False, "LOCATE_EXPIRED"
-            elif (
-                self._locate_used.get(locate.locate_id, Decimal(0)) + order.quantity
-                > locate.quantity
-            ):
+            elif self._locate_used.get(locate.locate_id, Decimal(0)) + quantity > locate.quantity:
                 locate_ok, locate_reason = False, "LOCATE_INSUFFICIENT"
             else:
                 locate_reason = "LOCATE_AVAILABLE"
@@ -285,10 +344,11 @@ class MarketAccessGate:
                 SellMark.SHORT_EXEMPT,
             }:
                 self._locate_used[order.locate_id] = (
-                    self._locate_used.get(order.locate_id, Decimal(0)) + order.quantity
+                    self._locate_used.get(order.locate_id, Decimal(0)) + quantity
                 )
         decision = MarketAccessDecision(
-            order_id=order.order_id,
+            order_id=order_id,
+            order_event_digest=order.order_event.envelope_digest,
             disposition=Disposition.PASS if passed else Disposition.HOLD,
             terminal=not passed,
             checks=tuple(checks),

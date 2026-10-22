@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 from enum import StrEnum
-from typing import Self
+from typing import Literal, Self
 
 from cannae_kernel.absence import Absent, Recorded
 from cannae_kernel.actor import ActorRef
@@ -24,6 +24,9 @@ __all__ = [
     "LifecycleState",
     "OrderEvent",
     "OrderEventPayload",
+    "OrderTerms",
+    "OrderType",
+    "TimeInForce",
     "seal_order_event",
 ]
 
@@ -37,6 +40,9 @@ class LifecycleState(StrEnum):
     PARENT_ACTIVE = "PARENT_ACTIVE"
     MARKET_ACCESS_PASSED = "MARKET_ACCESS_PASSED"
     MARKET_ACCESS_REFUSED = "MARKET_ACCESS_REFUSED"
+    CANCELLED = "CANCELLED"
+    REPLACED = "REPLACED"
+    EXPIRED = "EXPIRED"
     PARTIALLY_EXECUTED = "PARTIALLY_EXECUTED"
     EXECUTED = "EXECUTED"
     TRADE_CAPTURED = "TRADE_CAPTURED"
@@ -52,6 +58,50 @@ class LifecycleState(StrEnum):
     NOT_REACHED = "NOT_REACHED"
 
 
+class OrderType(StrEnum):
+    MARKET = "MARKET"
+    LIMIT = "LIMIT"
+    STOP = "STOP"
+    STOP_LIMIT = "STOP_LIMIT"
+
+
+class TimeInForce(StrEnum):
+    DAY = "DAY"
+    GOOD_TILL_CANCELLED = "GOOD_TILL_CANCELLED"
+    IMMEDIATE_OR_CANCEL = "IMMEDIATE_OR_CANCEL"
+    FILL_OR_KILL = "FILL_OR_KILL"
+
+
+class OrderTerms(BaseModel):
+    """Terms sealed into the order event that every control evaluates."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
+
+    account_id: str = Field(min_length=1)
+    strategy_id: str = Field(min_length=1)
+    issue: str = Field(min_length=1)
+    side: Literal["BUY", "SELL"]
+    order_type: OrderType
+    time_in_force: TimeInForce
+    control_price: Decimal = Field(gt=0)
+    limit_price: Decimal | None = Field(default=None, gt=0)
+    stop_price: Decimal | None = Field(default=None, gt=0)
+    fractional_enabled: bool = False
+    allocation_plan_digest: str | None = Field(default=None, pattern=r"^sha256:[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def _prices_match_order_type(self) -> Self:
+        needs_limit = self.order_type in {OrderType.LIMIT, OrderType.STOP_LIMIT}
+        needs_stop = self.order_type in {OrderType.STOP, OrderType.STOP_LIMIT}
+        if needs_limit != (self.limit_price is not None):
+            raise ValueError("limit price must be present exactly for limit and stop-limit orders")
+        if needs_stop != (self.stop_price is not None):
+            raise ValueError("stop price must be present exactly for stop and stop-limit orders")
+        if self.limit_price is not None and self.control_price != self.limit_price:
+            raise ValueError("limit orders must use their sealed limit price as control price")
+        return self
+
+
 class OrderEventPayload(BaseModel):
     """The domain payload sealed inside a kernel event envelope."""
 
@@ -63,6 +113,7 @@ class OrderEventPayload(BaseModel):
     state: LifecycleState
     reason: str = Field(min_length=1)
     quantity: Recorded[Decimal] | Absent
+    terms: OrderTerms | None = None
 
     @model_validator(mode="after")
     def _child_names_parent(self) -> Self:

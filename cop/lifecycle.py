@@ -73,6 +73,7 @@ __all__ = [
     "cell_for",
     "parse_document",
     "parse_ficc_document",
+    "parse_oms_document",
     "parse_repo_document",
     "row_disposition",
 ]
@@ -611,6 +612,45 @@ def parse_equities_document(raw: bytes, name: str) -> LifecycleRow:
     )
 
 
+def parse_oms_document(raw: bytes) -> LifecycleRow:
+    """Expose sealed order terms, states, gates, allocation and firm controls."""
+    try:
+        document = json.loads(raw)
+        if document["schema_version"] != "lc.oms_orders_allocations/1":
+            raise ValueError("unsupported schema")
+        orders = document["orders"]
+        allocations = document["allocations"]
+        controls = document["firm_control_events"]
+        terms = ", ".join(
+            f"{item['order_id']}={item['terms']['order_type']}/{item['terms']['time_in_force']}"
+            for item in orders
+        )
+        states = ", ".join(f"{item['order_id']}:{'→'.join(item['states'])}" for item in orders)
+        allocation = ", ".join(
+            f"{item['allocation_id']} avg={item['average_price']} rule={item['rule']} "
+            f"entries={len(item['entries'])}"
+            for item in allocations
+        )
+    except (ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        raise SourceMalformedError("OMS order and allocation publication is malformed") from exc
+    return LifecycleRow(
+        lifecycle_id="oms-orders-allocations",
+        cells=(),
+        taken_at=datetime.fromisoformat(document["as_of"]),
+        clearing_method="OMS_1_ORDER_MANAGEMENT",
+        ficc_facts=(
+            FiccLifecycleFact(stage="ORDER_TERMS", disposition=Disposition.PASS, detail=terms),
+            FiccLifecycleFact(stage="ORDER_STATES", disposition=Disposition.PASS, detail=states),
+            FiccLifecycleFact(stage="ALLOCATIONS", disposition=Disposition.PASS, detail=allocation),
+            FiccLifecycleFact(
+                stage="FIRM_CONTROLS",
+                disposition=Disposition.PASS,
+                detail=f"events={len(controls)}",
+            ),
+        ),
+    )
+
+
 class HttpxLifecycleClient:
     """Read the stable bilateral and FICC publication instances over HTTPS."""
 
@@ -646,4 +686,7 @@ class HttpxLifecycleClient:
                 "equities-protection-from-books",
             )
         )
-        return (*bilateral, ficc, *repo_rows, *equities_rows)
+        oms = parse_oms_document(
+            get_bytes(self._http, f"{self._base_url}/oms-orders-allocations.json", headers=headers)
+        )
+        return (*bilateral, ficc, *repo_rows, *equities_rows, oms)
