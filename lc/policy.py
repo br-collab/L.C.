@@ -15,7 +15,7 @@ from cannae_kernel.ids import IntentId, OrderId
 from cannae_kernel.provenance import Provenance
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from lc.events import LifecycleState
+from lc.events import LifecycleState, TimeInForce
 from lc.lifecycle import EventInput, LifecycleRegister, replay, transition
 
 __all__ = [
@@ -160,13 +160,14 @@ class ExecutionApplication(_Record):
     reason: str = Field(min_length=1)
 
 
-def apply_execution(
+def apply_execution(  # noqa: PLR0911, PLR0913 - every execution outcome is explicit
     register: LifecycleRegister,
     execution: ExecutionEvent,
     report: ExecutionReport,
     *,
     actor: ActorRef,
     event: EventInput,
+    remainder_event: EventInput | None = None,
 ) -> ExecutionApplication:
     """Receive a venue fact and refuse an overfill without absorbing it."""
     if execution.lifecycle_id != register.lifecycle_id:
@@ -213,6 +214,31 @@ def apply_execution(
             disposition=Disposition.HOLD,
             reason=f"execution quantity {report.quantity} exceeds remaining quantity {remaining}",
         )
+    time_in_force = order.terms.time_in_force if order.terms is not None else None
+    if time_in_force is TimeInForce.FILL_OR_KILL and report.quantity != remaining:
+        cancelled = transition(
+            register,
+            order_id=report.order_id,
+            target=LifecycleState.CANCELLED,
+            reason=f"FOK execution {report.execution_id} refused because it was not a full fill",
+            actor=actor,
+            event=event,
+        )
+        return ExecutionApplication(
+            journal=cancelled,
+            disposition=Disposition.HOLD,
+            reason="FOK partial fill refused and order cancelled without recording execution",
+        )
+    if (
+        time_in_force is TimeInForce.IMMEDIATE_OR_CANCEL
+        and report.quantity != remaining
+        and remainder_event is None
+    ):
+        return ExecutionApplication(
+            journal=register,
+            disposition=Disposition.HOLD,
+            reason="IOC partial fill requires a distinct event to cancel the remainder",
+        )
     target = (
         LifecycleState.EXECUTED
         if report.quantity == remaining
@@ -227,6 +253,24 @@ def apply_execution(
         event=event,
         quantity=report.quantity,
     )
+    if (
+        time_in_force is TimeInForce.IMMEDIATE_OR_CANCEL
+        and target is LifecycleState.PARTIALLY_EXECUTED
+    ):
+        assert remainder_event is not None  # guarded above; narrows the event type
+        updated = transition(
+            updated,
+            order_id=report.order_id,
+            target=LifecycleState.CANCELLED,
+            reason=f"IOC execution {report.execution_id} recorded; unfilled remainder cancelled",
+            actor=actor,
+            event=remainder_event,
+        )
+        return ExecutionApplication(
+            journal=updated,
+            disposition=Disposition.PASS,
+            reason="IOC partial execution recorded and unfilled remainder cancelled",
+        )
     return ExecutionApplication(
         journal=updated,
         disposition=Disposition.PASS,

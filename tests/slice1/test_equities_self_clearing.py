@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from importlib import import_module
 from pathlib import Path
 
+import pytest
 from cannae_kernel.absence import Recorded
 from cannae_kernel.actor import ActorKind, ActorRef
 from cannae_kernel.clocks import EventTimes
@@ -23,7 +24,7 @@ from lc.events import (
     TimeInForce,
     seal_order_event,
 )
-from lc.lifecycle import LifecycleRegister
+from lc.lifecycle import EventInput, LifecycleRegister, replay
 from lc.market_access import (
     ChildRelease,
     LimitsManifest,
@@ -31,6 +32,7 @@ from lc.market_access import (
     SellMark,
     consume_producer_attestation,
 )
+from lc.oms import expire_day_orders
 
 AT = datetime(2026, 10, 22, 14, tzinfo=UTC)
 
@@ -195,3 +197,32 @@ def test_eq1_publication_is_written_with_the_slice() -> None:
     path.mkdir(parents=True, exist_ok=True)
     for name, payload in publications.items():
         (path / name).write_bytes(payload)
+
+
+def test_day_expiry_uses_the_real_atreides_equities_calendar() -> None:
+    calendar_module = import_module("atreides.deadlines.calendar")
+    calendar = calendar_module.MarketCalendar.load(calendar_module.Market.US_EQUITIES)
+    release = _order("6")
+    order_id = release.order_event.payload.order_id
+    expired = expire_day_orders(
+        release.lifecycle_register,
+        session_date=date(2026, 10, 22),
+        calendar=calendar,
+        actor=release.order_event.actor,
+        events={
+            order_id: EventInput(
+                event_id=EventId("evt_" + "6" * 26),
+                times=release.order_event.times,
+                idempotency_key="eq1-day-expiry",
+            )
+        },
+    )
+    assert replay(expired.events).orders[order_id].state is LifecycleState.EXPIRED
+    with pytest.raises(calendar_module.CalendarIndeterminateError, match="no loaded data"):
+        expire_day_orders(
+            release.lifecycle_register,
+            session_date=date(2035, 1, 2),
+            calendar=calendar,
+            actor=release.order_event.actor,
+            events={},
+        )

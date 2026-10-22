@@ -19,7 +19,10 @@ from lc.events import LifecycleState
 from lc.lifecycle import EventInput, LifecycleRegister, replay
 from lc.policy import ExecutionReport, apply_execution
 from lc.trade import (
+    AllocationPlan,
     AllocationRecord,
+    AllocationRule,
+    AllocationTarget,
     CaptureRecord,
     MatchFact,
     affirm,
@@ -60,6 +63,14 @@ def _allocated() -> tuple[LifecycleRegister, CaptureRecord, AllocationRecord]:
         allocation_id=AllocationId(_id("alc_", 23)),
         actor=_actor(),
         event=_event(23),
+        plan=AllocationPlan(
+            targets=tuple(
+                AllocationTarget(account=account, target_quantity=captured.quantity)
+                for account in _payload().allocation_accounts
+            ),
+            rule=AllocationRule.PRO_RATA,
+            rounding_method="LARGEST_REMAINDER",
+        ),
     )
     return journal, captured, allocation
 
