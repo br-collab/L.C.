@@ -455,6 +455,30 @@
     <article class="card tile" data-lifecycle="{{ row.lifecycle_id }}">
       <h3><code>{{ row.lifecycle_id }}</code> {{ badge(row.badge) }}</h3>
       <p class="muted"><strong>Clearing method:</strong> <code>{{ row.clearing_method }}</code></p>
+      {% if row.observation_seat %}
+      <p class="muted"><strong>Observation seat:</strong> <code>{{ row.observation_seat }}</code>
+        &middot; <strong>Member:</strong> <code>{{ row.observed_member_id }}</code></p>
+      {% endif %}
+      {% if row.net_positions %}
+      <dl class="fields">
+        {% for member_id, cusip, settlement_date, net_quantity, net_money in row.net_positions %}
+        <div class="field">
+          <dt>{{ cusip }} &middot; {{ settlement_date }}</dt>
+          <dd><span class="field-value">Member {{ member_id }}: par {{ net_quantity }}; money {{ net_money }}</span></dd>
+        </div>
+        {% endfor %}
+      </dl>
+      {% endif %}
+      {% if row.ficc_facts %}
+      <dl class="fields">
+        {% for stage, fact_badge, detail in row.ficc_facts %}
+        <div class="field">
+          <dt>{{ stage }}</dt>
+          <dd><span class="field-value">{{ detail }}</span> {{ badge(fact_badge) }}</dd>
+        </div>
+        {% endfor %}
+      </dl>
+      {% endif %}
       {% if row.unknown_count %}<p class="muted">{{ row.unknown_count }} of {{ row.cells | length }} cells not confirmed.</p>{% endif %}
       <dl class="fields">
         {% for cell in row.cells %}

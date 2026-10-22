@@ -43,7 +43,15 @@ from cop.exceptions import (
 )
 from cop.github import Commit, Pull, PullDetail, PullHead, Tag, WorkflowRun
 from cop.grc import ControlRecord, GovernanceEvent, GovernanceKind, RiskLimit
-from cop.lifecycle import Checkpoint, Layer, LayerReading, LifecycleRow, build_row
+from cop.lifecycle import (
+    Checkpoint,
+    FiccLifecycleFact,
+    FiccNetPosition,
+    Layer,
+    LayerReading,
+    LifecycleRow,
+    build_row,
+)
 from cop.observation import SourceTimeoutError
 
 _NIGHTLY = (9, "Nightly")
@@ -312,7 +320,7 @@ _BUILT_LAYERS = frozenset(Layer)
 
 
 class DemoLifecycles:
-    """Four synthetic lifecycle objects, covering every state the board can show.
+    """Five synthetic lifecycle objects, covering every state the board can show.
 
     Deliberately includes the two a demonstration would rather skip: a row held
     at acceptance with nothing written to the Decision System of Record, and a
@@ -395,10 +403,39 @@ class DemoLifecycles:
                 now - timedelta(minutes=3), "approved by operator-bill"
             )
         }
-        return tuple(
+        ordinary = tuple(
             build_row(f"lif_01M2P20SY0000000000000{i:04d}", readings, _BUILT_LAYERS)
             for i, readings in enumerate((clean, held, stale, intent_only), start=1)
         )
+        ficc = LifecycleRow(
+            lifecycle_id="lif_03J0YY19FSPXWRSJ8ES4ZMMR15",
+            cells=(),
+            taken_at=now,
+            clearing_method="FICC_GSD_NOVATED_NETTED",
+            observation_seat="FICC_MEMBER",
+            observed_member_id="member-a",
+            ficc_facts=tuple(
+                FiccLifecycleFact(stage=stage, disposition=Disposition.PASS, detail="recorded")
+                for stage in (
+                    "CLEARING_ACCEPTANCE",
+                    "NOVATION",
+                    "NETTING",
+                    "SETTLEMENT_INSTRUCTION",
+                    "SETTLEMENT_FINALITY",
+                )
+            ),
+            net_positions=(
+                FiccNetPosition(
+                    member_id="member-a",
+                    cusip="91282CJL6",
+                    settlement_date="2026-10-22",
+                    net_quantity=Decimal("65"),
+                    net_settlement_amount=Decimal("-64.35"),
+                    settlement_currency="USD",
+                ),
+            ),
+        )
+        return (*ordinary, ficc)
 
 
 class DemoEscalations:

@@ -87,6 +87,8 @@ def _real_producer_bytes() -> tuple[bytes, bytes]:
                     cusip="91282CJL6",
                     settlement_date=date(2026, 10, 22),
                     signed_quantity=Decimal("100"),
+                    signed_settlement_amount=Decimal("-99.00"),
+                    settlement_currency="USD",
                     novation_evidence_id="novation-1",
                 ),
                 NovatedObligation(
@@ -96,6 +98,8 @@ def _real_producer_bytes() -> tuple[bytes, bytes]:
                     cusip="91282CJL6",
                     settlement_date=date(2026, 10, 22),
                     signed_quantity=Decimal("-35"),
+                    signed_settlement_amount=Decimal("34.65"),
+                    settlement_currency="USD",
                     novation_evidence_id="novation-2",
                 ),
             ),
@@ -115,8 +119,12 @@ def test_real_atreides_bytes_feed_lc_without_translation() -> None:
     document = consume_ficc_gsd_result(header_bytes, payload)
 
     assert document.clearing_method == "FICC_GSD_NOVATED_NETTED"
+    assert document.observation_seat == "FICC_MEMBER"
+    assert document.observed_member_id == "member-a"
     assert document.access_path == "FICC_DIRECT"
     assert document.net_settlement_obligations[0].net_quantity == Decimal("65")
+    assert document.net_settlement_obligations[0].net_settlement_amount == Decimal("-64.35")
+    assert document.net_settlement_obligations[0].settlement_currency == "USD"
     assert document.net_settlement_obligations[0].source_trade_ids == ("trade-1", "trade-2")
 
     transformation, recorded = consume_and_record_ficc(
@@ -127,6 +135,10 @@ def test_real_atreides_bytes_feed_lc_without_translation() -> None:
     assert recorded.method is ClearingMethod.NOVATED_NETTED
     assert recorded.method_label == "FICC_GSD_NOVATED_NETTED"
     assert recorded.access_model is AccessModel.FICC_DIRECT
+    assert recorded.observation_seat == "FICC_MEMBER"
+    assert recorded.observed_member_id == "member-a"
+    assert recorded.net_settlement_obligations[0].net_settlement_amount == Decimal("-64.35")
+    assert recorded.net_settlement_obligations[0].settlement_currency == "USD"
     assert transformation.input_digests == (digest_bytes(payload),)
     assert transformation.output_digest == digest(recorded)
 
@@ -151,6 +163,11 @@ def test_five_facts_remain_separate_and_the_method_is_visible() -> None:
         ficc_lifecycle_publication_bytes(publication), strict=True
     )
     assert restored.clearing_method == "FICC_GSD_NOVATED_NETTED"
+    assert restored.observation_seat == "FICC_MEMBER"
+    assert restored.observed_member_id == "member-a"
+    assert restored.net_settlement_obligations[0].net_quantity == Decimal("65")
+    assert restored.net_settlement_obligations[0].net_settlement_amount == Decimal("-64.35")
+    assert restored.net_settlement_obligations[0].settlement_currency == "USD"
     assert tuple(fact.stage for fact in restored.facts) == tuple(FiccEvidenceStage)
     assert all(fact.status is FiccFactStatus.RECORDED for fact in restored.facts)
     assert len({fact.evidence_id for fact in restored.facts}) == 5
