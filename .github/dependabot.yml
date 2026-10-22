@@ -4,8 +4,20 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
+    groups:
+      pip-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: weekly
-
+    groups:
+      codeql-action:
+        patterns:
+          - "github/codeql-action/*"
+      actions-minor-patch:
+        patterns: ["*"]
+        exclude-patterns:
+          - "github/codeql-action/*"
+        update-types: ["minor", "patch"]

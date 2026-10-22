@@ -79,7 +79,7 @@ def repo(service: RepoService) -> RepoResult:
         trade_id=f"repo-{service.value}",
         member_id="member-a",
         service=service,
-        term=RepoTerm.TERM,
+        term=RepoTerm.OVERNIGHT,
         start_date=date(2026, 10, 22),
         close_date=date(2026, 10, 23),
         collateral_par=Decimal("100"),

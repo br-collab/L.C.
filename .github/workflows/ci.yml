@@ -172,15 +172,15 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: br-collab/aureon
-          # Ancestry verified after #56 deployed.
-          ref: 3e90f72a1ffa177045d4e4f3e7f9770689e037f1
+          # FIX-7 verified this commit is on aureon/main.
+          ref: b22ed26050021468b5cd9a638636a2828c2afd54
           path: .slice1/aureon
 
       - name: Check out ancestry-verified Atreides
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: br-collab/Project-Atreides
-          # R16 producer commit; becomes ancestry-verified when Atreides PR #117 merges.
+          # R16 producer commit; FIX-7 verified it is on Atreides main after PR #117.
           ref: 123ce5a33a37f60cc40a7a436c4a7f993334331e
           path: .slice1/Project-Atreides
 

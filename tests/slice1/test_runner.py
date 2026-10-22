@@ -104,8 +104,8 @@ from lc.obligation import (
 from lc.policy import ExecutionReport, apply_execution
 from lc.trade import MatchFact, affirm, allocate, capture, record_match
 
-AUREON_COMMIT = "3e90f72a1ffa177045d4e4f3e7f9770689e037f1"
-ATREIDES_COMMIT = "7929b84d4b68c42ed857de42c40e64a9bb48b8a6"
+AUREON_COMMIT = "b22ed26050021468b5cd9a638636a2828c2afd54"
+ATREIDES_COMMIT = "123ce5a33a37f60cc40a7a436c4a7f993334331e"
 AT = datetime(2026, 9, 29, 15, 0, tzinfo=UTC)
 
 
