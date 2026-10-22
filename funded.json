@@ -4,6 +4,7 @@
   "scenario_id": "scn_00000000000000000000000001",
   "lifecycle_id": "lif_03J0YY19FSPXWRSJ8ES4ZMMHSR",
   "synthetic": true,
+  "clearing_method": "BILATERAL_GROSS",
   "stages": [
     {
       "stage": "APPROVED_INTENT",
