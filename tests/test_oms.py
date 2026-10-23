@@ -41,6 +41,7 @@ from lc.trade import (
     AllocationRefusalError,
     AllocationRule,
     AllocationTarget,
+    CaptureRecord,
     allocate,
     capture,
 )
@@ -320,6 +321,14 @@ def test_live_order_without_terms_refuses_credit_and_names_order() -> None:
     assert decision.disposition.value == "HOLD"
 
 
+def _capture_economics(record: CaptureRecord, **changes: object) -> CaptureRecord:
+    """Keep retained execution facts coherent with a synthetic capture variant."""
+    execution = record.executions[0].model_copy(
+        update={key: value for key, value in changes.items() if key in {"quantity", "price"}}
+    )
+    return record.model_copy(update={**changes, "executions": (execution,)})
+
+
 def test_targeted_allocation_and_two_fill_average_price_conserve() -> None:
     journal = _child_register()
     report = ExecutionReport(
@@ -344,8 +353,8 @@ def test_targeted_allocation_and_two_fill_average_price_conserve() -> None:
     )
     journal, first = capture(journal, report, _payload(), actor=_actor(), event=_event(85))
     fills = (
-        first.model_copy(update={"trade_id": "T1", "quantity": Decimal(40), "price": Decimal(100)}),
-        first.model_copy(update={"trade_id": "T2", "quantity": Decimal(30), "price": Decimal(107)}),
+        _capture_economics(first, trade_id="T1", quantity=Decimal(40), price=Decimal(100)),
+        _capture_economics(first, trade_id="T2", quantity=Decimal(30), price=Decimal(107)),
     )
     plan = AllocationPlan(
         targets=(
@@ -508,7 +517,7 @@ def test_allocation_plan_and_rounding_refusal_paths_are_explicit() -> None:
             event=_event(94),
             plan=plan,
         )
-    small = captured.model_copy(update={"quantity": Decimal(2), "price": Decimal(100)})
+    small = _capture_economics(captured, quantity=Decimal(2), price=Decimal(100))
     _, rotated = allocate(
         journal,
         small,
@@ -520,7 +529,7 @@ def test_allocation_plan_and_rounding_refusal_paths_are_explicit() -> None:
     )
     assert [entry.quantity for entry in rotated.entries] == [2]
     assert rotated.residual_assignments == ("A",)
-    fractional = small.model_copy(update={"quantity": Decimal("1.5")})
+    fractional = _capture_economics(small, quantity=Decimal("1.5"))
     with pytest.raises(ValueError, match="whole-share"):
         allocate(
             journal,
@@ -531,9 +540,9 @@ def test_allocation_plan_and_rounding_refusal_paths_are_explicit() -> None:
             event=_event(96),
             plan=plan,
         )
-    repeating = small.model_copy(update={"quantity": Decimal(1), "price": Decimal(100)})
-    other = small.model_copy(
-        update={"trade_id": "OTHER", "quantity": Decimal(2), "price": Decimal("100.50")}
+    repeating = _capture_economics(small, quantity=Decimal(1), price=Decimal(100))
+    other = _capture_economics(
+        small, trade_id="OTHER", quantity=Decimal(2), price=Decimal("100.50")
     )
     fractional_plan = AllocationPlan(
         targets=(
@@ -614,8 +623,8 @@ def test_allocation_conserves_quantity_and_money_for_200_random_examples() -> No
             rounding_method="LARGEST_REMAINDER",
         )
         fills = tuple(
-            captured.model_copy(
-                update={"trade_id": f"P{example}-{index}", "quantity": quantity, "price": price}
+            _capture_economics(
+                captured, trade_id=f"P{example}-{index}", quantity=quantity, price=price
             )
             for index, (quantity, price) in enumerate(zip(quantities, prices, strict=True))
         )
@@ -669,12 +678,8 @@ def test_large_repeating_average_allocates_without_error() -> None:
     )
     journal, captured = capture(journal, report, _payload(), actor=_actor(), event=_event(109))
     fills = (
-        captured.model_copy(
-            update={"trade_id": "L1", "quantity": Decimal(100), "price": Decimal("100.01")}
-        ),
-        captured.model_copy(
-            update={"trade_id": "L2", "quantity": Decimal(200), "price": Decimal("100.02")}
-        ),
+        _capture_economics(captured, trade_id="L1", quantity=Decimal(100), price=Decimal("100.01")),
+        _capture_economics(captured, trade_id="L2", quantity=Decimal(200), price=Decimal("100.02")),
     )
     plan = AllocationPlan(
         targets=(
