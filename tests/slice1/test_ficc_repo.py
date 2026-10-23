@@ -95,6 +95,8 @@ def repo(service: RepoService) -> RepoResult:
 
 
 def test_real_producer_bytes_cross_without_translation_and_tamper_fails() -> None:
+    # FIX-10 E requires the published rounding rule and each unrounded leg
+    # amount to cross intact so the counterparty can check the rounded cash.
     result = repo(RepoService.DVP)
     assert result.payload_digest is not None and result.payload is not None
     doc = consume_repo_result(str(result.payload_digest), result.payload)
@@ -103,6 +105,9 @@ def test_real_producer_bytes_cross_without_translation_and_tamper_fails() -> Non
         and doc.legs[0].leg == "START"
         and doc.legs[1].leg == "CLOSE"
     )
+    assert doc.cash_rounding_convention == "ROUND_HALF_UP_TO_CENT"
+    assert doc.legs[0].unrounded_signed_money == Decimal("-99")
+    assert doc.legs[1].unrounded_signed_money == Decimal("99.01375")
     with pytest.raises(ValueError, match="attested digest"):
         consume_repo_result(str(result.payload_digest), result.payload + b" ")
 
