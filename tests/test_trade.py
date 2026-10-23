@@ -6,6 +6,7 @@ import ast
 import random
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from cannae_kernel.absence import Recorded
@@ -27,6 +28,7 @@ from lc.trade import (
     AllocationTarget,
     CaptureRecord,
     MatchFact,
+    _captured_consideration,
     affirm,
     allocate,
     capture,
@@ -221,6 +223,22 @@ def test_grok_multifill_case_books_exact_money() -> None:
         journal = applied.journal
     _, captured = capture(journal, reports, _payload(), actor=_actor(), event=_event(5002))
     assert captured.quantity * captured.price == Decimal("9975.937500")
+
+
+def test_allocation_sums_captured_prints_not_rounded_average() -> None:
+    """Rule 29 regression found by SIM-1B seed 20261023 on 9 Sep 2027."""
+    capture_record = SimpleNamespace(
+        executions=(
+            SimpleNamespace(quantity=Decimal(72), price=Decimal("0.123")),
+            SimpleNamespace(quantity=Decimal(1), price=Decimal("0.159")),
+        )
+    )
+    exact = _captured_consideration((capture_record,))  # type: ignore[arg-type]
+    rounded_average_reconstruction = (exact / Decimal(73)).quantize(Decimal("0.000001")) * Decimal(
+        73
+    )
+    assert exact.quantize(Decimal("0.01")) == Decimal("9.02")
+    assert rounded_average_reconstruction.quantize(Decimal("0.01")) == Decimal("9.01")
 
 
 def test_mismatch_opens_its_own_exception_and_cannot_close_it_here() -> None:

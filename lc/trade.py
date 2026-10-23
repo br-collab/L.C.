@@ -152,6 +152,17 @@ class TradeOutcome(_Record):
     exception: OpenException | None = None
 
 
+def _captured_consideration(captures: tuple[CaptureRecord, ...]) -> Decimal:
+    return sum(
+        (
+            execution.quantity * execution.price
+            for item in captures
+            for execution in item.executions
+        ),
+        Decimal(0),
+    )
+
+
 def capture(
     register: LifecycleRegister,
     report: ExecutionReport | tuple[ExecutionReport, ...],
@@ -220,7 +231,10 @@ def allocate(  # noqa: PLR0913 - allocation evidence is explicit at the call sit
     if plan is None:
         raise AllocationRefusalError("allocation requires a declared plan before the order")
     total_quantity = sum((item.quantity for item in captures), Decimal(0))
-    total_money = sum((item.quantity * item.price for item in captures), Decimal(0))
+    # Rule 29: "Every money path carries a property test ... asserting conservation
+    # to the share and to the cent." Capture retains every venue execution, so
+    # allocation sums those facts instead of multiplying a rounded average back out.
+    total_money = _captured_consideration(captures)
     price_quantum = Decimal(1).scaleb(-plan.average_price_decimal_places)
     average_price = (total_money / total_quantity).quantize(price_quantum, rounding=ROUND_HALF_EVEN)
     order = replay(register.events).orders[captures[0].order_id]
