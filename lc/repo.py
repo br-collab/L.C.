@@ -35,6 +35,9 @@ class RepoLeg(_Wire):
     settlement_date: date | None
     signed_par: Decimal
     signed_money: Decimal | None
+    # FIX-10 E: "keep the unrounded amount on the leg" so the receiving
+    # participant can reproduce the published cash rounding.
+    unrounded_signed_money: Decimal | None
     currency: str
     cusip: str | None
     collateral_class: str | None
@@ -64,6 +67,9 @@ class RepoDocument(_Wire):
     haircut_percent: Decimal
     member_margin_approximation: Decimal
     member_margin_method: Literal["SYNTHETIC_APPROXIMATION_NOT_FICC_VAR"]
+    # FIX-10 E: "record the rounding rule in the published document so a
+    # counterparty can check it."
+    cash_rounding_convention: Literal["ROUND_HALF_UP_TO_CENT"]
     legs: tuple[RepoLeg, ...]
     gcf_allocation: GcfAllocation | None
 
