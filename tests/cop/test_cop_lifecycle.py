@@ -215,7 +215,7 @@ def _equities_wire_document(name: str) -> bytes:
 def _oms_wire_document() -> bytes:
     return json.dumps(
         {
-            "schema_version": "lc.oms_orders_allocations/1",
+            "schema_version": "lc.oms_orders_allocations/2",
             "as_of": "2026-10-22T14:00:00+00:00",
             "synthetic": True,
             "orders": [
@@ -235,6 +235,28 @@ def _oms_wire_document() -> bytes:
                 }
             ],
             "firm_control_events": [],
+            "fills": [
+                {
+                    "trade_id": "T1",
+                    "order_id": "O1",
+                    "cusip": "91282CJL6",
+                    "quantity": "100",
+                    "price": "99.5",
+                    "provenance": "FACT_SYNTHETIC",
+                }
+            ],
+            "closed_trades": [
+                {
+                    "trade_id": "T1",
+                    "rail": "FICC_GSD_DVP",
+                    "ccp_status": "SETTLED",
+                    "cash_reconciled": True,
+                    "securities_reconciled": True,
+                    "books_posted": True,
+                    "unexplained_breaks": 0,
+                    "replay_economics_identical": True,
+                }
+            ],
         }
     ).encode()
 

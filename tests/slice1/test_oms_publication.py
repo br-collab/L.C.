@@ -22,7 +22,13 @@ def test_oms_publication_replays_and_is_visible_to_cop() -> None:
         "ORDER_STATES",
         "ALLOCATIONS",
         "FIRM_CONTROLS",
+        "FILLS",
+        "CLOSED_TRADE",
     ]
+    closed = row.ficc_facts[-1]
+    assert "FICC_GSD_DVP SETTLED" in closed.detail
+    assert "breaks=0" in closed.detail
+    assert "replay=True" in closed.detail
 
 
 def test_oms_publication_is_written_with_the_slice() -> None:
