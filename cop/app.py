@@ -86,6 +86,7 @@ PANELS: dict[str, str] = {
     "agents": "Atreides agents",
     "advisories": "Engine advisories (synthetic)",
     "traceability": "Requirement coverage (synthetic)",
+    "simulation": "Market and settlement simulation",
     "lifecycles": "Lifecycle board",
     "escalations": "Escalation queue",
     "breaks": "Breaks across layers",
@@ -108,7 +109,7 @@ SECTIONS: dict[str, tuple[str, ...]] = {
     "controls": ("controls",),
     "risk": ("risk",),
     "agents": ("agents", "advisories", "traceability"),
-    "programme": ("waves", "repositories", "aureon", "scheduled"),
+    "programme": ("waves", "repositories", "aureon", "simulation", "scheduled"),
     "blind": ("blindspots",),
 }
 
