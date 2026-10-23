@@ -140,7 +140,8 @@ def _record_ficc_netted(
         )
     net_totals = {
         (position.member_id, position.cusip, position.settlement_date): (
-            position.net_quantity, position.net_settlement_amount
+            position.net_quantity,
+            position.net_settlement_amount,
         )
         for position in document.net_settlement_obligations
     }

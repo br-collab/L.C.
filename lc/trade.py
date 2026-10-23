@@ -176,8 +176,10 @@ def capture(
     total_money = sum((item.quantity * item.price for item in reports), Decimal(0))
     executions = tuple(
         CapturedExecution(
-            execution_id=item.execution_id, quantity=item.quantity,
-            price=item.price, execution_digest=digest(item),
+            execution_id=item.execution_id,
+            quantity=item.quantity,
+            price=item.price,
+            execution_digest=digest(item),
         )
         for item in reports
     )
