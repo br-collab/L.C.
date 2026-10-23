@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import random
 from decimal import Decimal
 from pathlib import Path
 
@@ -103,6 +104,81 @@ def test_capture_explicitly_folds_in_enrichment_and_allocation_conserves() -> No
     assert sum((entry.quantity for entry in allocation.entries), Decimal(0)) == captured.quantity
     assert allocation.executed_quantity == captured.quantity
     assert replay(journal.events).orders[captured.order_id].state is LifecycleState.ALLOCATED
+
+
+def test_generated_multifill_capture_and_allocation_conserve_share_and_cent() -> None:
+    """Rule 29 property test: 240 generated examples, fixed seed 20261022."""
+    rng = random.Random(20261022)
+    base = VenueEmulator(seed=8).execute(_venue_order(), outcome=VenueOutcome.FILL, event_time=NOW)
+    assert isinstance(base.event, Recorded) and isinstance(base.report, Recorded)
+    for example in range(240):
+        first_qty = Decimal(rng.randrange(1, 100))
+        second_qty = Decimal(100) - first_qty
+        first_price = Decimal(rng.randrange(1, 100_000)) / Decimal(64)
+        second_price = Decimal(rng.randrange(1, 100_000)) / Decimal(64)
+        reports = (
+            ExecutionReport.model_validate(base.report.value.model_dump(mode="python")).model_copy(
+                update={"execution_id": f"p-{example}-1", "quantity": first_qty,
+                        "price": first_price, "outcome": "PARTIAL_FILL"}
+            ),
+            ExecutionReport.model_validate(base.report.value.model_dump(mode="python")).model_copy(
+                update={"execution_id": f"p-{example}-2", "quantity": second_qty,
+                        "price": second_price, "outcome": "FILL"}
+            ),
+        )
+        journal = _child_register()
+        for index, report in enumerate(reports):
+            execution = base.event.value.model_copy(update={"payload_digest": digest(report)})
+            applied = apply_execution(
+                journal, execution, report, actor=_actor(), event=_event(2000 + example * 2 + index)
+            )
+            assert applied.disposition is Disposition.PASS
+            journal = applied.journal
+        journal, captured = capture(
+            journal, reports, _payload(), actor=_actor(), event=_event(3000 + example)
+        )
+        _, allocation = allocate(
+            journal, captured, _payload(), allocation_id=AllocationId(_id("alc_", 4000 + example)),
+            actor=_actor(), event=_event(4000 + example),
+            plan=AllocationPlan(
+                targets=(AllocationTarget(account="A", target_quantity=Decimal(34)),
+                         AllocationTarget(account="B", target_quantity=Decimal(66))),
+                rule=AllocationRule.PRO_RATA, rounding_method="LARGEST_REMAINDER",
+            ),
+        )
+        assert sum((entry.quantity for entry in allocation.entries), Decimal(0)) == Decimal(100)
+        expected_cents = (first_qty * first_price + second_qty * second_price).quantize(
+            Decimal("0.01")
+        )
+        assert (
+            sum((entry.consideration for entry in allocation.entries), Decimal(0))
+            == expected_cents
+        )
+
+
+def test_grok_multifill_case_books_exact_money() -> None:
+    reports = (
+        ExecutionReport(execution_id="grok-1", order_id=_venue_order().order_id,
+                        intent_id=_payload().intent_id, venue="VENUE-SYNTHETIC",
+                        quantity=Decimal(60), price=Decimal("100.015625"), outcome="PARTIAL_FILL"),
+        ExecutionReport(execution_id="grok-2", order_id=_venue_order().order_id,
+                        intent_id=_payload().intent_id, venue="VENUE-SYNTHETIC",
+                        quantity=Decimal(40), price=Decimal("99.375"), outcome="FILL"),
+    )
+    journal = _child_register()
+    base = VenueEmulator(seed=8).execute(_venue_order(), outcome=VenueOutcome.FILL, event_time=NOW)
+    assert isinstance(base.event, Recorded)
+    for index, report in enumerate(reports):
+        applied = apply_execution(
+            journal,
+            base.event.value.model_copy(update={"payload_digest": digest(report)}),
+            report,
+            actor=_actor(),
+            event=_event(5000 + index),
+        )
+        journal = applied.journal
+    _, captured = capture(journal, reports, _payload(), actor=_actor(), event=_event(5002))
+    assert captured.quantity * captured.price == Decimal("9975.937500")
 
 
 def test_mismatch_opens_its_own_exception_and_cannot_close_it_here() -> None:

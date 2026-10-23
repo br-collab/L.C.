@@ -9,6 +9,8 @@ from types import SimpleNamespace
 from typing import Literal
 
 import pytest
+pytest.importorskip("aureon")
+
 from atreides.acceptance.service import evaluate_candidate, prepare_instruction
 from atreides.messaging.canonical import (
     CashLegInstruction,

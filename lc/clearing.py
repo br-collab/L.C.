@@ -117,7 +117,6 @@ class FiccClearingResult(_Record):
     input_trade_ids: tuple[str, ...]
     input_obligation_ids: tuple[str, ...]
     output_position_count: int = Field(gt=0)
-    net_quantity: Decimal
     net_settlement_obligations: tuple[FiccNetObligation, ...]
 
 
@@ -131,6 +130,26 @@ def _record_ficc_netted(
         "FICC_SPONSORED": AccessModel.SPONSORED,
         "FICC_AGENT": AccessModel.AGENT,
     }
+    novated_totals: dict[tuple[str, str, object], tuple[Decimal, Decimal]] = {}
+    for obligation in document.novated_obligations:
+        key = (obligation.member_id, obligation.cusip, obligation.settlement_date)
+        quantity, money = novated_totals.get(key, (Decimal(0), Decimal(0)))
+        novated_totals[key] = (
+            quantity + obligation.signed_quantity,
+            money + obligation.signed_settlement_amount,
+        )
+    net_totals = {
+        (position.member_id, position.cusip, position.settlement_date): (
+            position.net_quantity, position.net_settlement_amount
+        )
+        for position in document.net_settlement_obligations
+    }
+    if novated_totals != net_totals:
+        raise ValueError(
+            "FICC net positions do not conserve novated par and money "
+            "per member, CUSIP, and settlement date"
+        )
+
     result = FiccClearingResult(
         access_model=access_models[document.access_path],
         observed_member_id=document.observed_member_id,
@@ -147,9 +166,6 @@ def _record_ficc_netted(
             sorted(obligation.obligation_id for obligation in document.novated_obligations)
         ),
         output_position_count=len(document.net_settlement_obligations),
-        net_quantity=sum(
-            (position.net_quantity for position in document.net_settlement_obligations), Decimal(0)
-        ),
         net_settlement_obligations=document.net_settlement_obligations,
     )
     transformation = ClearingTransformation(

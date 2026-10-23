@@ -184,6 +184,29 @@ def apply_execution(  # noqa: PLR0911, PLR0913 - every execution outcome is expl
         )
     snapshot = replay(register.events)
     order = snapshot.orders[report.order_id]
+    if report.outcome == "OVERFILL":
+        return ExecutionApplication(
+            journal=register,
+            disposition=Disposition.HOLD,
+            reason=(
+                "venue classified the report as OVERFILL; quantity exceeds "
+                "remaining and was not recorded"
+            ),
+        )
+    if report.outcome == "LATE_FILL":
+        exception_journal = transition(
+            register,
+            order_id=report.order_id,
+            target=LifecycleState.EXCEPTION_OPEN,
+            reason=f"late fill {report.execution_id} reported by venue",
+            actor=actor,
+            event=event,
+        )
+        return ExecutionApplication(
+            journal=exception_journal,
+            disposition=Disposition.HOLD,
+            reason="venue LATE_FILL opened an exception without adding quantity",
+        )
     if order.state in {LifecycleState.CANCELLED, LifecycleState.EXPIRED}:
         exception_journal = transition(
             register,
