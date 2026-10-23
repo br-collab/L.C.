@@ -47,6 +47,13 @@ class _Record(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
 
 
+class CapturedExecution(_Record):
+    execution_id: str = Field(min_length=1)
+    quantity: Decimal = Field(gt=0)
+    price: Decimal = Field(gt=0)
+    execution_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+
+
 class CaptureRecord(_Record):
     trade_id: str = Field(min_length=1)
     order_id: OrderId
@@ -54,6 +61,7 @@ class CaptureRecord(_Record):
     instrument_id: str = Field(min_length=1)
     quantity: Decimal = Field(gt=0)
     price: Decimal = Field(gt=0)
+    executions: tuple[CapturedExecution, ...]
     enrichment_folded_into_capture: bool = True
     provenance: Provenance = Provenance.POLICY_RESULT
 
@@ -146,27 +154,47 @@ class TradeOutcome(_Record):
 
 def capture(
     register: LifecycleRegister,
-    report: ExecutionReport,
+    report: ExecutionReport | tuple[ExecutionReport, ...],
     intent: ApprovedIntentPayload,
     *,
     actor: ActorRef,
     event: EventInput,
 ) -> tuple[LifecycleRegister, CaptureRecord]:
+    reports = report if isinstance(report, tuple) else (report,)
+    if not reports:
+        raise ValueError("trade capture requires execution reports")
+    order_ids = {item.order_id for item in reports}
+    if len(order_ids) != 1:
+        raise ValueError("all captured reports must belong to one order")
     snapshot = replay(register.events)
-    order = snapshot.orders[report.order_id]
+    order = snapshot.orders[reports[0].order_id]
     if order.state is not LifecycleState.EXECUTED:
         raise ValueError("trade capture requires an EXECUTED order")
+    total_quantity = sum((item.quantity for item in reports), Decimal(0))
+    if total_quantity != order.executed_quantity:
+        raise ValueError("execution reports do not sum to the executed quantity")
+    total_money = sum((item.quantity * item.price for item in reports), Decimal(0))
+    executions = tuple(
+        CapturedExecution(
+            execution_id=item.execution_id,
+            quantity=item.quantity,
+            price=item.price,
+            execution_digest=digest(item),
+        )
+        for item in reports
+    )
     record = CaptureRecord(
-        trade_id=f"trade-{report.execution_id}",
-        order_id=report.order_id,
-        execution_digest=digest(report),
+        trade_id=f"trade-{reports[0].execution_id}",
+        order_id=reports[0].order_id,
+        execution_digest=executions[0].execution_digest,
         instrument_id=intent.instrument_id,
-        quantity=order.executed_quantity,
-        price=report.price,
+        quantity=total_quantity,
+        price=total_money / total_quantity,
+        executions=executions,
     )
     journal = transition(
         register,
-        order_id=report.order_id,
+        order_id=reports[0].order_id,
         target=LifecycleState.TRADE_CAPTURED,
         reason="execution captured; ENRICHED is explicitly folded into TRADE_CAPTURED",
         actor=actor,
