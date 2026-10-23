@@ -616,11 +616,13 @@ def parse_oms_document(raw: bytes) -> LifecycleRow:
     """Expose sealed order terms, states, gates, allocation and firm controls."""
     try:
         document = json.loads(raw)
-        if document["schema_version"] != "lc.oms_orders_allocations/1":
+        if document["schema_version"] != "lc.oms_orders_allocations/2":
             raise ValueError("unsupported schema")
         orders = document["orders"]
         allocations = document["allocations"]
         controls = document["firm_control_events"]
+        fills = document["fills"]
+        closed = document["closed_trades"]
         terms = ", ".join(
             f"{item['order_id']}={item['terms']['order_type']}/{item['terms']['time_in_force']}"
             for item in orders
@@ -646,6 +648,26 @@ def parse_oms_document(raw: bytes) -> LifecycleRow:
                 stage="FIRM_CONTROLS",
                 disposition=Disposition.PASS,
                 detail=f"events={len(controls)}",
+            ),
+            FiccLifecycleFact(
+                stage="FILLS",
+                disposition=Disposition.PASS,
+                detail=", ".join(
+                    f"{item['trade_id']} {item['cusip']} qty={item['quantity']} "
+                    f"price={item['price']} {item['provenance']}"
+                    for item in fills
+                ),
+            ),
+            FiccLifecycleFact(
+                stage="CLOSED_TRADE",
+                disposition=Disposition.PASS,
+                detail=", ".join(
+                    f"{item['trade_id']} {item['rail']} {item['ccp_status']} "
+                    f"cash={item['cash_reconciled']} securities={item['securities_reconciled']} "
+                    f"books={item['books_posted']} breaks={item['unexplained_breaks']} "
+                    f"replay={item['replay_economics_identical']}"
+                    for item in closed
+                ),
             ),
         ),
     )

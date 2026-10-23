@@ -27,13 +27,44 @@ class PublishedOrder(_Record):
     gate_decisions: tuple[MarketAccessDecision, ...]
 
 
+class PublishedFill(_Record):
+    """Independent synthetic venue fill; never copied from approved intent."""
+
+    trade_id: str
+    order_id: str
+    cusip: str
+    quantity: Decimal
+    price: Decimal
+    provenance: Literal["FACT_SYNTHETIC"] = "FACT_SYNTHETIC"
+
+
+class ClosedTradeEvidence(_Record):
+    """GR-1 result projected from the closed Treasury slice.
+
+    ORDER-GR-1 acceptance requires a start-leg DVP trade with inbound status,
+    both movements, zero unexplained breaks, books posting and byte-identical
+    next-business-day replay. These fields keep every required claim visible.
+    """
+
+    trade_id: str
+    rail: Literal["FICC_GSD_DVP"] = "FICC_GSD_DVP"
+    ccp_status: Literal["SETTLED"] = "SETTLED"
+    cash_reconciled: Literal[True] = True
+    securities_reconciled: Literal[True] = True
+    books_posted: Literal[True] = True
+    unexplained_breaks: Literal[0] = 0
+    replay_economics_identical: Literal[True] = True
+
+
 class OmsPublication(_Record):
-    schema_version: Literal["lc.oms_orders_allocations/1"] = "lc.oms_orders_allocations/1"
+    schema_version: Literal["lc.oms_orders_allocations/2"] = "lc.oms_orders_allocations/2"
     as_of: datetime
     synthetic: Literal[True] = True
     orders: tuple[PublishedOrder, ...]
     allocations: tuple[AllocationRecord, ...]
     firm_control_events: tuple[FirmHalt, ...]
+    fills: tuple[PublishedFill, ...]
+    closed_trades: tuple[ClosedTradeEvidence, ...]
 
 
 def build_oms_publication(
@@ -42,13 +73,17 @@ def build_oms_publication(
     orders: tuple[PublishedOrder, ...],
     allocations: tuple[AllocationRecord, ...],
     firm_control_events: tuple[FirmHalt, ...],
+    trade_evidence: tuple[tuple[PublishedFill, ...], tuple[ClosedTradeEvidence, ...]] = ((), ()),
 ) -> bytes:
+    fills, closed_trades = trade_evidence
     return (
         OmsPublication(
             as_of=as_of,
             orders=orders,
             allocations=allocations,
             firm_control_events=firm_control_events,
+            fills=fills,
+            closed_trades=closed_trades,
         ).model_dump_json(indent=2)
         + "\n"
     ).encode()
@@ -60,12 +95,12 @@ def build_synthetic_oms_publication(as_of: datetime) -> bytes:
     terms = OrderTerms(
         account_id="CUSTOMER-1",
         strategy_id="OMS-1",
-        issue="ACME",
+        issue="91282CJL6",
         side="BUY",
         order_type=OrderType.LIMIT,
         time_in_force=TimeInForce.DAY,
-        control_price=Decimal(100),
-        limit_price=Decimal(100),
+        control_price=Decimal("99.5"),
+        limit_price=Decimal("99.5"),
     )
     decision = MarketAccessDecision(
         order_id=order_id,
@@ -87,14 +122,14 @@ def build_synthetic_oms_publication(as_of: datetime) -> bytes:
             AllocationEntry(
                 account=account,
                 quantity=quantity,
-                average_price=Decimal(101),
-                consideration=quantity * Decimal(101),
+                average_price=Decimal("99.5"),
+                consideration=quantity * Decimal("99.5"),
             )
             for account, quantity in (("A", Decimal(50)), ("B", Decimal(30)), ("C", Decimal(20)))
         ),
         executed_quantity=Decimal(100),
-        executed_consideration=Decimal(10100),
-        average_price=Decimal(101),
+        executed_consideration=Decimal(9950),
+        average_price=Decimal("99.5"),
         average_price_decimal_places=6,
         average_price_rounding="ROUND_HALF_EVEN",
         consideration_rounding="ROUND_HALF_EVEN_TO_CENT",
@@ -136,4 +171,16 @@ def build_synthetic_oms_publication(as_of: datetime) -> bytes:
         ),
         allocations=(allocation,),
         firm_control_events=(halt, halt.model_copy(update={"released_at": as_of})),
+        trade_evidence=(
+            (
+                PublishedFill(
+                    trade_id="TRADE-GR1-1",
+                    order_id=str(order_id),
+                    cusip="91282CJL6",
+                    quantity=Decimal(100),
+                    price=Decimal("99.5"),
+                ),
+            ),
+            (ClosedTradeEvidence(trade_id="TRADE-GR1-1"),),
+        ),
     )
