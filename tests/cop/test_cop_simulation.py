@@ -24,4 +24,7 @@ def test_simulation_is_a_reachable_cop_panel() -> None:
     assert "simulation-snapshot/daily-close.json" in body
     assert "simulation-snapshot/run-summary.json" in body
     assert "simulation-snapshot/trend.json" in body
+    assert "simulation-snapshot/spike-2019/SUMMARY.md" in body
+    assert "simulation-snapshot/spike-2019/run-summary.json" in body
+    assert "does not replace the latest synthetic close" in body
     assert "Not tested:" in body
