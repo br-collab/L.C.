@@ -1,5 +1,5 @@
 {
-  "schema_version": "lc.oms_orders_allocations/1",
+  "schema_version": "lc.oms_orders_allocations/2",
   "as_of": "2026-10-22T14:00:00Z",
   "synthetic": true,
   "orders": [
@@ -8,12 +8,12 @@
       "terms": {
         "account_id": "CUSTOMER-1",
         "strategy_id": "OMS-1",
-        "issue": "ACME",
+        "issue": "91282CJL6",
         "side": "BUY",
         "order_type": "LIMIT",
         "time_in_force": "DAY",
-        "control_price": "100",
-        "limit_price": "100",
+        "control_price": "99.5",
+        "limit_price": "99.5",
         "stop_price": null,
         "fractional_enabled": false,
         "allocation_plan_digest": null
@@ -53,25 +53,25 @@
         {
           "account": "A",
           "quantity": "50",
-          "average_price": "101",
-          "consideration": "5050"
+          "average_price": "99.5",
+          "consideration": "4975.0"
         },
         {
           "account": "B",
           "quantity": "30",
-          "average_price": "101",
-          "consideration": "3030"
+          "average_price": "99.5",
+          "consideration": "2985.0"
         },
         {
           "account": "C",
           "quantity": "20",
-          "average_price": "101",
-          "consideration": "2020"
+          "average_price": "99.5",
+          "consideration": "1990.0"
         }
       ],
       "executed_quantity": "100",
-      "executed_consideration": "10100",
-      "average_price": "101",
+      "executed_consideration": "9950",
+      "average_price": "99.5",
       "average_price_decimal_places": 6,
       "average_price_rounding": "ROUND_HALF_EVEN",
       "consideration_rounding": "ROUND_HALF_EVEN_TO_CENT",
@@ -114,6 +114,28 @@
       },
       "recorded_at": "2026-10-22T14:00:00Z",
       "released_at": "2026-10-22T14:00:00Z"
+    }
+  ],
+  "fills": [
+    {
+      "trade_id": "TRADE-GR1-1",
+      "order_id": "ord_11111111111111111111111111",
+      "cusip": "91282CJL6",
+      "quantity": "100",
+      "price": "99.5",
+      "provenance": "FACT_SYNTHETIC"
+    }
+  ],
+  "closed_trades": [
+    {
+      "trade_id": "TRADE-GR1-1",
+      "rail": "FICC_GSD_DVP",
+      "ccp_status": "SETTLED",
+      "cash_reconciled": true,
+      "securities_reconciled": true,
+      "books_posted": true,
+      "unexplained_breaks": 0,
+      "replay_economics_identical": true
     }
   ]
 }
