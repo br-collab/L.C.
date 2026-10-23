@@ -72,7 +72,7 @@ include = ["lc*", "emulators*", "cop*", "harness_c2*", "thifur_h*"]
 # tests/test_package_data.py keeps the lc entry complete.
 [tool.setuptools.package-data]
 cop = ["program.yaml", "templates/*.html", "static/*.css", "static/*.js"]
-lc = ["occ_rule_table.json"]
+lc = ["occ_rule_table.json", "py.typed"]
 
 [tool.ruff]
 line-length = 100
