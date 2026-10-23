@@ -47,6 +47,13 @@ class _Record(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
 
 
+class CapturedExecution(_Record):
+    execution_id: str = Field(min_length=1)
+    quantity: Decimal = Field(gt=0)
+    price: Decimal = Field(gt=0)
+    execution_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+
+
 class CaptureRecord(_Record):
     trade_id: str = Field(min_length=1)
     order_id: OrderId
@@ -54,16 +61,9 @@ class CaptureRecord(_Record):
     instrument_id: str = Field(min_length=1)
     quantity: Decimal = Field(gt=0)
     price: Decimal = Field(gt=0)
-    executions: tuple["CapturedExecution", ...]
+    executions: tuple[CapturedExecution, ...]
     enrichment_folded_into_capture: bool = True
     provenance: Provenance = Provenance.POLICY_RESULT
-
-
-class CapturedExecution(_Record):
-    execution_id: str = Field(min_length=1)
-    quantity: Decimal = Field(gt=0)
-    price: Decimal = Field(gt=0)
-    execution_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
 
 
 class AllocationEntry(_Record):
