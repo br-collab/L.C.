@@ -7,6 +7,8 @@
 > *experimental*, *validated* and *production-qualified*; all five repositories are at
 > the first, and this label changes only when evidence changes it.
 
+**Last updated:** 242250Z OCT 26. Reflects `main` at `df32507`, package version 0.1.0 (no release tag). Latest merged change: #120, dated SIM-1 simulation links in the Common Operating Picture.
+
 
 The synthetic middle layer of Project Cannae Legion — a deliberately bounded OMS/EMS (Order Management System / Execution Management System) and clearing layer that turns Aureon's approved intent into executions, allocations and settlement obligations that Atreides can accept.
 
