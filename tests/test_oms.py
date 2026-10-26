@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from random import Random
 from typing import Any
@@ -57,6 +57,7 @@ def _terms(**changes: object) -> OrderTerms:
         "time_in_force": TimeInForce.DAY,
         "control_price": Decimal(100),
         "limit_price": Decimal(100),
+        "policy_expires_at": datetime(2026, 12, 31, tzinfo=UTC),
     }
     values.update(changes)
     return OrderTerms.model_validate(values)

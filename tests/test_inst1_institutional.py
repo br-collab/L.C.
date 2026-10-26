@@ -18,6 +18,7 @@ from lc.institutional import (
     QuantityUnit,
     TickBucket,
     TreasuryReference,
+    accrued_interest_actual_actual_icma,
     derive_cash,
     minimum_price_increment,
     validate_settlement_date,
@@ -162,3 +163,67 @@ def test_asset_profile_names_market_asset_cycle_and_calendar() -> None:
     assert BILATERAL_TREASURY.asset_class is AssetClass.US_TREASURY
     assert BILATERAL_TREASURY.settlement_cycle == 1
     assert BILATERAL_TREASURY.calendar == "Fedwire Securities"
+
+
+# INST-1 Amendment 3, V3: the coupon schedule is built backward from maturity with the
+# end-of-month rule. Expected values are hand arithmetic (coupon x accrued days / period days),
+# stated in each case. The convention is labelled convention: U.S. Treasury Actual/Actual
+# (ICMA), not a quoted rule text.
+
+
+def _ref(
+    rate: str, dated: date, maturity: date, first_coupon: date | None = None
+) -> TreasuryReference:
+    return TreasuryReference(
+        annual_coupon_rate=Decimal(rate),
+        dated_date=dated,
+        maturity_date=maturity,
+        payments_per_year=2,
+        first_coupon_date=first_coupon,
+    )
+
+
+def _accrued(settle: date, reference: TreasuryReference) -> Decimal:
+    return accrued_interest_actual_actual_icma(
+        face=Decimal(1_000_000), settlement_date=settle, reference=reference
+    )
+
+
+def test_v3_month_end_coupons_stay_at_month_end() -> None:
+    """28 Feb 2027 to 31 Aug 2027 is 184 days; 183 accrued: 20,000 x 183 / 184.
+
+    Before WP1b the schedule rolled forward and clamped 31 Aug to 28 Feb to 28 Aug, and
+    this case returned 217.39.
+    """
+    reference = _ref("0.04", date(2026, 8, 31), date(2028, 8, 31))
+    assert _accrued(date(2027, 8, 30), reference) == Decimal("19891.30")
+
+
+def test_v3_february_maturity_pays_on_the_last_day_of_august() -> None:
+    """28 Feb 2027 to 31 Aug 2027 is 184 days; 107 accrued: 10,000 x 107 / 184."""
+    reference = _ref("0.02", date(2026, 2, 28), date(2029, 2, 28))
+    assert _accrued(date(2027, 6, 15), reference) == Decimal("5815.22")
+
+
+def test_v3_short_first_coupon_accrues_from_the_dated_date() -> None:
+    """Dated 15 Oct, first coupon 15 Nov 2026; quasi period 15 May to 15 Nov is 184 days.
+
+    17 days accrued (15 Oct to 1 Nov): 20,000 x 17 / 184.
+    """
+    reference = _ref("0.04", date(2026, 10, 15), date(2031, 11, 15))
+    assert _accrued(date(2026, 11, 1), reference) == Decimal("1847.83")
+
+
+def test_v3_long_first_coupon_spans_two_quasi_periods() -> None:
+    """First coupon 15 May 2027: 31 of 184 days, then 61 of 181 days.
+
+    20,000 x (31 / 184 + 61 / 181) = 10,109.90.
+    """
+    reference = _ref("0.04", date(2026, 10, 15), date(2031, 11, 15), date(2027, 5, 15))
+    assert _accrued(date(2027, 1, 15), reference) == Decimal("10109.90")
+
+
+def test_v3_a_first_coupon_off_the_schedule_is_refused() -> None:
+    reference = _ref("0.04", date(2026, 10, 15), date(2031, 11, 15), date(2027, 5, 20))
+    with pytest.raises(ValueError, match="FIRST_COUPON_NOT_ON_SCHEDULE"):
+        _accrued(date(2027, 1, 15), reference)

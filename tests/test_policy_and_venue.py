@@ -13,11 +13,18 @@ from cannae_kernel.disposition import Disposition
 from cannae_kernel.ids import ActorId, EventId, LifecycleId, OrderId
 from cannae_kernel.provenance import Provenance
 from cannae_kernel.session import BusinessDate, MarketSession, SessionContext
-from test_lifecycle import NOW, _accepted, _actor, _event, _id, _payload
+from test_lifecycle import NOW, _accepted, _actor, _envelope, _event, _id, _payload
 
 from emulators.venue import VenueEmulator, VenueOrder, VenueOutcome
 from lc.events import LifecycleState, OrderTerms, OrderType, TimeInForce
-from lc.lifecycle import ChildOrder, EventInput, LifecycleRegister, split_parent, transition
+from lc.lifecycle import (
+    ApprovedIntentPayload,
+    ChildOrder,
+    EventInput,
+    LifecycleRegister,
+    split_parent,
+    transition,
+)
 from lc.policy import (
     ExecutionApplication,
     ExecutionPolicy,
@@ -54,11 +61,41 @@ def _evidence(
     )
 
 
+#: The approved-intent digest the default child order is sealed under. Obligation tests name
+#: the same digest in their source manifest (INST-1 Amendment 3: formation reads it from here).
+#: The digest of the default sealed intent; the default child is sealed under it.
+INTENT_DIGEST = digest(_envelope())
+
+
+def default_terms(**changes: object) -> OrderTerms:
+    """Complete sealed terms for the default child: INST-1 Amendment 3 refuses a fill without."""
+    values: dict[str, object] = {
+        "account_id": "ACCOUNT-1",
+        "strategy_id": "STRATEGY-1",
+        "issue": "91282CJL6",
+        "side": "BUY",
+        "order_type": OrderType.LIMIT,
+        "time_in_force": TimeInForce.DAY,
+        "control_price": Decimal("100"),
+        "limit_price": Decimal("100"),
+        "approved_intent_digest": INTENT_DIGEST,
+        "policy_expires_at": NOW + timedelta(hours=1),
+    }
+    values.update(changes)
+    return OrderTerms.model_validate(values)
+
+
 def _child_register(
-    *, terms: OrderTerms | None = None, quantity: Decimal = Decimal("100")
+    *,
+    terms: OrderTerms | None = None,
+    quantity: Decimal = Decimal("100"),
+    unsealed: bool = False,
+    intent_payload: ApprovedIntentPayload | None = None,
 ) -> LifecycleRegister:
+    """The default child at MARKET_ACCESS_PASSED; ``unsealed`` records it with no terms."""
+    terms = None if unsealed else (terms if terms is not None else default_terms())
     register = split_parent(
-        _accepted(),
+        _accepted(intent_payload),
         actor=_actor(),
         children=(
             ChildOrder(
@@ -287,6 +324,41 @@ def test_fill_after_authority_expiry_is_refused() -> None:
         event_time=NOW,
     )
     assert outcome.reason.startswith("POLICY_EXPIRED")
+
+
+# INST-1 Amendment 3, V6: execution controls fail closed. Before WP1b, the limit, expiry,
+# notional and session checks ran only when terms were present, so these fills passed.
+
+
+def _fill(register: LifecycleRegister, price: Decimal) -> ExecutionApplication:
+    result = VenueEmulator(seed=7).execute(
+        _venue_order(), outcome=VenueOutcome.FILL, event_time=NOW
+    )
+    assert isinstance(result.event, Recorded) and isinstance(result.report, Recorded)
+    report = ExecutionReport.model_validate(
+        result.report.value.model_dump(mode="python")
+    ).model_copy(update={"price": price})
+    execution = result.event.value.model_copy(update={"payload_digest": digest(report)})
+    return apply_execution(register, execution, report, actor=_actor(), event=_event(20))
+
+
+def test_v6_an_order_without_sealed_terms_holds_at_any_price() -> None:
+    for price in (Decimal(100), Decimal(1_000_000)):
+        outcome = _fill(_child_register(unsealed=True), price)
+        assert outcome.disposition is Disposition.HOLD
+        assert outcome.reason.startswith("TERMS_ABSENT")
+
+
+def test_v6_terms_without_a_policy_expiry_hold() -> None:
+    outcome = _fill(_child_register(terms=_terms(policy_expires_at=None)), Decimal(100))
+    assert outcome.disposition is Disposition.HOLD
+    assert outcome.reason.startswith("POLICY_EXPIRY_ABSENT")
+
+
+def test_v6_the_unsealed_hold_records_no_fill() -> None:
+    register = _child_register(unsealed=True)
+    outcome = _fill(register, Decimal(100))
+    assert outcome.journal == register
 
 
 def test_notional_basis_is_binding_but_quantity_estimate_is_not() -> None:

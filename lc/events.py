@@ -95,6 +95,9 @@ class OrderTerms(BaseModel):
     policy_expires_at: datetime | None = None
     minimum_price_increment: Decimal = Field(default=Decimal("0.01"), gt=0)
     session_activity_permitted: bool = True
+    #: INST-1 Amendment 3 (WP1b): the capacity of the account the order is for, sealed with
+    #: the order so the obligation can carry it to Atreides without a caller asserting it.
+    account_capacity: Literal["CUSTOMER", "PAB", "PROPRIETARY"] | None = None
 
     @model_validator(mode="after")
     def _prices_match_order_type(self) -> Self:

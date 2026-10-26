@@ -12,6 +12,7 @@ import pytest
 
 pytest.importorskip("aureon")
 
+from atreides.acceptance.registry import ParticipantRegistry
 from atreides.acceptance.service import evaluate_candidate, prepare_instruction
 from atreides.messaging.canonical import (
     CashLegInstruction,
@@ -81,8 +82,8 @@ from lc.asset_profile import (
     TOKENIZED_TREASURY_SINGLE_PLATFORM,
     AssetProfile,
 )
-from lc.clearing import GrossTrade, clear_gross
-from lc.events import LifecycleState
+from lc.clearing import clear_gross
+from lc.events import LifecycleState, OrderTerms, OrderType, TimeInForce
 from lc.institutional import AssetClass, InstrumentReference, QuantityUnit, TreasuryReference
 from lc.lifecycle import (
     ChildOrder,
@@ -106,6 +107,7 @@ from lc.obligation import (
     SourceManifest,
     SourceReference,
     form_obligation,
+    gross_trade_from_capture,
 )
 from lc.policy import ExecutionReport, apply_execution
 from lc.trade import (
@@ -139,6 +141,15 @@ SESSION = SessionContext(
     session=MarketSession.REGULAR,
     business_date=BusinessDate(
         value=date(2026, 9, 29), calendar="SIFMA-US", established_by=str(ACTOR.actor_id)
+    ),
+)
+#: The obligation settles T+1 from the fill on 29 Sep 2026. Before INST-1 WP1b the slice
+#: asserted a 28 Sep trade date to the obligation and settled on the fill's own day; the trade
+#: date is now read from the sealed fill, so the settlement session is the next business day.
+SETTLEMENT_SESSION = SessionContext(
+    session=MarketSession.REGULAR,
+    business_date=BusinessDate(
+        value=date(2026, 9, 30), calendar="SIFMA-US", established_by=str(ACTOR.actor_id)
     ),
 )
 
@@ -285,7 +296,25 @@ def _run(  # noqa: PLR0915 - the ordered lifecycle remains visible as one experi
     register = split_parent(
         accepted,
         actor=ACTOR,
-        children=(ChildOrder(order_id=child_id, quantity=Decimal("100"), event=_event(13)),),
+        children=(
+            ChildOrder(
+                order_id=child_id,
+                quantity=Decimal("100"),
+                event=_event(13),
+                terms=OrderTerms(
+                    account_id="ACCOUNT-W5",
+                    strategy_id="STRATEGY-W5",
+                    issue="91282CJL6",
+                    side="BUY",
+                    order_type=OrderType.LIMIT,
+                    time_in_force=TimeInForce.DAY,
+                    control_price=Decimal("99.5"),
+                    limit_price=Decimal("99.5"),
+                    approved_intent_digest=digest(intent),
+                    policy_expires_at=AT + timedelta(hours=1),
+                ),
+            ),
+        ),
     ).journal
     venue_order = VenueOrder(
         lifecycle_id=scenario.lifecycle_id,
@@ -348,12 +377,32 @@ def _run(  # noqa: PLR0915 - the ordered lifecycle remains visible as one experi
     )
     affirmed = affirm(matched, order_id=child_id, fact=fact, actor=ACTOR, event=_event(25))
     obligation_id = ObligationId(_id("obl_", 31))
-    gross = GrossTrade(
-        trade_id=captured.trade_id,
+    instrument = InstrumentReference(
+        cusip="91282CJL6",
+        asset_class=AssetClass.US_TREASURY,
+        quantity_unit=QuantityUnit.FACE,
+        treasury=TreasuryReference(
+            annual_coupon_rate=Decimal(0),
+            dated_date=date(2026, 3, 30),
+            maturity_date=date(2036, 3, 30),
+            payments_per_year=2,
+        ),
+    )
+    gross = gross_trade_from_capture(
+        captured,
         trade_digest=digest(venue.event.value),
         obligation_id=obligation_id,
-        quantity=captured.quantity,
-        cash=Decimal("99.50"),
+        instrument=instrument,
+        settlement_date=SETTLEMENT_SESSION.business_date.value,
+    )
+    # Attested reference data: which institution stands behind each cash account. The
+    # obligation names this version's digest; Atreides refuses any other at preparation.
+    registry = ParticipantRegistry(
+        version="w5-participants/1.0",
+        entries=(
+            ("CASH-PAY", FinancialInstitution(bicfi="AAAAUS33XXX")),
+            ("CASH-RECEIVE", FinancialInstitution(bicfi="BBBBUS33XXX")),
+        ),
     )
     transformation, clearing = clear_gross(lifecycle_id=scenario.lifecycle_id, trades=(gross,))
     source_digests = {
@@ -390,25 +439,13 @@ def _run(  # noqa: PLR0915 - the ordered lifecycle remains visible as one experi
         transformation=transformation,
         clearing=clearing,
         obligation_id=obligation_id,
-        session=SESSION,
+        session=SETTLEMENT_SESSION,
         source_manifest=manifest,
         asset_profile=asset_profile,
-        approved_intent_digest=digest(intent),
-        approved_side="BUY",
-        firm_participant_id="buyer",
-        instrument=InstrumentReference(
-            cusip="91282CJL6",
-            asset_class=AssetClass.US_TREASURY,
-            quantity_unit=QuantityUnit.FACE,
-            treasury=TreasuryReference(
-                annual_coupon_rate=Decimal(0),
-                dated_date=date(2026, 3, 30),
-                maturity_date=date(2036, 3, 30),
-                payments_per_year=2,
-            ),
-        ),
-        execution_price=Decimal("99.5"),
-        trade_date=date(2026, 9, 28),
+        approved_intent=intent,
+        approved_intent_bytes=intent_bytes,
+        participant_registry_digest=registry.digest,
+        instrument=instrument,
         securities_leg=SecuritiesLeg(
             instrument_id=internal.instrument_id,
             quantity=Decimal("100"),
@@ -420,7 +457,7 @@ def _run(  # noqa: PLR0915 - the ordered lifecycle remains visible as one experi
             accrued=Decimal("0"),
             total=Decimal("99.50"),
             currency="USD",
-            value_date=SESSION.business_date.value,
+            value_date=SETTLEMENT_SESSION.business_date.value,
             paying_account_id="CASH-PAY",
             receiving_account_id="CASH-RECEIVE",
         ),
@@ -609,6 +646,7 @@ def _run(  # noqa: PLR0915 - the ordered lifecycle remains visible as one experi
             formed.payload.canonical_bytes(),
             acceptance,
             cash_instruction,
+            participant_registry=registry,
         )
         prepared_bytes = prepared.header_xml + b"\n" + prepared.document_xml
         prepared_envelope = _artifact_envelope(

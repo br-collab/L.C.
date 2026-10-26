@@ -29,6 +29,7 @@ from cannae_kernel.canonical import canonical_bytes_of, digest, digest_bytes
 from cannae_kernel.delivery import DeliveryPattern
 from cannae_kernel.envelopes import ExecutionEvent
 from cannae_kernel.ids import LifecycleId
+from cannae_kernel.session import SessionContext
 from test_occ_boundary import CAPABILITIES as NOVATION_CAPABILITIES
 from test_occ_boundary import novated
 from test_option_exercise import (
@@ -84,6 +85,15 @@ from lc.options import (
 D = Decimal
 FORMED_AT = datetime(2026, 12, 18, 21, 0, tzinfo=UTC)
 SETTLES = date(2026, 12, 21)
+
+
+def settling(session: SessionContext) -> SessionContext:
+    """The settlement session: the trade's session moved to the settlement business date."""
+    return session.model_copy(
+        update={"business_date": session.business_date.model_copy(update={"value": SETTLES})}
+    )
+
+
 ROUTE = SettlementRoute(
     rail="SYNTHETIC equity settlement",
     securities_route="SYNTHETIC central counterparty securities",
@@ -123,7 +133,7 @@ def premium(side: NovationSide) -> tuple[FormedOptionObligation, ExecutionEvent,
         central_counterparty=CCP,
         settlement_date=SETTLES,
         route=ROUTE,
-        session=event.session,
+        session=settling(event.session),
         formed_at=FORMED_AT,
     )
     return formed, event, payload
@@ -181,7 +191,7 @@ def test_a_premium_needs_the_attested_bytes_and_the_right_member() -> None:
             central_counterparty=CCP,
             settlement_date=SETTLES,
             route=ROUTE,
-            session=buyer_event.session,
+            session=settling(buyer_event.session),
             formed_at=FORMED_AT,
         )
 
@@ -245,7 +255,7 @@ def exercise_obligations(
         strike_currency="USD",
         settlement_date=SETTLES,
         route=ROUTE,
-        session=novated()[0].session,
+        session=settling(novated()[0].session),
         formed_at=FORMED_AT,
         strike_multiplier=multiplier,
     )
@@ -292,7 +302,7 @@ def test_an_early_exercise_notice_forms_the_same_kind_of_obligation() -> None:
         strike_currency="USD",
         settlement_date=SETTLES,
         route=ROUTE,
-        session=novated()[0].session,
+        session=settling(novated()[0].session),
         formed_at=FORMED_AT,
     )
     assert formed[0].transformation.input_digests == (digest(notice),)
@@ -411,7 +421,7 @@ def test_inconsistent_exercise_and_assignment_are_refused() -> None:
         "strike_currency": "USD",
         "settlement_date": SETTLES,
         "route": ROUTE,
-        "session": novated()[0].session,
+        "session": settling(novated()[0].session),
         "formed_at": FORMED_AT,
     }
     with pytest.raises(ValueError, match="13 contracts exercised, but the assignment is for 12"):
@@ -499,3 +509,21 @@ def test_participants_name_the_member_and_the_counterparty() -> None:
             AccountRole.RECEIVER,
         ) in roles
         assert UNDERLYING == obligation.payload.securities_leg.instrument_id  # type: ignore[union-attr]
+
+
+def test_a_session_that_is_not_the_settlement_date_is_refused() -> None:
+    """INST-1 Amendment 3: Atreides binds control evidence to the envelope's business date."""
+    buyer_event, _, payload = novated()
+    admitted = admit_novation(buyer_event, payload, capabilities=CAPABILITIES)
+    with pytest.raises(ValueError, match="SETTLEMENT_DATE_CONFLICT"):
+        form_premium_obligation(
+            admitted,
+            payload,
+            side=NovationSide.BUYER,
+            member=party(admitted.trade.buyer.clearing_member_id),
+            central_counterparty=CCP,
+            settlement_date=SETTLES,
+            route=ROUTE,
+            session=buyer_event.session,
+            formed_at=FORMED_AT,
+        )

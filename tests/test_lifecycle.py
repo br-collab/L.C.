@@ -135,8 +135,8 @@ def _envelope(payload: ApprovedIntentPayload | None = None) -> ApprovedIntentEnv
     )
 
 
-def _accepted() -> IntentOutcome:
-    payload = _payload()
+def _accepted(payload: ApprovedIntentPayload | None = None) -> IntentOutcome:
+    payload = payload or _payload()
     outcome = accept_intent(
         _envelope(payload),
         _wire_bytes(payload),

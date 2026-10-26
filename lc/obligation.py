@@ -13,7 +13,8 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal
 from enum import StrEnum
-from typing import Self
+from typing import Literal, Self
+from zoneinfo import ZoneInfo
 
 from cannae_kernel.absence import Absent, Recorded
 from cannae_kernel.actor import ActorRef
@@ -21,6 +22,7 @@ from cannae_kernel.canonical import canonical_bytes_of, digest
 from cannae_kernel.delivery import DeliveryPattern
 from cannae_kernel.disposition import Disposition
 from cannae_kernel.envelopes import (
+    ApprovedIntentEnvelope,
     ClearingTransformation,
     FirmSecuritiesDirection,
     ObligationAcceptanceRecord,
@@ -33,15 +35,26 @@ from cannae_kernel.session import SessionContext
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from lc.asset_profile import AssetProfile
-from lc.clearing import GrossClearingResult
-from lc.events import LifecycleState
+from lc.clearing import GrossClearingResult, GrossTrade
+from lc.events import LifecycleState, OrderTerms
 from lc.institutional import (
     InstrumentReference,
     MarketProfile,
-    derive_cash,
+    derive_cash_from_fills,
     validate_settlement_date,
 )
-from lc.lifecycle import EventInput, LifecycleRegister, replay, transition
+from lc.lifecycle import (
+    EventInput,
+    LifecycleRegister,
+    OrderSnapshot,
+    read_approved_intent,
+    replay,
+    transition,
+)
+from lc.trade import CaptureRecord
+
+#: Trade dates for U.S. markets are Eastern calendar dates.
+_US_MARKETS = ZoneInfo("America/New_York")
 
 __all__ = [
     "AccountRole",
@@ -59,6 +72,7 @@ __all__ = [
     "SourceManifest",
     "SourceReference",
     "form_obligation",
+    "gross_trade_from_capture",
     "record_atreides_handoff",
 ]
 
@@ -228,6 +242,11 @@ class ObligationPayload(_Record):
     candidate_paths: tuple[CandidatePathDescriptor, ...]
     expected_finality: tuple[ExpectedFinality, ...]
     corrections: tuple[Correction, ...]
+    #: INST-1 Amendment 3: the delivering firm account's sealed capacity, set exactly when the
+    #: firm delivers securities. Atreides reads it here, never from a caller.
+    seller_capacity: Literal["CUSTOMER", "PAB", "PROPRIETARY"] | None = None
+    #: The participant registry version this obligation was formed against.
+    participant_registry_digest: str | None = Field(default=None, pattern=r"^sha256:[0-9a-f]{64}$")
 
     @model_validator(mode="after")
     def _payload_is_complete(self) -> Self:  # noqa: PLR0912, PLR0915
@@ -345,6 +364,100 @@ def record_atreides_handoff(
     return HandoffOutcome(journal=journal, acceptance=acceptance)
 
 
+def _direction_and_capacity(
+    terms: OrderTerms,
+) -> tuple[FirmSecuritiesDirection, Literal["CUSTOMER", "PAB", "PROPRIETARY"] | None]:
+    """The firm's securities direction from the sealed side, and a delivery's sealed capacity."""
+    if terms.side == "BUY":
+        return FirmSecuritiesDirection.RECEIVE, None
+    if terms.account_capacity is None:
+        raise ValueError("ACCOUNT_CAPACITY_ABSENT: a firm delivery needs the sealed capacity")
+    return FirmSecuritiesDirection.DELIVER, terms.account_capacity
+
+
+def gross_trade_from_capture(
+    captured: CaptureRecord,
+    *,
+    trade_digest: str,
+    obligation_id: ObligationId,
+    instrument: InstrumentReference,
+    settlement_date: date,
+) -> GrossTrade:
+    """The gross-clearing input for one captured trade, its cash derived and never supplied.
+
+    INST-1 Amendment 3 (V1). The cash is the sum of quantity x price over the captured
+    executions, priced through ``derive_cash_from_fills`` (Treasury prices per 100 of par plus
+    accrued interest). ``form_obligation`` refuses a clearing result whose cash disagrees.
+    ``trade_digest`` is the lineage link only (the sealed execution the trade consumed, as
+    the lineage assembler reads it); it carries no economics.
+    """
+    consideration = sum(
+        (execution.quantity * execution.price for execution in captured.executions), Decimal(0)
+    )
+    _, _, total = derive_cash_from_fills(
+        quantity=captured.quantity,
+        consideration=consideration,
+        settlement_date=settlement_date,
+        instrument=instrument,
+    )
+    return GrossTrade(
+        trade_id=captured.trade_id,
+        trade_digest=trade_digest,
+        obligation_id=obligation_id,
+        quantity=captured.quantity,
+        cash=total,
+    )
+
+
+def _sealed_order(  # noqa: PLR0913 - each sealed record it checks is named
+    register: LifecycleRegister,
+    *,
+    order_id: OrderId,
+    approved_intent: ApprovedIntentEnvelope,
+    approved_intent_bytes: bytes,
+    instrument: InstrumentReference,
+    securities_leg: SecuritiesLeg,
+) -> tuple[OrderSnapshot, OrderTerms, date]:
+    """The affirmed order, its sealed terms and its trade date, each checked.
+
+    The approved side and instrument are read from the sealed intent's verified bytes, and the
+    order's own sealed terms must agree with them and name that intent's digest.
+    """
+    intent = read_approved_intent(approved_intent, approved_intent_bytes)
+    order = replay(register.events).orders.get(order_id)
+    if order is None:
+        raise ValueError("ORDER_UNKNOWN: the register holds no such order")
+    if order.state is not LifecycleState.AFFIRMED:
+        raise ValueError("an obligation requires an AFFIRMED trade")
+    terms = order.terms
+    if terms is None:
+        raise ValueError("TERMS_ABSENT: the order carries no sealed terms")
+    order_intents = {
+        event.payload.intent_id for event in register.events if event.payload.order_id == order_id
+    }
+    if order_intents != {approved_intent.envelope_id}:
+        raise ValueError("APPROVED_INTENT_UNBOUND: the order belongs to another intent")
+    if terms.approved_intent_digest != digest(approved_intent):
+        raise ValueError("APPROVED_INTENT_UNBOUND: the order was not sealed under this intent")
+    if terms.side != intent.side:
+        raise ValueError("SIDE_NOT_APPROVED: the order's sealed side is not the intent's side")
+    if securities_leg.instrument_id != intent.instrument_id:
+        raise ValueError("INSTRUMENT_UNBOUND: the securities leg is not the approved instrument")
+    if instrument.cusip != terms.issue:
+        raise ValueError("INSTRUMENT_UNBOUND: the instrument is not the sealed order's issue")
+    if securities_leg.quantity != order.executed_quantity:
+        raise ValueError("QUANTITY_NOT_EXECUTED: the securities leg is not the executed quantity")
+    fill_times = [
+        event.times.event_time
+        for event in register.events
+        if event.payload.order_id == order_id and event.payload.consideration > 0
+    ]
+    if not fill_times:
+        raise ValueError("FILLS_ABSENT: the register holds no sealed fill for this order")
+    trade_date = max(fill_times).astimezone(_US_MARKETS).date()
+    return order, terms, trade_date
+
+
 def form_obligation(  # noqa: PLR0912, PLR0913 - every boundary input remains explicit
     *,
     register: LifecycleRegister,
@@ -355,12 +468,9 @@ def form_obligation(  # noqa: PLR0912, PLR0913 - every boundary input remains ex
     session: SessionContext,
     source_manifest: SourceManifest,
     asset_profile: AssetProfile,
-    approved_intent_digest: str,
-    approved_side: str,
-    firm_participant_id: str,
+    approved_intent: ApprovedIntentEnvelope,
+    approved_intent_bytes: bytes,
     instrument: InstrumentReference,
-    execution_price: Decimal,
-    trade_date: date,
     securities_leg: SecuritiesLeg,
     cash_leg: CashLeg,
     participants: tuple[ParticipantAccount, ...],
@@ -372,10 +482,25 @@ def form_obligation(  # noqa: PLR0912, PLR0913 - every boundary input remains ex
     clearing_event: EventInput,
     obligation_event: EventInput,
     candidate_event: EventInput,
+    participant_registry_digest: str | None = None,
 ) -> FormedObligation:
-    """Form one gross obligation and record readiness without building instructions."""
-    if replay(register.events).orders[order_id].state is not LifecycleState.AFFIRMED:
-        raise ValueError("an obligation requires an AFFIRMED trade")
+    """Form one gross obligation and record readiness without building instructions.
+
+    INST-1 Amendment 3 (V1, V2). The side is read from the sealed approved intent (its bytes
+    verified against the envelope) and must equal the order's sealed side. The trade date,
+    the executed quantity and the consideration are read from the order's sealed events in
+    ``register``. None is taken from the caller; the caller's legs, cash and instrument are
+    checked against them.
+    """
+    approved_intent_digest = digest(approved_intent)
+    order, terms, trade_date = _sealed_order(
+        register,
+        order_id=order_id,
+        approved_intent=approved_intent,
+        approved_intent_bytes=approved_intent_bytes,
+        instrument=instrument,
+        securities_leg=securities_leg,
+    )
     if transformation.lifecycle_id != register.lifecycle_id:
         raise ValueError("clearing transformation belongs to another lifecycle")
     if transformation.output_digest != digest(clearing):
@@ -398,9 +523,13 @@ def form_obligation(  # noqa: PLR0912, PLR0913 - every boundary input remains ex
         deadline_seconds=0,
     )
     validate_settlement_date(trade_date=trade_date, value_date=cash_leg.value_date, profile=profile)
-    principal, accrued, total = derive_cash(
-        quantity=securities_leg.quantity,
-        price=execution_price,
+    if session.business_date.value != cash_leg.value_date:
+        # Atreides binds customer control evidence to the envelope's business date, so the
+        # envelope must carry the day the obligation settles.
+        raise ValueError("SETTLEMENT_DATE_CONFLICT: the session is not the cash value date")
+    principal, accrued, total = derive_cash_from_fills(
+        quantity=order.executed_quantity,
+        consideration=order.executed_consideration,
         settlement_date=cash_leg.value_date,
         instrument=instrument,
     )
@@ -425,13 +554,7 @@ def form_obligation(  # noqa: PLR0912, PLR0913 - every boundary input remains ex
     if not any(reference.digest == approved_intent_digest for reference in approved_references):
         raise ValueError("APPROVED_INTENT_UNBOUND")
 
-    if approved_side not in {"BUY", "SELL"}:
-        raise ValueError("APPROVED_SIDE_INVALID")
-    direction = (
-        FirmSecuritiesDirection.RECEIVE
-        if approved_side == "BUY"
-        else FirmSecuritiesDirection.DELIVER
-    )
+    direction, seller_capacity = _direction_and_capacity(terms)
 
     payload = ObligationPayload(
         source_manifest=source_manifest,
@@ -442,6 +565,8 @@ def form_obligation(  # noqa: PLR0912, PLR0913 - every boundary input remains ex
         candidate_paths=candidate_paths,
         expected_finality=expected_finality,
         corrections=corrections,
+        seller_capacity=seller_capacity,
+        participant_registry_digest=participant_registry_digest,
     )
     participants_by_account = {item.account_id: item for item in participants}
     if direction is FirmSecuritiesDirection.RECEIVE:
@@ -450,8 +575,10 @@ def form_obligation(  # noqa: PLR0912, PLR0913 - every boundary input remains ex
     else:
         firm_security = participants_by_account[securities_leg.delivering_account_id]
         firm_cash = participants_by_account[cash_leg.receiving_account_id]
-    if {firm_security.participant_id, firm_cash.participant_id} != {firm_participant_id}:
-        raise ValueError("PARTY_ROLE_MISMATCH: legs disagree with approved direction")
+    # The firm is whoever takes the sealed side's securities and cash duties; it must be one
+    # participant on both of those legs.
+    if firm_security.participant_id != firm_cash.participant_id:
+        raise ValueError("PARTY_ROLE_MISMATCH: legs disagree with the sealed direction")
     envelope = SettlementObligationEnvelope(
         obligation_id=obligation_id,
         lifecycle_id=register.lifecycle_id,
