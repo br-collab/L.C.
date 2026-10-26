@@ -60,7 +60,7 @@ from cannae_kernel.session import BusinessDate, MarketSession, SessionContext
 from emulators.matching import MatchingEmulator, MatchingOutcome, MatchRequest
 from emulators.settlement import RailOutcome, SyntheticEntitledMember, SyntheticRail
 from emulators.venue import VenueEmulator, VenueOrder, VenueOutcome
-from harness_c2.chaos import ChaosPlan, record_injection_conditions
+from harness_c2.chaos import ChaosPlan, apply_transcript_injections, record_injection_conditions
 from harness_c2.escalation import (
     EscalationRefusedError,
     EscalationRequest,
@@ -83,6 +83,7 @@ from lc.asset_profile import (
 )
 from lc.clearing import GrossTrade, clear_gross
 from lc.events import LifecycleState
+from lc.institutional import AssetClass, InstrumentReference, QuantityUnit, TreasuryReference
 from lc.lifecycle import (
     ChildOrder,
     EventInput,
@@ -243,7 +244,7 @@ def _run(  # noqa: PLR0915 - the ordered lifecycle remains visible as one experi
         "shares": 100,
         "quantity_unit": "FACE",
         "price": 99.5,
-        "notional": 9950,
+        "notional": 99.5,
         "signal_type": "W5_SYNTHETIC",
         "rationale": "deterministic bilateral Treasury DvP scenario",
         "allocation_accounts": ("ACCOUNT-A", "ACCOUNT-B"),
@@ -352,7 +353,7 @@ def _run(  # noqa: PLR0915 - the ordered lifecycle remains visible as one experi
         trade_digest=digest(venue.event.value),
         obligation_id=obligation_id,
         quantity=captured.quantity,
-        cash=Decimal("9950"),
+        cash=Decimal("99.50"),
     )
     transformation, clearing = clear_gross(lifecycle_id=scenario.lifecycle_id, trades=(gross,))
     source_digests = {
@@ -392,6 +393,22 @@ def _run(  # noqa: PLR0915 - the ordered lifecycle remains visible as one experi
         session=SESSION,
         source_manifest=manifest,
         asset_profile=asset_profile,
+        approved_intent_digest=digest(intent),
+        approved_side="BUY",
+        firm_participant_id="buyer",
+        instrument=InstrumentReference(
+            cusip="91282CJL6",
+            asset_class=AssetClass.US_TREASURY,
+            quantity_unit=QuantityUnit.FACE,
+            treasury=TreasuryReference(
+                annual_coupon_rate=Decimal(0),
+                dated_date=date(2026, 3, 30),
+                maturity_date=date(2036, 3, 30),
+                payments_per_year=2,
+            ),
+        ),
+        execution_price=Decimal("99.5"),
+        trade_date=date(2026, 9, 28),
         securities_leg=SecuritiesLeg(
             instrument_id=internal.instrument_id,
             quantity=Decimal("100"),
@@ -399,9 +416,9 @@ def _run(  # noqa: PLR0915 - the ordered lifecycle remains visible as one experi
             receiving_account_id="SEC-RECEIVE",
         ),
         cash_leg=CashLeg(
-            principal=Decimal("9950"),
+            principal=Decimal("99.50"),
             accrued=Decimal("0"),
-            total=Decimal("9950"),
+            total=Decimal("99.50"),
             currency="USD",
             value_date=SESSION.business_date.value,
             paying_account_id="CASH-PAY",
@@ -437,10 +454,10 @@ def _run(  # noqa: PLR0915 - the ordered lifecycle remains visible as one experi
         candidate_event=_event(28),
     )
     operation = OperationContext(
-        notional=Decimal("9950"), currency="USD", is_material=False, is_lvps_material=False
+        notional=Decimal("99.50"), currency="USD", is_material=False, is_lvps_material=False
     )
     funding = FundingState(
-        Decimal("10000") if funded else Decimal(0), Decimal("9950"), Decimal("20000"), True
+        Decimal("10000") if funded else Decimal(0), Decimal("99.50"), Decimal("20000"), True
     )
     rails = {CashRail.FEDWIRE: RailState(CashRail.FEDWIRE, RailStatus.AVAILABLE, 7200)}
     gate = evaluate(
@@ -578,7 +595,7 @@ def _run(  # noqa: PLR0915 - the ordered lifecycle remains visible as one experi
             message_id="W5-MSG-001",
             end_to_end_id="W5-E2E-001",
             created_at=AT,
-            amount=Decimal("9950"),
+            amount=Decimal("99.50"),
             currency="USD",
             debtor=debtor,
             creditor=creditor,
@@ -705,6 +722,8 @@ def _run(  # noqa: PLR0915 - the ordered lifecycle remains visible as one experi
             reason="Atreides reconciled prepared instruction to settled rail response",
             n=39,
         )
+    if chaos_plan is not None:
+        transcript = apply_transcript_injections(scenario, transcript, chaos_plan)
     return scenario, transcript
 
 

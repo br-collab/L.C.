@@ -59,6 +59,8 @@ def test_side_rail_routes_every_existing_panel_once_and_keeps_blind_spots_pinned
         "escalations",
         "breaks",
         "cashleg",
+        "cns",
+        "xrpl",
         "blindspots",
         "scheduled",
         "decisions",

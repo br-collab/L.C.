@@ -505,7 +505,12 @@ def traceability_body() -> dict[str, object]:
         "run_timestamp": "2026-10-08T20:10:32Z",
         "requirements": [
             {"requirement_id": "BR-01", "status": "COVERED", "test_node_ids": ["test_x"]},
-            {"requirement_id": "BR-02", "status": "UNTESTED", "test_node_ids": []},
+            {
+                "requirement_id": "BR-02",
+                "status": "UNTESTED",
+                "test_node_ids": [],
+                "reason": "no synthetic producer exists for this requirement",
+            },
         ],
         "digest": "b" * 64,
     }

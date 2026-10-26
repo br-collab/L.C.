@@ -52,7 +52,7 @@ def _seal(
         "shares": 100,
         "quantity_unit": "FACE",
         "price": 99.5,
-        "notional": 9950,
+        "notional": 99.5,
         "signal_type": "W5_SYNTHETIC",
         "rationale": "deterministic bilateral Treasury DvP scenario",
         "allocation_accounts": allocation_accounts,

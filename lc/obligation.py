@@ -22,6 +22,7 @@ from cannae_kernel.delivery import DeliveryPattern
 from cannae_kernel.disposition import Disposition
 from cannae_kernel.envelopes import (
     ClearingTransformation,
+    FirmSecuritiesDirection,
     ObligationAcceptanceRecord,
     SettlementObligationEnvelope,
 )
@@ -34,6 +35,12 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from lc.asset_profile import AssetProfile
 from lc.clearing import GrossClearingResult
 from lc.events import LifecycleState
+from lc.institutional import (
+    InstrumentReference,
+    MarketProfile,
+    derive_cash,
+    validate_settlement_date,
+)
 from lc.lifecycle import EventInput, LifecycleRegister, replay, transition
 
 __all__ = [
@@ -223,7 +230,7 @@ class ObligationPayload(_Record):
     corrections: tuple[Correction, ...]
 
     @model_validator(mode="after")
-    def _payload_is_complete(self) -> Self:
+    def _payload_is_complete(self) -> Self:  # noqa: PLR0912, PLR0915
         legs: set[LegKind] = set()
         required_accounts: set[str] = set()
         if (self.securities_leg is None) is not (self.delivery_pattern in _NO_SECURITIES_LEG):
@@ -247,6 +254,34 @@ class ObligationPayload(_Record):
             raise ValueError("every leg account must belong to a named participant")
         if len(accounts) != len(self.participants):
             raise ValueError("participant accounts must be unique")
+        by_account = {participant.account_id: participant for participant in self.participants}
+        if self.securities_leg is not None:
+            deliverer = by_account[self.securities_leg.delivering_account_id]
+            receiver = by_account[self.securities_leg.receiving_account_id]
+            if deliverer.role is not AccountRole.DELIVERER:
+                raise ValueError("PARTY_ROLE_MISMATCH: securities deliverer role")
+            if receiver.role is not AccountRole.RECEIVER:
+                raise ValueError("PARTY_ROLE_MISMATCH: securities receiver role")
+            if deliverer.participant_id == receiver.participant_id:
+                raise ValueError("PARTY_ROLE_MISMATCH: securities parties must be distinct")
+        if self.cash_leg is not None:
+            payer = by_account[self.cash_leg.paying_account_id]
+            cash_receiver = by_account[self.cash_leg.receiving_account_id]
+            if payer.role is not AccountRole.DELIVERER:
+                raise ValueError("PARTY_ROLE_MISMATCH: cash payer role")
+            if cash_receiver.role is not AccountRole.RECEIVER:
+                raise ValueError("PARTY_ROLE_MISMATCH: cash receiver role")
+            if payer.participant_id == cash_receiver.participant_id:
+                raise ValueError("PARTY_ROLE_MISMATCH: cash parties must be distinct")
+        if self.securities_leg is not None and self.cash_leg is not None:
+            deliverer = by_account[self.securities_leg.delivering_account_id]
+            receiver = by_account[self.securities_leg.receiving_account_id]
+            payer = by_account[self.cash_leg.paying_account_id]
+            cash_receiver = by_account[self.cash_leg.receiving_account_id]
+            if deliverer.participant_id != cash_receiver.participant_id:
+                raise ValueError("PARTY_ROLE_MISMATCH: deliverer must equal cash receiver")
+            if receiver.participant_id != payer.participant_id:
+                raise ValueError("PARTY_ROLE_MISMATCH: receiver must equal cash payer")
         if not self.candidate_paths:
             raise ValueError("at least one candidate path descriptor is required")
         if any(path.delivery_pattern is not self.delivery_pattern for path in self.candidate_paths):
@@ -310,7 +345,7 @@ def record_atreides_handoff(
     return HandoffOutcome(journal=journal, acceptance=acceptance)
 
 
-def form_obligation(  # noqa: PLR0913 - every boundary input remains explicit
+def form_obligation(  # noqa: PLR0912, PLR0913 - every boundary input remains explicit
     *,
     register: LifecycleRegister,
     order_id: OrderId,
@@ -320,6 +355,12 @@ def form_obligation(  # noqa: PLR0913 - every boundary input remains explicit
     session: SessionContext,
     source_manifest: SourceManifest,
     asset_profile: AssetProfile,
+    approved_intent_digest: str,
+    approved_side: str,
+    firm_participant_id: str,
+    instrument: InstrumentReference,
+    execution_price: Decimal,
+    trade_date: date,
     securities_leg: SecuritiesLeg,
     cash_leg: CashLeg,
     participants: tuple[ParticipantAccount, ...],
@@ -343,11 +384,30 @@ def form_obligation(  # noqa: PLR0913 - every boundary input remains explicit
         raise ValueError("obligation identifier is not a gross-clearing output")
     if delivery_pattern is not asset_profile.settlement_pattern:
         raise ValueError("delivery pattern does not match the registered asset profile")
+    if instrument.asset_class is not asset_profile.asset_class:
+        raise ValueError("ASSET_PROFILE_MISMATCH")
     gross = next(item for item in clearing.obligations if item.obligation_id == obligation_id)
     if securities_leg.quantity != gross.quantity:
         raise ValueError("securities leg quantity does not match gross-clearing output")
-    if cash_leg.total != gross.cash:
-        raise ValueError("cash leg total does not match gross-clearing output")
+    profile = MarketProfile(
+        profile_id=asset_profile.profile_id,
+        market=asset_profile.market,
+        asset_class=asset_profile.asset_class,
+        settlement_cycle=asset_profile.settlement_cycle,
+        calendar=asset_profile.calendar,
+        deadline_seconds=0,
+    )
+    validate_settlement_date(trade_date=trade_date, value_date=cash_leg.value_date, profile=profile)
+    principal, accrued, total = derive_cash(
+        quantity=securities_leg.quantity,
+        price=execution_price,
+        settlement_date=cash_leg.value_date,
+        instrument=instrument,
+    )
+    if (cash_leg.principal, cash_leg.accrued, cash_leg.total) != (principal, accrued, total):
+        raise ValueError("CASH_NOT_PRICE_TIMES_QUANTITY")
+    if gross.cash != total:
+        raise ValueError("CASH_NOT_PRICE_TIMES_QUANTITY: clearing cash is not derived cash")
     transformation_references = tuple(
         reference
         for reference in source_manifest.references
@@ -357,6 +417,21 @@ def form_obligation(  # noqa: PLR0913 - every boundary input remains explicit
         reference.digest == digest(transformation) for reference in transformation_references
     ):
         raise ValueError("source manifest does not bind the clearing transformation")
+    approved_references = tuple(
+        reference
+        for reference in source_manifest.references
+        if reference.kind is SourceKind.APPROVED_INTENT
+    )
+    if not any(reference.digest == approved_intent_digest for reference in approved_references):
+        raise ValueError("APPROVED_INTENT_UNBOUND")
+
+    if approved_side not in {"BUY", "SELL"}:
+        raise ValueError("APPROVED_SIDE_INVALID")
+    direction = (
+        FirmSecuritiesDirection.RECEIVE
+        if approved_side == "BUY"
+        else FirmSecuritiesDirection.DELIVER
+    )
 
     payload = ObligationPayload(
         source_manifest=source_manifest,
@@ -368,10 +443,21 @@ def form_obligation(  # noqa: PLR0913 - every boundary input remains explicit
         expected_finality=expected_finality,
         corrections=corrections,
     )
+    participants_by_account = {item.account_id: item for item in participants}
+    if direction is FirmSecuritiesDirection.RECEIVE:
+        firm_security = participants_by_account[securities_leg.receiving_account_id]
+        firm_cash = participants_by_account[cash_leg.paying_account_id]
+    else:
+        firm_security = participants_by_account[securities_leg.delivering_account_id]
+        firm_cash = participants_by_account[cash_leg.receiving_account_id]
+    if {firm_security.participant_id, firm_cash.participant_id} != {firm_participant_id}:
+        raise ValueError("PARTY_ROLE_MISMATCH: legs disagree with approved direction")
     envelope = SettlementObligationEnvelope(
         obligation_id=obligation_id,
         lifecycle_id=register.lifecycle_id,
         transformation_digest=digest(transformation),
+        approved_intent_digest=approved_intent_digest,
+        firm_securities_direction=direction,
         session=session,
         provenance=Provenance.POLICY_RESULT,
         payload_digest=digest(payload),

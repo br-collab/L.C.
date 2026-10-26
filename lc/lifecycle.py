@@ -195,6 +195,7 @@ class OrderSnapshot(_Record):
     state: LifecycleState
     quantity: Decimal
     executed_quantity: Decimal = Decimal(0)
+    executed_consideration: Decimal = Decimal(0)
     parent_order_id: OrderId | None
     terms: OrderTerms | None = None
 
@@ -218,6 +219,7 @@ def _append(  # noqa: PLR0913 - every sealed-event field remains explicit
     quantity: Decimal,
     rule_version: str,
     terms: OrderTerms | None = None,
+    consideration: Decimal = Decimal(0),
 ) -> LifecycleRegister:
     sealed = seal_order_event(
         event_id=event.event_id,
@@ -234,6 +236,7 @@ def _append(  # noqa: PLR0913 - every sealed-event field remains explicit
             state=state,
             reason=reason,
             quantity=Recorded[Decimal](value=quantity),
+            consideration=consideration,
             terms=terms,
         ),
         prior_event_digest=register.events[-1].envelope_digest if register.events else None,
@@ -441,6 +444,7 @@ def transition(  # noqa: PLR0913 - transition evidence is explicit at the call s
     event: EventInput,
     quantity: Decimal | None = None,
     terms: OrderTerms | None = None,
+    consideration: Decimal = Decimal(0),
 ) -> LifecycleRegister:
     snapshot = replay(register.events)
     current = snapshot.orders[order_id]
@@ -464,6 +468,7 @@ def transition(  # noqa: PLR0913 - transition evidence is explicit at the call s
         quantity=quantity if quantity is not None else current.quantity,
         rule_version="lc-m3-lifecycle/1.0",
         terms=terms if terms is not None else current.terms,
+        consideration=consideration,
     )
 
 
@@ -520,6 +525,11 @@ def replay(events: tuple[OrderEvent, ...]) -> RegisterSnapshot:
                 prior.executed_quantity + event_quantity
                 if prior is not None and is_execution
                 else (prior.executed_quantity if prior is not None else Decimal(0))
+            ),
+            executed_consideration=(
+                prior.executed_consideration + payload.consideration
+                if prior is not None and is_execution
+                else (prior.executed_consideration if prior is not None else Decimal(0))
             ),
             parent_order_id=payload.parent_order_id,
             terms=payload.terms if payload.terms is not None else (prior.terms if prior else None),

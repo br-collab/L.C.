@@ -26,6 +26,7 @@ __all__ = [
     "InjectionCondition",
     "InjectionKind",
     "apply_injections",
+    "apply_transcript_injections",
     "authority_reading",
     "generate_plan",
     "observe",
@@ -158,6 +159,46 @@ def apply_injections(events: tuple[ChaosEvent, ...], plan: ChaosPlan) -> ChaosRe
             if removed:
                 absent.append(condition.source or condition.event_class)
     return ChaosResult(plan=plan, events=tuple(current), absent_sources=tuple(sorted(set(absent))))
+
+
+def apply_transcript_injections(
+    scenario: ScenarioRecord, transcript: CrossingTranscript, plan: ChaosPlan
+) -> CrossingTranscript:
+    """Apply the plan to the named scenario's real crossing outcome.
+
+    INST-1 L4 requires an injection to affect the run it names, not merely to be
+    recorded beside an unchanged run. The reference-data outage makes the first
+    L.C.-to-Atreides handoff indeterminate with a named reason.
+    """
+    scenario.require_lifecycle(transcript.crossings[0].lifecycle_id)
+    outage = next(
+        (
+            condition
+            for condition in plan.conditions
+            if condition.kind is InjectionKind.OUTAGE and condition.event_class == "reference_data"
+        ),
+        None,
+    )
+    if outage is None:
+        return transcript
+    changed = []
+    applied = False
+    for crossing in transcript.crossings:
+        updated_crossing = crossing
+        if not applied and crossing.producer == "lc" and crossing.consumer == "atreides":
+            updated_crossing = crossing.model_copy(
+                update={
+                    "disposition": Disposition.INDETERMINATE,
+                    "reason": (
+                        f"CHAOS_OUTAGE:{outage.condition_id}: required reference data absent"
+                    ),
+                }
+            )
+            applied = True
+        changed.append(updated_crossing)
+    if not applied:
+        raise ValueError("CHAOS_TARGET_NOT_REACHED: no L.C.-to-Atreides crossing")
+    return CrossingTranscript(crossings=tuple(changed))
 
 
 def observe(event: ChaosEvent, *, at: datetime) -> bytes:

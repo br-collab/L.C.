@@ -23,3 +23,11 @@ def test_the_occ_table_is_declared_as_package_data() -> None:
     name = DEFAULT_TABLE_PATH.relative_to(Path(lc.__file__).resolve().parent).as_posix()
     assert DEFAULT_TABLE_PATH.is_file()
     assert any(fnmatch.fnmatch(name, pattern) for pattern in patterns), name
+
+
+def test_pinned_regulatory_sources_are_declared_as_package_data() -> None:
+    with (REPO / "pyproject.toml").open("rb") as handle:
+        patterns = tomllib.load(handle)["tool"]["setuptools"]["package-data"]["lc"]
+    for source in (REPO / "lc" / "rules").glob("*.txt"):
+        name = source.relative_to(REPO / "lc").as_posix()
+        assert any(fnmatch.fnmatch(name, pattern) for pattern in patterns), name

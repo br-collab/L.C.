@@ -98,6 +98,8 @@ PANELS: dict[str, str] = {
     "governance": "Governance trail",
     "controls": "Controls and compliance",
     "risk": "Risk limits",
+    "cns": "Continuous Net Settlement rail",
+    "xrpl": "Ripple/XRP Ledger path",
 }
 
 SECTIONS: dict[str, tuple[str, ...]] = {
@@ -108,13 +110,15 @@ SECTIONS: dict[str, tuple[str, ...]] = {
     "decisions": ("escalations", "governance", "decisions"),
     "controls": ("controls",),
     "risk": ("risk",),
+    "cns": ("cns",),
+    "xrpl": ("xrpl",),
     "agents": ("agents", "advisories", "traceability"),
     "programme": ("waves", "repositories", "aureon", "simulation", "scheduled"),
     "blind": ("blindspots",),
 }
 
 SECTION_GROUPS = (
-    ("OPERATE", ("now", "trades", "exceptions", "cash")),
+    ("OPERATE", ("now", "trades", "exceptions", "cash", "cns", "xrpl")),
     ("GOVERN", ("decisions", "controls", "risk", "agents")),
     ("BUILD", ("programme",)),
 )

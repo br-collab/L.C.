@@ -116,6 +116,14 @@ class CrossingTranscript(_Record):
     crossings: tuple[Crossing, ...] = ()
 
     def append(self, crossing: Crossing) -> CrossingTranscript:
+        artifact_id = getattr(crossing.envelope, "artifact_id", None)
+        if artifact_id is not None and any(
+            getattr(existing.envelope, "artifact_id", None) == artifact_id
+            for existing in self.crossings
+        ):
+            raise ValueError(f"DUPLICATE_CROSSING_ARTIFACT: {artifact_id}")
+        if self.crossings and crossing.times.event_time < self.crossings[-1].times.event_time:
+            raise ValueError("CROSSING_TIME_REVERSED")
         return self.model_copy(update={"crossings": (*self.crossings, crossing)}, deep=True)
 
     def to_bytes(self) -> bytes:

@@ -128,7 +128,7 @@ def build_synthetic_oms_publication(as_of: datetime) -> bytes:
             for account, quantity in (("A", Decimal(50)), ("B", Decimal(30)), ("C", Decimal(20)))
         ),
         executed_quantity=Decimal(100),
-        executed_consideration=Decimal(9950),
+        executed_consideration=Decimal("99.50"),
         average_price=Decimal("99.5"),
         average_price_decimal_places=6,
         average_price_rounding="ROUND_HALF_EVEN",

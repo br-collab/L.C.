@@ -63,7 +63,11 @@ from enum import StrEnum
 from typing import Final, Self
 
 from cannae_kernel.canonical import digest, digest_bytes
-from cannae_kernel.envelopes import ClearingTransformation, SettlementObligationEnvelope
+from cannae_kernel.envelopes import (
+    ClearingTransformation,
+    FirmSecuritiesDirection,
+    SettlementObligationEnvelope,
+)
 from cannae_kernel.finality import FinalityType
 from cannae_kernel.ids import LifecycleId, ObligationId, encode_ulid
 from cannae_kernel.provenance import Provenance
@@ -215,6 +219,8 @@ def _form(  # noqa: PLR0913 - every part of the envelope stays explicit
     session: SessionContext,
     formed_at: datetime,
     seed: str,
+    approved_intent_digest: str,
+    firm_securities_direction: FirmSecuritiesDirection,
 ) -> FormedOptionObligation:
     pattern = profile.settlement_pattern
     legs = [
@@ -251,6 +257,8 @@ def _form(  # noqa: PLR0913 - every part of the envelope stays explicit
         obligation_id=_obligation_id(formed_at, seed),
         lifecycle_id=transformation.lifecycle_id,
         transformation_digest=digest(transformation),
+        approved_intent_digest=approved_intent_digest,
+        firm_securities_direction=firm_securities_direction,
         session=session,
         provenance=Provenance.POLICY_RESULT,
         payload_digest=digest(payload),
@@ -342,6 +350,12 @@ def form_premium_obligation(  # noqa: PLR0913 - every boundary input remains exp
         session=session,
         formed_at=formed_at,
         seed=f"premium:{event.payload_digest}:{side.value}",
+        approved_intent_digest=event.intent_digest,
+        firm_securities_direction=(
+            FirmSecuritiesDirection.RECEIVE
+            if side is NovationSide.BUYER
+            else FirmSecuritiesDirection.DELIVER
+        ),
     )
 
 
@@ -538,6 +552,12 @@ def _account_obligations(  # noqa: PLR0913 - every part of the obligation stays 
             session=session,
             formed_at=formed_at,
             seed=f"{seed}:{account.clearing_member_id}:{account.account_id}:{index}",
+            approved_intent_digest=transformation.input_digests[0],
+            firm_securities_direction=(
+                FirmSecuritiesDirection.RECEIVE
+                if receives_deliverable
+                else FirmSecuritiesDirection.DELIVER
+            ),
         )
 
     formed: list[FormedOptionObligation] = []

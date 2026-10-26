@@ -29,6 +29,10 @@ def _obligation(profile: AssetProfile) -> ObligationPayload:
 def test_third_profile_is_registry_data_and_runs_the_same_lifecycle() -> None:
     third = AssetProfile(
         profile_id="treasury.test-only",
+        asset_class=BILATERAL_TREASURY.asset_class,
+        market=BILATERAL_TREASURY.market,
+        settlement_cycle=1,
+        calendar="Fedwire Securities",
         settlement_pattern=DeliveryPattern.DVP,
         cash_representation="test cash",
         custody_path="test custody",
