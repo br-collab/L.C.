@@ -14,6 +14,7 @@ from cannae_kernel.finality import FinalityType
 from cannae_kernel.ids import ObligationId
 from cannae_kernel.session import BusinessDate, MarketSession, SessionContext
 from test_lifecycle import _actor, _envelope, _event, _id, _payload, _wire_bytes
+from test_market_access import capacity_document
 from test_policy_and_venue import INTENT_DIGEST, default_terms
 from test_trade import _allocated, _fact
 
@@ -23,6 +24,7 @@ from lc.clearing import clear_gross
 from lc.events import LifecycleState, OrderTerms
 from lc.institutional import AssetClass, InstrumentReference, QuantityUnit, TreasuryReference
 from lc.lifecycle import ApprovedIntentPayload, OrderSide, replay
+from lc.market_access import AttestedInput
 from lc.obligation import (
     AccountRole,
     CandidatePathDescriptor,
@@ -41,6 +43,7 @@ from lc.obligation import (
 from lc.trade import affirm, record_match
 
 OBLIGATION_ID = ObligationId(_id("obl_", 31))
+_DEFAULT = object()
 
 
 def _sha(value: str) -> str:
@@ -76,6 +79,7 @@ def _formed(  # noqa: PLR0913 - each lie the tests tell is its own keyword
     gross_instrument: InstrumentReference | None = None,
     participants: tuple[ParticipantAccount, ...] | None = None,
     session_date: date = date(2026, 9, 24),
+    account_capacity: AttestedInput | object | None = _DEFAULT,
 ) -> FormedObligation:
     journal, captured, _ = _allocated(terms, intent_payload)
     supplied = supplied_intent or intent_payload or _payload()
@@ -210,6 +214,16 @@ def _formed(  # noqa: PLR0913 - each lie the tests tell is its own keyword
         clearing_event=_event(26),
         obligation_event=_event(27),
         candidate_event=_event(28),
+        account_capacity=(
+            capacity_document(
+                ("ACCOUNT-1", "CUSTOMER"),
+                ("ACCOUNT-A", "CUSTOMER"),
+                ("ACCOUNT-B", "CUSTOMER"),
+                firm_participant_id="participant-buyer",
+            )
+            if account_capacity is _DEFAULT
+            else account_capacity  # type: ignore[arg-type]
+        ),
     )
 
 
@@ -394,18 +408,11 @@ def _sell_terms(**changes: object) -> OrderTerms:
     )
 
 
-def test_v2_a_sealed_sell_without_a_sealed_capacity_is_refused() -> None:
-    with pytest.raises(ValueError, match="ACCOUNT_CAPACITY_ABSENT"):
-        _formed(intent_payload=_sell_intent(), terms=_sell_terms())
-
-
-def test_v2_a_sealed_sell_delivers_and_carries_its_capacity_under_the_digest() -> None:
-    sell = _sell_terms(account_capacity="CUSTOMER")
-    seller_is_firm = (
+def _firm_sells(firm: str = "participant-firm") -> tuple[ParticipantAccount, ...]:
+    """Legs where ``firm`` delivers the securities and receives the cash."""
+    return (
         ParticipantAccount(
-            participant_id="participant-firm",
-            account_id="SEC-DELIVER",
-            role=AccountRole.DELIVERER,
+            participant_id=firm, account_id="SEC-DELIVER", role=AccountRole.DELIVERER
         ),
         ParticipantAccount(
             participant_id="participant-street",
@@ -418,16 +425,87 @@ def test_v2_a_sealed_sell_delivers_and_carries_its_capacity_under_the_digest() -
             role=AccountRole.DELIVERER,
         ),
         ParticipantAccount(
-            participant_id="participant-firm",
-            account_id="CASH-RECEIVE",
-            role=AccountRole.RECEIVER,
+            participant_id=firm, account_id="CASH-RECEIVE", role=AccountRole.RECEIVER
         ),
     )
-    formed = _formed(intent_payload=_sell_intent(), terms=sell, participants=seller_is_firm)
-    assert formed.envelope.firm_securities_direction.value == "DELIVER"
-    assert formed.payload.seller_capacity == "CUSTOMER"
+
+
+def _attested(
+    order: str = "PROPRIETARY",
+    a: str = "PROPRIETARY",
+    b: str = "PROPRIETARY",
+    firm: str = "participant-firm",
+) -> AttestedInput:
+    """The order account ACCOUNT-1 and the intent's allocation accounts ACCOUNT-A and -B."""
+    return capacity_document(
+        ("ACCOUNT-1", order), ("ACCOUNT-A", a), ("ACCOUNT-B", b), firm_participant_id=firm
+    )
+
+
+def _sell(**changes: object) -> FormedObligation:
+    values: dict[str, object] = {
+        "intent_payload": _sell_intent(),
+        "terms": _sell_terms(),
+        "participants": _firm_sells(),
+        "account_capacity": _attested(),
+    }
+    values.update(changes)
+    return _formed(**values)  # type: ignore[arg-type]
+
+
+# INST-1 Amendment 3, WP1b items 1 and 4 (Grok's review of 0761fb0): the firm participant and
+# the seller capacity come from the attested account-capacity document.
+
+
+def test_wp1b_an_outsider_cannot_be_named_the_firm_on_a_proprietary_sell() -> None:
+    """Grok: a sell sealed PROPRIETARY with participant-outsider as the firm was accepted."""
+    with pytest.raises(ValueError, match="FIRM_PARTICIPANT_UNBOUND"):
+        _sell(participants=_firm_sells("participant-outsider"))
+
+
+def test_wp1b_capacity_is_the_attested_one_and_the_most_protective_of_the_accounts() -> None:
+    proprietary = _sell()
+    assert proprietary.payload.seller_capacity == "PROPRIETARY"
+    customer = _sell(account_capacity=_attested(a="CUSTOMER"))
+    assert customer.payload.seller_capacity == "CUSTOMER"
+    pab = _sell(account_capacity=_attested(b="PAB"))
+    assert pab.payload.seller_capacity == "PAB"
+    assert _sell(account_capacity=_attested(a="PAB", b="CUSTOMER")).payload.seller_capacity == (
+        "CUSTOMER"
+    )
+
+
+def test_wp1b_the_payload_names_the_attested_document_under_its_digest() -> None:
+    document = _attested(a="CUSTOMER")
+    formed = _sell(account_capacity=document)
+    assert formed.payload.account_capacity_digest == document.payload_digest
     relabelled = formed.payload.model_copy(update={"seller_capacity": "PROPRIETARY"})
     assert digest(relabelled) != formed.envelope.payload_digest
+
+
+def test_wp1b_an_account_the_document_does_not_attest_is_refused() -> None:
+    partial = capacity_document(
+        ("ACCOUNT-1", "PROPRIETARY"), firm_participant_id="participant-firm"
+    )
+    with pytest.raises(ValueError, match="CAPACITY_ACCOUNT_UNKNOWN: ACCOUNT-A, ACCOUNT-B"):
+        _sell(account_capacity=partial)
+
+
+def test_wp1b_a_missing_or_tampered_document_is_refused() -> None:
+    with pytest.raises(ValueError, match="CAPACITY_DOCUMENT_MISSING"):
+        _sell(account_capacity=None)
+    good = _attested()
+    tampered = good.model_copy(
+        update={"payload": good.payload.replace(b"PROPRIETARY", b"CUSTOMER")}
+    )
+    with pytest.raises(ValueError, match="CAPACITY_DOCUMENT_TAMPERED"):
+        _sell(account_capacity=tampered)
+
+
+def test_wp1b_a_buy_takes_its_firm_from_the_document_too() -> None:
+    assert _formed().envelope.firm_securities_direction.value == "RECEIVE"
+    with pytest.raises(ValueError, match="FIRM_PARTICIPANT_UNBOUND"):
+        _formed(account_capacity=_attested(firm="participant-other"))
 
 
 def test_source_manifest_refuses_missing_upstream_evidence() -> None:

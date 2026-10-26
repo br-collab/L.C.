@@ -126,6 +126,8 @@ class CapacityPosition(_Record):
 
 class CapacityAccount(_Record):
     account_id: str
+    #: INST-1 Amendment 3 (WP1b item 4): from the account's books type at Atreides.
+    capacity: Literal["CUSTOMER", "PAB", "PROPRIETARY"]
     buying_power: Decimal
     margin_excess: Decimal
     margin_result_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
@@ -133,11 +135,13 @@ class CapacityAccount(_Record):
 
 
 class CapacityDocument(_Record):
-    schema_version: Literal["atreides.equities_account_capacity/2"]
+    schema_version: Literal["atreides.equities_account_capacity/3"]
     as_of: datetime
     maximum_age_seconds: int
     synthetic: Literal[True]
     journal_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    #: INST-1 Amendment 3 (WP1b item 1): the carrying firm's settlement participant.
+    firm_participant_id: str = Field(min_length=1)
     accounts: tuple[CapacityAccount, ...]
 
 
@@ -202,6 +206,18 @@ class MarketAccessDecision(_Record):
 
 
 T = TypeVar("T", bound=BaseModel)
+
+
+def read_capacity_document(item: AttestedInput | None) -> tuple[CapacityDocument, str]:
+    """The attested account-capacity document, or a named refusal.
+
+    INST-1 Amendment 3 (WP1b items 1 and 4): an obligation's seller capacity and firm
+    participant are read from here, never from the order author or the caller.
+    """
+    document, status = _parse_attested(item, CapacityDocument)
+    if document is None or item is None:
+        raise ValueError(f"CAPACITY_{status}: the attested account-capacity document is unusable")
+    return document, item.payload_digest
 
 
 def _parse_attested(item: AttestedInput | None, model: type[T]) -> tuple[T | None, str]:
