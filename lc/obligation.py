@@ -44,6 +44,7 @@ from lc.institutional import (
     validate_settlement_date,
 )
 from lc.lifecycle import (
+    ApprovedIntentPayload,
     EventInput,
     LifecycleRegister,
     OrderSnapshot,
@@ -51,6 +52,7 @@ from lc.lifecycle import (
     replay,
     transition,
 )
+from lc.market_access import AttestedInput, CapacityDocument, read_capacity_document
 from lc.trade import CaptureRecord
 
 #: Trade dates for U.S. markets are Eastern calendar dates.
@@ -242,9 +244,11 @@ class ObligationPayload(_Record):
     candidate_paths: tuple[CandidatePathDescriptor, ...]
     expected_finality: tuple[ExpectedFinality, ...]
     corrections: tuple[Correction, ...]
-    #: INST-1 Amendment 3: the delivering firm account's sealed capacity, set exactly when the
+    #: INST-1 Amendment 3: the delivering accounts' attested capacity, set exactly when the
     #: firm delivers securities. Atreides reads it here, never from a caller.
     seller_capacity: Literal["CUSTOMER", "PAB", "PROPRIETARY"] | None = None
+    #: The attested account-capacity document the capacity was read from (WP1b item 4).
+    account_capacity_digest: str | None = Field(default=None, pattern=r"^sha256:[0-9a-f]{64}$")
     #: The participant registry version this obligation was formed against.
     participant_registry_digest: str | None = Field(default=None, pattern=r"^sha256:[0-9a-f]{64}$")
 
@@ -364,15 +368,35 @@ def record_atreides_handoff(
     return HandoffOutcome(journal=journal, acceptance=acceptance)
 
 
-def _direction_and_capacity(
-    terms: OrderTerms,
-) -> tuple[FirmSecuritiesDirection, Literal["CUSTOMER", "PAB", "PROPRIETARY"] | None]:
-    """The firm's securities direction from the sealed side, and a delivery's sealed capacity."""
-    if terms.side == "BUY":
-        return FirmSecuritiesDirection.RECEIVE, None
-    if terms.account_capacity is None:
-        raise ValueError("ACCOUNT_CAPACITY_ABSENT: a firm delivery needs the sealed capacity")
-    return FirmSecuritiesDirection.DELIVER, terms.account_capacity
+#: Most protective first: a delivery touching any customer account is a customer delivery.
+_CAPACITY_RANK: tuple[Literal["CUSTOMER", "PAB", "PROPRIETARY"], ...] = (
+    "CUSTOMER",
+    "PAB",
+    "PROPRIETARY",
+)
+
+
+def _attested_firm(
+    document: CapacityDocument,
+    *,
+    accounts: tuple[str, ...],
+    direction: FirmSecuritiesDirection,
+) -> tuple[str, Literal["CUSTOMER", "PAB", "PROPRIETARY"] | None]:
+    """The firm participant and, for a delivery, the seller capacity, from attested data.
+
+    INST-1 Amendment 3 (WP1b items 1 and 4). ``accounts`` are the order's account and the
+    intent's allocation accounts. Every one must be in the attested document. A delivery's
+    capacity is the most protective of theirs, because Rule 15c3-3 protects the customer or
+    PAB securities in it whatever the other accounts hold.
+    """
+    by_account = {item.account_id: item for item in document.accounts}
+    unknown = sorted(account for account in accounts if account not in by_account)
+    if unknown:
+        raise ValueError(f"CAPACITY_ACCOUNT_UNKNOWN: {', '.join(unknown)} not attested")
+    if direction is FirmSecuritiesDirection.RECEIVE:
+        return document.firm_participant_id, None
+    stated = {by_account[account].capacity for account in accounts}
+    return document.firm_participant_id, next(item for item in _CAPACITY_RANK if item in stated)
 
 
 def gross_trade_from_capture(
@@ -417,8 +441,8 @@ def _sealed_order(  # noqa: PLR0913 - each sealed record it checks is named
     approved_intent_bytes: bytes,
     instrument: InstrumentReference,
     securities_leg: SecuritiesLeg,
-) -> tuple[OrderSnapshot, OrderTerms, date]:
-    """The affirmed order, its sealed terms and its trade date, each checked.
+) -> tuple[OrderSnapshot, OrderTerms, date, ApprovedIntentPayload]:
+    """The affirmed order, its sealed terms, its trade date and its intent, each checked.
 
     The approved side and instrument are read from the sealed intent's verified bytes, and the
     order's own sealed terms must agree with them and name that intent's digest.
@@ -455,7 +479,7 @@ def _sealed_order(  # noqa: PLR0913 - each sealed record it checks is named
     if not fill_times:
         raise ValueError("FILLS_ABSENT: the register holds no sealed fill for this order")
     trade_date = max(fill_times).astimezone(_US_MARKETS).date()
-    return order, terms, trade_date
+    return order, terms, trade_date, intent
 
 
 def form_obligation(  # noqa: PLR0912, PLR0913 - every boundary input remains explicit
@@ -482,6 +506,7 @@ def form_obligation(  # noqa: PLR0912, PLR0913 - every boundary input remains ex
     clearing_event: EventInput,
     obligation_event: EventInput,
     candidate_event: EventInput,
+    account_capacity: AttestedInput | None,
     participant_registry_digest: str | None = None,
 ) -> FormedObligation:
     """Form one gross obligation and record readiness without building instructions.
@@ -493,7 +518,7 @@ def form_obligation(  # noqa: PLR0912, PLR0913 - every boundary input remains ex
     checked against them.
     """
     approved_intent_digest = digest(approved_intent)
-    order, terms, trade_date = _sealed_order(
+    order, terms, trade_date, intent = _sealed_order(
         register,
         order_id=order_id,
         approved_intent=approved_intent,
@@ -554,7 +579,15 @@ def form_obligation(  # noqa: PLR0912, PLR0913 - every boundary input remains ex
     if not any(reference.digest == approved_intent_digest for reference in approved_references):
         raise ValueError("APPROVED_INTENT_UNBOUND")
 
-    direction, seller_capacity = _direction_and_capacity(terms)
+    direction = (
+        FirmSecuritiesDirection.RECEIVE if intent.side == "BUY" else FirmSecuritiesDirection.DELIVER
+    )
+    capacity_document, capacity_digest = read_capacity_document(account_capacity)
+    firm_participant_id, seller_capacity = _attested_firm(
+        capacity_document,
+        accounts=tuple(dict.fromkeys((terms.account_id, *intent.allocation_accounts))),
+        direction=direction,
+    )
 
     payload = ObligationPayload(
         source_manifest=source_manifest,
@@ -566,6 +599,7 @@ def form_obligation(  # noqa: PLR0912, PLR0913 - every boundary input remains ex
         expected_finality=expected_finality,
         corrections=corrections,
         seller_capacity=seller_capacity,
+        account_capacity_digest=capacity_digest,
         participant_registry_digest=participant_registry_digest,
     )
     participants_by_account = {item.account_id: item for item in participants}
@@ -575,10 +609,12 @@ def form_obligation(  # noqa: PLR0912, PLR0913 - every boundary input remains ex
     else:
         firm_security = participants_by_account[securities_leg.delivering_account_id]
         firm_cash = participants_by_account[cash_leg.receiving_account_id]
-    # The firm is whoever takes the sealed side's securities and cash duties; it must be one
-    # participant on both of those legs.
+    # The firm takes the sealed side's securities and cash duties, and it is the participant
+    # the attested capacity document names, not one the caller chose.
     if firm_security.participant_id != firm_cash.participant_id:
         raise ValueError("PARTY_ROLE_MISMATCH: legs disagree with the sealed direction")
+    if firm_security.participant_id != firm_participant_id:
+        raise ValueError("FIRM_PARTICIPANT_UNBOUND: the firm legs are not the attested participant")
     envelope = SettlementObligationEnvelope(
         obligation_id=obligation_id,
         lifecycle_id=register.lifecycle_id,

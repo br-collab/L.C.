@@ -27,9 +27,10 @@ from decimal import Decimal
 import pytest
 from cannae_kernel.canonical import canonical_bytes_of, digest, digest_bytes
 from cannae_kernel.delivery import DeliveryPattern
-from cannae_kernel.envelopes import ExecutionEvent
+from cannae_kernel.envelopes import ExecutionEvent, FirmSecuritiesDirection
 from cannae_kernel.ids import LifecycleId
 from cannae_kernel.session import SessionContext
+from test_market_access import capacity_document
 from test_occ_boundary import CAPABILITIES as NOVATION_CAPABILITIES
 from test_occ_boundary import novated
 from test_option_exercise import (
@@ -45,10 +46,12 @@ from test_option_exercise import (
     CAPABILITIES as EXERCISE_CAPABILITIES,
 )
 
+from lc.market_access import read_capacity_document
 from lc.obligation import (
     AccountRole,
     LegKind,
     ObligationPayload,
+    SecuritiesLeg,
     SourceKind,
     SourceManifest,
     SourceReference,
@@ -70,6 +73,7 @@ from lc.option_obligation import (
     ObligationPurpose,
     SettlementParty,
     SettlementRoute,
+    _seller_capacity,
     form_exercise_obligations,
     form_premium_obligation,
 )
@@ -80,11 +84,14 @@ from lc.options import (
     OptionRight,
     OptionSeries,
     PositionAccount,
+    PositionAccountType,
 )
 
 D = Decimal
 FORMED_AT = datetime(2026, 12, 18, 21, 0, tzinfo=UTC)
 SETTLES = date(2026, 12, 21)
+#: Attested capacity for the SYNTHETIC position accounts: every one a customer account.
+OPTION_CAPACITY = capacity_document(*((f"A{n:05d}", "CUSTOMER") for n in range(400)))
 
 
 def settling(session: SessionContext) -> SessionContext:
@@ -257,6 +264,7 @@ def exercise_obligations(
         route=ROUTE,
         session=settling(novated()[0].session),
         formed_at=FORMED_AT,
+        account_capacity=OPTION_CAPACITY,
         strike_multiplier=multiplier,
     )
     return formed, expired, assigned
@@ -304,6 +312,7 @@ def test_an_early_exercise_notice_forms_the_same_kind_of_obligation() -> None:
         route=ROUTE,
         session=settling(novated()[0].session),
         formed_at=FORMED_AT,
+        account_capacity=OPTION_CAPACITY,
     )
     assert formed[0].transformation.input_digests == (digest(notice),)
     assert formed[0].account == HOLDERS[0]
@@ -423,6 +432,7 @@ def test_inconsistent_exercise_and_assignment_are_refused() -> None:
         "route": ROUTE,
         "session": settling(novated()[0].session),
         "formed_at": FORMED_AT,
+        "account_capacity": OPTION_CAPACITY,
     }
     with pytest.raises(ValueError, match="13 contracts exercised, but the assignment is for 12"):
         form_exercise_obligations(
@@ -527,3 +537,37 @@ def test_a_session_that_is_not_the_settlement_date_is_refused() -> None:
             session=buyer_event.session,
             formed_at=FORMED_AT,
         )
+
+
+def test_an_option_delivery_takes_its_capacity_from_the_attested_document() -> None:
+    """INST-1 Amendment 3 (WP1b item 4): the OCC origin bounds the capacity; it does not set it.
+
+    A FIRM origin is the member's own account, so only PROPRIETARY fits. A MARKET_MAKER origin
+    can be a non-member market maker the member carries, so PAB is allowed and then held to
+    possession or control at Atreides.
+    """
+    leg = SecuritiesLeg(
+        instrument_id="SYNTHETIC-XYZ",
+        quantity=D(100),
+        delivering_account_id="SEC-1",
+        receiving_account_id="SEC-2",
+    )
+    deliver = FirmSecuritiesDirection.DELIVER
+
+    def stated(kind: PositionAccountType, capacity: str) -> object:
+        document = read_capacity_document(capacity_document(("A00001", capacity)))
+        return _seller_capacity(account(1, kind), leg, deliver, document)[0]
+
+    assert stated(PositionAccountType.FIRM, "PROPRIETARY") == "PROPRIETARY"
+    assert stated(PositionAccountType.MARKET_MAKER, "PAB") == "PAB"
+    assert stated(PositionAccountType.CUSTOMER, "PAB") == "PAB"
+    with pytest.raises(ValueError, match="CAPACITY_ORIGIN_MISMATCH"):
+        stated(PositionAccountType.FIRM, "CUSTOMER")
+    with pytest.raises(ValueError, match="CAPACITY_ORIGIN_MISMATCH"):
+        stated(PositionAccountType.CUSTOMER, "PROPRIETARY")
+    with pytest.raises(ValueError, match="CAPACITY_ACCOUNT_UNKNOWN"):
+        _seller_capacity(
+            account(2), leg, deliver, read_capacity_document(capacity_document(("A00001", "PAB")))
+        )
+    with pytest.raises(ValueError, match="CAPACITY_DOCUMENT_MISSING"):
+        _seller_capacity(account(1), leg, deliver, None)

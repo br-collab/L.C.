@@ -111,7 +111,7 @@ jobs:
           repository: br-collab/Project-Atreides
           # INST-1 Amendment 3 (V4): the WP2b head, so the handoff runs against the boundary
           # L.C. actually meets. Re-pin to the merge commit once Atreides #153 merges.
-          ref: c4a2bc0f173898f5c1bd5a7206b7122a4cd32502
+          ref: 133ad4bdb89122f8a8e6add13ef9cb3f876fa545
           path: .handoff/Project-Atreides
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
@@ -194,7 +194,7 @@ jobs:
           repository: br-collab/Project-Atreides
           # INST-1 Amendment 3: the WP2b head (attested participant registry, payload-bound
           # seller capacity). Re-pin to the merge commit once Atreides #153 merges.
-          ref: c4a2bc0f173898f5c1bd5a7206b7122a4cd32502
+          ref: 133ad4bdb89122f8a8e6add13ef9cb3f876fa545
           path: .slice1/Project-Atreides
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
