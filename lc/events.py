@@ -7,6 +7,7 @@ contract and are constructed only by an independent producer.
 
 from __future__ import annotations
 
+from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
 from typing import Literal, Self
@@ -88,6 +89,12 @@ class OrderTerms(BaseModel):
     stop_price: Decimal | None = Field(default=None, gt=0)
     fractional_enabled: bool = False
     allocation_plan_digest: str | None = Field(default=None, pattern=r"^sha256:[0-9a-f]{64}$")
+    approved_intent_digest: str | None = Field(default=None, pattern=r"^sha256:[0-9a-f]{64}$")
+    quantity_basis: Literal["QUANTITY", "NOTIONAL"] = "QUANTITY"
+    approved_notional: Decimal | None = Field(default=None, gt=0)
+    policy_expires_at: datetime | None = None
+    minimum_price_increment: Decimal = Field(default=Decimal("0.01"), gt=0)
+    session_activity_permitted: bool = True
 
     @model_validator(mode="after")
     def _prices_match_order_type(self) -> Self:
@@ -99,6 +106,13 @@ class OrderTerms(BaseModel):
             raise ValueError("stop price must be present exactly for stop and stop-limit orders")
         if self.limit_price is not None and self.control_price != self.limit_price:
             raise ValueError("limit orders must use their sealed limit price as control price")
+        if (self.quantity_basis == "NOTIONAL") is not (self.approved_notional is not None):
+            raise ValueError("notional-denominated orders require one approved notional")
+        if self.policy_expires_at is not None and self.policy_expires_at.tzinfo is None:
+            raise ValueError("policy_expires_at must be timezone-aware")
+        for price in (self.control_price, self.limit_price, self.stop_price):
+            if price is not None and price >= 1 and price % self.minimum_price_increment:
+                raise ValueError("PRICE_INCREMENT_INVALID: 17 CFR 242.612")
         return self
 
 
@@ -113,6 +127,7 @@ class OrderEventPayload(BaseModel):
     state: LifecycleState
     reason: str = Field(min_length=1)
     quantity: Recorded[Decimal] | Absent
+    consideration: Decimal = Field(default=Decimal(0), ge=0)
     terms: OrderTerms | None = None
 
     @model_validator(mode="after")

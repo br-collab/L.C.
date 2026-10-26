@@ -1,0 +1,16 @@
+Sources: 17 CFR 242.612; SEC Release 34-101070; SEC Release 34-105656
+Rule URL: https://www.ecfr.gov/current/title-17/chapter-II/part-242/section-242.612
+Adopting release: https://www.sec.gov/files/rules/final/2024/34-101070.pdf
+Current exemptive order: https://www.sec.gov/files/rules/exorders/2026/34-105656.pdf
+Retrieved: 2026-10-26
+Licence: United States government works; 17 U.S.C. 105. Pinned in the CATO-D2 government-source style.
+
+Relevant rule and effective-date facts:
+For an NMS stock priced at or above $1.00, the legacy minimum pricing increment is $0.01.
+The 2024 amendment adds a $0.005 increment when the stock's time-weighted average quoted spread
+for its evaluation period is $0.015 or less; otherwise the increment is $0.01.
+
+Release 34-105656 granted temporary exemptive relief from compliance with amended Rule 612 until
+the first business day of November 2027. Therefore L.C. applies the legacy $0.01 increment before
+2027-11-01 and uses the declared STANDARD or NARROW_SPREAD bucket from that date. For prices below
+$1.00 the rule's $0.0001 floor remains applicable.

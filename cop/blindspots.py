@@ -85,6 +85,36 @@ class BlindSpot:
 CONTRACT_BLIND_SPOTS: tuple[BlindSpot, ...] = (
     BlindSpot(
         kind=BlindSpotKind.CONTRACT_CANNOT_EXPRESS,
+        name="Approved intent to settlement-obligation economics binding",
+        detail=(
+            "The envelope now binds intent identity and direction; price, quantity and parties "
+            "remain domain payload checks."
+        ),
+        remedy="retain the L.C. derivation and Atreides cross-artifact acceptance checks",
+    ),
+    BlindSpot(
+        kind=BlindSpotKind.CONTRACT_CANNOT_EXPRESS,
+        name="Cash-gate decision to obligation cash binding",
+        detail=(
+            "The kernel envelope does not itself prove which cash-gate snapshot evaluated "
+            "its payload."
+        ),
+        remedy="bind evaluated notional and currency in the Atreides decision record",
+    ),
+    BlindSpot(
+        kind=BlindSpotKind.CONTRACT_CANNOT_EXPRESS,
+        name="Prepared instruction to participant-registry binding",
+        detail="The kernel contract carries no account-to-BIC registry evidence.",
+        remedy="publish the Atreides registry mapping and comparison disposition",
+    ),
+    BlindSpot(
+        kind=BlindSpotKind.CONTRACT_CANNOT_EXPRESS,
+        name="Customer securities to possession-or-control binding",
+        detail="The obligation does not carry the customer-protection control result.",
+        remedy="bind the Atreides possession-or-control decision to the obligation",
+    ),
+    BlindSpot(
+        kind=BlindSpotKind.CONTRACT_CANNOT_EXPRESS,
         name="Break records across layers",
         detail=(
             "No domain publishes break records yet. Panel 10 is a labelled synthetic "

@@ -1,0 +1,15 @@
+Source: electronic Code of Federal Regulations, 17 CFR 240.15c6-1(a)
+URL: https://www.ecfr.gov/current/title-17/chapter-II/part-240/section-240.15c6-1
+Retrieved: 2026-10-26
+Licence: United States government work; 17 U.S.C. 105. Pinned in the CATO-D2 government-source style.
+
+Relevant current text:
+A broker or dealer shall not effect or enter into a contract for the purchase or sale of a
+security (other than an exempted security, government security, municipal security, commercial
+paper, bankers' acceptances, or commercial bills) that provides for payment of funds and delivery
+of securities later than the first business day after the date of the contract unless otherwise
+expressly agreed to by the parties at the time of the transaction.
+
+Application in L.C.:
+U.S. equities use T+1 under this paragraph. U.S. Treasuries are government securities excluded
+by the paragraph; their T+1 profile is explicitly labelled market convention instead of law.

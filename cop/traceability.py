@@ -31,6 +31,15 @@ class RequirementCoverage(_Frozen):
     requirement_id: str = Field(min_length=1)
     status: CoverageStatus
     test_node_ids: tuple[str, ...]
+    reason: str | None = None
+
+    @model_validator(mode="after")
+    def _evidence_or_reason(self) -> Self:
+        if self.status is CoverageStatus.COVERED and not self.test_node_ids:
+            raise ValueError("COVERED requires at least one named test")
+        if self.status is CoverageStatus.UNTESTED and not self.reason:
+            raise ValueError("UNTESTED requires the reason it cannot yet be tested")
+        return self
 
 
 class TraceabilityPublication(_Frozen):

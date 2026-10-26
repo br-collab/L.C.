@@ -19,3 +19,11 @@ def test_scenario_runner_records_the_plan_and_replays_it_exactly() -> None:
         assert crossing.envelope.artifact_kind == "injection_condition"
         artifact_ids.append(crossing.envelope.artifact_id)
     assert tuple(artifact_ids) == tuple(condition.condition_id for condition in plan.conditions)
+    assert any(crossing.reason.startswith("CHAOS_OUTAGE:") for crossing in first.crossings)
+
+
+def test_injected_plan_changes_the_targeted_run() -> None:
+    _plain_scenario, plain = _run(funded=True)
+    _chaos_scenario, chaos = _run(funded=True, chaos_plan=generate_plan(29))
+    assert all(not crossing.reason.startswith("CHAOS_OUTAGE:") for crossing in plain.crossings)
+    assert any(crossing.reason.startswith("CHAOS_OUTAGE:") for crossing in chaos.crossings)

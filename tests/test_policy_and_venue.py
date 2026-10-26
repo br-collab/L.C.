@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
+import pytest
 from cannae_kernel.absence import Absent, Recorded
 from cannae_kernel.actor import ActorKind, ActorRef
 from cannae_kernel.canonical import digest
@@ -15,9 +16,10 @@ from cannae_kernel.session import BusinessDate, MarketSession, SessionContext
 from test_lifecycle import NOW, _accepted, _actor, _event, _id, _payload
 
 from emulators.venue import VenueEmulator, VenueOrder, VenueOutcome
-from lc.events import LifecycleState, OrderTerms
+from lc.events import LifecycleState, OrderTerms, OrderType, TimeInForce
 from lc.lifecycle import ChildOrder, EventInput, LifecycleRegister, split_parent, transition
 from lc.policy import (
+    ExecutionApplication,
     ExecutionPolicy,
     ExecutionReport,
     MarketEvidenceSnapshot,
@@ -226,3 +228,80 @@ def test_execution_cannot_bypass_market_access() -> None:
     assert applied.disposition is Disposition.HOLD
     assert applied.reason == "execution refused because market access has not passed"
     assert applied.journal.canonical_bytes() == before
+
+
+def _terms(**changes: object) -> OrderTerms:
+    values: dict[str, object] = {
+        "account_id": "SYN-CUSTOMER-1",
+        "strategy_id": "INST-1",
+        "issue": "91282CJL6",
+        "side": "BUY",
+        "order_type": OrderType.LIMIT,
+        "time_in_force": TimeInForce.DAY,
+        "control_price": Decimal(100),
+        "limit_price": Decimal(100),
+        "approved_intent_digest": "sha256:" + "a" * 64,
+        "quantity_basis": "QUANTITY",
+        "policy_expires_at": NOW + timedelta(hours=1),
+    }
+    values.update(changes)
+    return OrderTerms.model_validate(values)
+
+
+def _application(
+    *, terms: OrderTerms, price: Decimal, event_time: datetime = NOW
+) -> ExecutionApplication:
+    result = VenueEmulator(seed=7).execute(
+        _venue_order(), outcome=VenueOutcome.FILL, event_time=event_time
+    )
+    assert isinstance(result.event, Recorded) and isinstance(result.report, Recorded)
+    report = ExecutionReport.model_validate(
+        result.report.value.model_dump(mode="python")
+    ).model_copy(update={"price": price})
+    execution = result.event.value.model_copy(update={"payload_digest": digest(report)})
+    return apply_execution(
+        _child_register(terms=terms), execution, report, actor=_actor(), event=_event(20)
+    )
+
+
+@pytest.mark.parametrize(
+    ("side", "limit", "fill"),
+    [("BUY", Decimal(100), Decimal("100.01")), ("SELL", Decimal(100), Decimal("99.99"))],
+)
+def test_fill_outside_sealed_limit_is_refused(side: str, limit: Decimal, fill: Decimal) -> None:
+    outcome = _application(
+        terms=_terms(side=side, control_price=limit, limit_price=limit), price=fill
+    )
+    assert outcome.disposition is Disposition.HOLD
+    assert outcome.reason.startswith("FILL_OUTSIDE_LIMIT")
+
+
+def test_fill_at_limit_still_passes() -> None:
+    assert _application(terms=_terms(), price=Decimal(100)).disposition is Disposition.PASS
+
+
+def test_fill_after_authority_expiry_is_refused() -> None:
+    outcome = _application(
+        terms=_terms(policy_expires_at=NOW - timedelta(seconds=1)),
+        price=Decimal(100),
+        event_time=NOW,
+    )
+    assert outcome.reason.startswith("POLICY_EXPIRED")
+
+
+def test_notional_basis_is_binding_but_quantity_estimate_is_not() -> None:
+    held = _application(
+        terms=_terms(quantity_basis="NOTIONAL", approved_notional=Decimal("9999")),
+        price=Decimal(100),
+    )
+    passed = _application(
+        terms=_terms(quantity_basis="QUANTITY", approved_notional=None),
+        price=Decimal(100),
+    )
+    assert held.reason.startswith("APPROVED_NOTIONAL_EXCEEDED")
+    assert passed.disposition is Disposition.PASS
+
+
+def test_closed_session_refuses_execution() -> None:
+    outcome = _application(terms=_terms(session_activity_permitted=False), price=Decimal(100))
+    assert outcome.reason.startswith("SESSION_CLOSED")

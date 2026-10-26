@@ -96,6 +96,10 @@
   </div>
   <p><a href="{{ url_for('section', name='exceptions') }}">Exceptions is the workbench →</a></p>
 </section>
+{% elif active_section == 'cns' %}
+<section class="panel" data-panel="cns"><p class="section-kicker">OPERATE · RAIL</p><h2>Continuous Net Settlement</h2><p>Lifecycle and reconciliation evidence are shown from computed records; absent evidence remains INDETERMINATE.</p></section>
+{% elif active_section == 'xrpl' %}
+<section class="panel" data-panel="xrpl"><p class="section-kicker">OPERATE · PATH</p><h2>Ripple / XRP Ledger</h2><p>Research path only. No credential or submission capability is present in L.C.</p></section>
 {% elif active_section == 'exceptions' %}
 {% set ex = page.exceptions %}
 <section class="panel exceptions-panel" data-panel="exceptions">
@@ -425,6 +429,7 @@
       <h3>{{ row.requirement.requirement_id }} {{ badge(row.badge) }}</h3>
       <dl class="fields">
         <div class="field"><dt>Marked tests</dt><dd>{{ row.requirement.test_node_ids|join('; ') if row.requirement.test_node_ids else 'None recorded' }}</dd></div>
+        <div class="field"><dt>Untested reason</dt><dd>{{ row.requirement.reason if row.requirement.reason else 'Not applicable — named tests supplied' }}</dd></div>
         <div class="field"><dt>Run timestamp</dt><dd>{{ tr.tile.shown.run_timestamp }}</dd></div>
         <div class="field"><dt>Evidence digest</dt><dd>{{ tr.tile.shown.digest }}</dd></div>
       </dl>

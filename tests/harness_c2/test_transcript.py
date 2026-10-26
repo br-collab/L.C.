@@ -1,5 +1,6 @@
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
+import pytest
 from cannae_kernel.actor import ActorKind, ActorRef
 from cannae_kernel.canonical import digest_bytes
 from cannae_kernel.clocks import EventTimes
@@ -124,3 +125,37 @@ def test_transcript_accepts_a_byte_attested_external_artifact() -> None:
     restored = CrossingTranscript.from_bytes(encoded)
     assert restored.to_bytes() == encoded
     assert isinstance(restored.crossings[0].envelope, CrossingArtifactEnvelope)
+
+
+def test_transcript_refuses_duplicate_artifact_identity() -> None:
+    payload = b'{"outcome":"SETTLED"}'
+    envelope = CrossingArtifactEnvelope(
+        artifact_id="rail-response-duplicate",
+        lifecycle_id=SCENARIO.lifecycle_id,
+        artifact_kind="rail_response",
+        payload_digest=digest_bytes(payload),
+    )
+    crossing = record_crossing(
+        scenario=SCENARIO,
+        producer="synthetic_rail",
+        consumer="atreides",
+        lifecycle_id=SCENARIO.lifecycle_id,
+        envelope=envelope,
+        payload_bytes=payload,
+        producer_asserted_digest=str(envelope.payload_digest),
+        times=TIMES,
+        accepted_disposition=Disposition.PASS,
+        accepted_reason="synthetic rail response received",
+    )
+    transcript = CrossingTranscript().append(crossing)
+    with pytest.raises(ValueError, match="DUPLICATE_CROSSING_ARTIFACT"):
+        transcript.append(crossing)
+
+
+def test_transcript_refuses_time_reversal() -> None:
+    later = _crossing()
+    earlier = _crossing().model_copy(
+        update={"times": TIMES.model_copy(update={"event_time": NOW - timedelta(seconds=1)})}
+    )
+    with pytest.raises(ValueError, match="CROSSING_TIME_REVERSED"):
+        CrossingTranscript(crossings=(later,)).append(earlier)

@@ -44,6 +44,7 @@ from cannae_kernel.delivery import DeliveryPattern
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from lc.asset_profile import DEFAULT_ASSET_PROFILES, AssetProfile, AssetProfileRegistry
+from lc.institutional import AssetClass
 
 __all__ = [
     "LISTED_OPTION_ASSET_PROFILES",
@@ -278,6 +279,10 @@ class PositionCapabilityRegistry(_Record):
 
 LISTED_OPTION_PREMIUM = AssetProfile(
     profile_id="equity-option.listed.premium",
+    asset_class=AssetClass.LISTED_OPTION,
+    market="US_LISTED_OPTIONS",
+    settlement_cycle=1,
+    calendar="OCC business day",
     settlement_pattern=DeliveryPattern.PAYMENT_ONLY,
     cash_representation="commercial-bank money through each clearing member's settlement bank",
     custody_path="option positions carried at the central counterparty",
@@ -288,6 +293,10 @@ LISTED_OPTION_PREMIUM = AssetProfile(
 
 LISTED_OPTION_EXERCISE = AssetProfile(
     profile_id="equity-option.listed.exercise",
+    asset_class=AssetClass.LISTED_OPTION,
+    market="US_LISTED_OPTIONS",
+    settlement_cycle=1,
+    calendar="OCC business day",
     settlement_pattern=DeliveryPattern.DVP,
     cash_representation="commercial-bank money for the strike consideration",
     custody_path="underlying securities through the equity settlement system",
@@ -298,6 +307,10 @@ LISTED_OPTION_EXERCISE = AssetProfile(
 
 LISTED_OPTION_EXERCISE_FREE_DELIVERY = AssetProfile(
     profile_id="equity-option.listed.exercise.free-delivery",
+    asset_class=AssetClass.LISTED_OPTION,
+    market="US_LISTED_OPTIONS",
+    settlement_cycle=1,
+    calendar="OCC business day",
     settlement_pattern=DeliveryPattern.FOP,
     cash_representation="not applicable: the strike settles against the first security",
     custody_path="underlying securities through the equity settlement system",
@@ -308,6 +321,10 @@ LISTED_OPTION_EXERCISE_FREE_DELIVERY = AssetProfile(
 
 LISTED_OPTION_EXERCISE_CASH = AssetProfile(
     profile_id="equity-option.listed.exercise.cash",
+    asset_class=AssetClass.LISTED_OPTION,
+    market="US_LISTED_OPTIONS",
+    settlement_cycle=1,
+    calendar="OCC business day",
     settlement_pattern=DeliveryPattern.PAYMENT_ONLY,
     cash_representation="commercial-bank money through each clearing member's settlement bank",
     custody_path="not applicable: no securities move",

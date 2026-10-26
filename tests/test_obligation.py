@@ -20,6 +20,7 @@ from emulators.matching import MatchingOutcome
 from lc.asset_profile import BILATERAL_TREASURY
 from lc.clearing import GrossTrade, clear_gross
 from lc.events import LifecycleState
+from lc.institutional import AssetClass, InstrumentReference, QuantityUnit, TreasuryReference
 from lc.lifecycle import replay
 from lc.obligation import (
     AccountRole,
@@ -61,7 +62,13 @@ def _manifest(transformation_digest: str) -> SourceManifest:
     )
 
 
-def _formed() -> FormedObligation:
+def _formed(
+    *,
+    supplied_cash: Decimal = Decimal("99.50"),
+    approved_side: str = "BUY",
+    firm_participant_id: str = "participant-buyer",
+    instrument_asset_class: AssetClass = AssetClass.US_TREASURY,
+) -> FormedObligation:
     journal, captured, _ = _allocated()
     fact = _fact(MatchingOutcome.MATCHED_AND_AFFIRMED)
     matched = record_match(
@@ -84,7 +91,7 @@ def _formed() -> FormedObligation:
         trade_digest=digest(captured),
         obligation_id=OBLIGATION_ID,
         quantity=captured.quantity,
-        cash=Decimal("998.25"),
+        cash=Decimal("99.50"),
     )
     transformation, clearing = clear_gross(
         lifecycle_id=affirmed.journal.lifecycle_id, trades=(gross_trade,)
@@ -127,6 +134,30 @@ def _formed() -> FormedObligation:
         ),
         source_manifest=_manifest(digest(transformation)),
         asset_profile=BILATERAL_TREASURY,
+        approved_intent_digest=_sha("intent"),
+        approved_side=approved_side,
+        firm_participant_id=firm_participant_id,
+        instrument=(
+            InstrumentReference(
+                cusip="91282CJL6",
+                asset_class=AssetClass.US_TREASURY,
+                quantity_unit=QuantityUnit.FACE,
+                treasury=TreasuryReference(
+                    annual_coupon_rate=Decimal(0),
+                    dated_date=date(2026, 3, 24),
+                    maturity_date=date(2036, 3, 24),
+                    payments_per_year=2,
+                ),
+            )
+            if instrument_asset_class is AssetClass.US_TREASURY
+            else InstrumentReference(
+                cusip="037833100",
+                asset_class=AssetClass.US_EQUITY,
+                quantity_unit=QuantityUnit.SHARES,
+            )
+        ),
+        execution_price=Decimal("99.5"),
+        trade_date=date(2026, 9, 23),
         securities_leg=SecuritiesLeg(
             instrument_id=captured.instrument_id,
             quantity=captured.quantity,
@@ -134,9 +165,9 @@ def _formed() -> FormedObligation:
             receiving_account_id="SEC-RECEIVE",
         ),
         cash_leg=CashLeg(
-            principal=Decimal("995.00"),
-            accrued=Decimal("3.25"),
-            total=Decimal("998.25"),
+            principal=supplied_cash,
+            accrued=Decimal("0"),
+            total=supplied_cash,
             currency="USD",
             value_date=date(2026, 9, 24),
             paying_account_id="CASH-PAY",
@@ -180,11 +211,15 @@ def test_emits_the_frozen_envelope_without_extension_and_with_every_owned_field(
         "obligation_id",
         "lifecycle_id",
         "transformation_digest",
+        "approved_intent_digest",
+        "firm_securities_direction",
         "session",
         "provenance",
         "payload_digest",
     }
     assert formed.envelope.payload_digest == digest(formed.payload)
+    assert formed.envelope.approved_intent_digest == _sha("intent")
+    assert formed.envelope.firm_securities_direction.value == "RECEIVE"
     cash = formed.payload.cash_leg
     assert cash is not None and cash.total == cash.principal + cash.accrued
     assert {reference.kind for reference in formed.payload.source_manifest.references} == {
@@ -229,14 +264,28 @@ def test_obligation_and_candidate_readiness_are_explicit_recorded_states() -> No
 def test_cash_leg_is_required_and_cannot_be_short_or_internally_inconsistent() -> None:
     with pytest.raises(ValueError, match="cash total must equal principal plus accrued"):
         CashLeg(
-            principal=Decimal("995.00"),
-            accrued=Decimal("3.25"),
-            total=Decimal("997.00"),
+            principal=Decimal("9.95"),
+            accrued=Decimal("0"),
+            total=Decimal("9.94"),
             currency="USD",
             value_date=date(2026, 9, 24),
             paying_account_id="CASH-PAY",
             receiving_account_id="CASH-RECEIVE",
         )
+
+
+def test_formation_refuses_a_supplied_cash_total_that_is_wrong_by_one_cent() -> None:
+    with pytest.raises(ValueError, match="CASH_NOT_PRICE_TIMES_QUANTITY"):
+        _formed(supplied_cash=Decimal("99.51"))
+
+
+def test_formation_refuses_asset_and_approved_direction_mismatches() -> None:
+    with pytest.raises(ValueError, match="ASSET_PROFILE_MISMATCH"):
+        _formed(instrument_asset_class=AssetClass.US_EQUITY)
+    with pytest.raises(ValueError, match="PARTY_ROLE_MISMATCH"):
+        _formed(approved_side="SELL")
+    with pytest.raises(ValueError, match="APPROVED_SIDE_INVALID"):
+        _formed(approved_side="TRANSFER")
 
 
 def test_source_manifest_refuses_missing_upstream_evidence() -> None:

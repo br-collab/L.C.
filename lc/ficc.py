@@ -9,7 +9,7 @@ from typing import Literal, Self
 
 from cannae_kernel.canonical import canonical_bytes, digest_bytes
 from cannae_kernel.ids import LifecycleId, ScenarioId
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 __all__ = [
     "FiccEvidenceFact",
@@ -60,6 +60,19 @@ class FiccNovatedObligation(_WireModel):
     settlement_currency: str
     novation_evidence_id: str
 
+    @field_validator("cusip", mode="before")
+    @classmethod
+    def _normalise_cusip(cls, value: object) -> object:
+        return value.strip().upper() if isinstance(value, str) else value
+
+    @field_validator("signed_quantity", "signed_settlement_amount", mode="before")
+    @classmethod
+    def _finite_economics(cls, value: object) -> object:
+        candidate = Decimal(value) if isinstance(value, str) else value
+        if isinstance(candidate, Decimal) and not candidate.is_finite():
+            raise ValueError("NETTING_VALUE_NOT_FINITE")
+        return candidate
+
 
 class FiccNetObligation(_WireModel):
     member_id: str
@@ -70,6 +83,19 @@ class FiccNetObligation(_WireModel):
     settlement_currency: str
     source_obligation_ids: tuple[str, ...]
     source_trade_ids: tuple[str, ...]
+
+    @field_validator("cusip", mode="before")
+    @classmethod
+    def _normalise_cusip(cls, value: object) -> object:
+        return value.strip().upper() if isinstance(value, str) else value
+
+    @field_validator("net_quantity", "net_settlement_amount", mode="before")
+    @classmethod
+    def _finite_economics(cls, value: object) -> object:
+        candidate = Decimal(value) if isinstance(value, str) else value
+        if isinstance(candidate, Decimal) and not candidate.is_finite():
+            raise ValueError("NETTING_VALUE_NOT_FINITE")
+        return candidate
 
 
 class FiccGsdDocument(_WireModel):

@@ -711,6 +711,8 @@ def build_rail(page: PageView) -> dict[str, RailItemView]:
             ),
         ),
         "cash": RailItemView("cash", "Cash & liquidity", source_badge(page.cash_leg.tile)),
+        "cns": RailItemView("cns", "CNS rail", trade_badge),
+        "xrpl": RailItemView("xrpl", "Ripple / XRPL", source_badge(page.cash_leg.tile)),
         "decisions": RailItemView(
             "decisions",
             "Decisions",

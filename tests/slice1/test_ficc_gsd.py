@@ -34,6 +34,8 @@ from lc.ficc import (
     FiccEvidenceStage,
     FiccFactStatus,
     FiccLifecycleDocument,
+    FiccNetObligation,
+    FiccNovatedObligation,
     consume_ficc_gsd_result,
     ficc_lifecycle_publication,
     ficc_lifecycle_publication_bytes,
@@ -147,6 +149,32 @@ def test_receiver_recomputes_the_digest_before_parsing() -> None:
     header_bytes, payload = _real_producer_bytes()
     with pytest.raises(ValueError, match="attested digest"):
         consume_ficc_gsd_result(header_bytes, payload + b" ")
+
+
+def test_netting_normalises_identifiers_and_refuses_nan() -> None:
+    item = FiccNetObligation(
+        member_id="member-a",
+        cusip=" 91282cjl6 ",
+        settlement_date=date(2026, 10, 22),
+        net_quantity=Decimal("65"),
+        net_settlement_amount=Decimal("-64.35"),
+        settlement_currency="USD",
+        source_obligation_ids=("obligation-1",),
+        source_trade_ids=("trade-1",),
+    )
+    assert item.cusip == "91282CJL6"
+    with pytest.raises(ValueError, match="NETTING_VALUE_NOT_FINITE"):
+        FiccNovatedObligation(
+            obligation_id="obligation-1",
+            trade_ids=("trade-1",),
+            member_id="member-a",
+            cusip="91282CJL6",
+            settlement_date=date(2026, 10, 22),
+            signed_quantity=Decimal("NaN"),
+            signed_settlement_amount=Decimal("-64.35"),
+            settlement_currency="USD",
+            novation_evidence_id="novation-1",
+        )
 
 
 def test_five_facts_remain_separate_and_the_method_is_visible() -> None:
