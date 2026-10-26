@@ -138,6 +138,6 @@ def test_cross_domain_job_pins_and_exercises_the_advisory_producer() -> None:
     seam = Path("tests/test_atreides_handoff.py").read_text()
     # INST-1 Amendment 3 (V4): the handoff job pins the Atreides WP2b head, which still
     # carries the advisory producer this seam exercises.
-    assert "c4a2bc0f173898f5c1bd5a7206b7122a4cd32502" in workflow
+    assert "a1c3a1344c585485301842e6471f2f45edb04cb9" in workflow
     assert "publication_bytes" in seam
     assert "parse_publication" in seam

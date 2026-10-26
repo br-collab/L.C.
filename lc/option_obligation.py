@@ -76,6 +76,7 @@ from cannae_kernel.session import SessionContext
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from lc.asset_profile import AssetProfile
+from lc.market_access import AttestedInput, CapacityDocument, read_capacity_document
 from lc.obligation import (
     AccountRole,
     CandidatePathDescriptor,
@@ -207,11 +208,13 @@ def _participants(
     )
 
 
-#: INST-1 Amendment 3: the position account's sealed type, as the payload's seller capacity.
-_CAPACITY_BY_ACCOUNT_TYPE: dict[PositionAccountType, Literal["CUSTOMER", "PAB", "PROPRIETARY"]] = {
-    PositionAccountType.CUSTOMER: "CUSTOMER",
-    PositionAccountType.FIRM: "PROPRIETARY",
-    PositionAccountType.MARKET_MAKER: "PROPRIETARY",
+#: OCC position origins and the books capacities each may hold. A FIRM origin is the clearing
+#: member's own account; CUSTOMER and MARKET_MAKER origins can carry accounts for others, so the
+#: books capacity, not the origin, decides (a non-member market maker can be a PAB account).
+_CAPACITIES_BY_ORIGIN: dict[PositionAccountType, frozenset[str]] = {
+    PositionAccountType.CUSTOMER: frozenset({"CUSTOMER", "PAB"}),
+    PositionAccountType.FIRM: frozenset({"PROPRIETARY"}),
+    PositionAccountType.MARKET_MAKER: frozenset({"PAB", "PROPRIETARY", "CUSTOMER"}),
 }
 
 
@@ -219,13 +222,31 @@ def _seller_capacity(
     account: PositionAccount | None,
     securities: SecuritiesLeg | None,
     direction: FirmSecuritiesDirection,
-) -> Literal["CUSTOMER", "PAB", "PROPRIETARY"] | None:
-    """Set exactly when the firm delivers securities out of a typed position account."""
+    capacity: tuple[CapacityDocument, str] | None,
+) -> tuple[Literal["CUSTOMER", "PAB", "PROPRIETARY"] | None, str | None]:
+    """The attested capacity and its document digest, set exactly when securities are delivered.
+
+    INST-1 Amendment 3 (WP1b item 4): read from the attested account-capacity document, and
+    checked against the OCC position origin, never mapped from the origin alone.
+    """
     if direction is not FirmSecuritiesDirection.DELIVER or securities is None:
-        return None
+        return None, None
     if account is None:
         raise ValueError("ACCOUNT_CAPACITY_ABSENT: a securities delivery needs its account")
-    return _CAPACITY_BY_ACCOUNT_TYPE[account.account_type]
+    if capacity is None:
+        raise ValueError("CAPACITY_DOCUMENT_MISSING: a securities delivery needs attested capacity")
+    document, document_digest = capacity
+    entry = next(
+        (item for item in document.accounts if item.account_id == account.account_id), None
+    )
+    if entry is None:
+        raise ValueError(f"CAPACITY_ACCOUNT_UNKNOWN: {account.account_id} not attested")
+    if entry.capacity not in _CAPACITIES_BY_ORIGIN[account.account_type]:
+        raise ValueError(
+            f"CAPACITY_ORIGIN_MISMATCH: a {account.account_type.value} position cannot be "
+            f"{entry.capacity}"
+        )
+    return entry.capacity, document_digest
 
 
 def _form(  # noqa: PLR0913 - every part of the envelope stays explicit
@@ -244,8 +265,12 @@ def _form(  # noqa: PLR0913 - every part of the envelope stays explicit
     seed: str,
     approved_intent_digest: str,
     firm_securities_direction: FirmSecuritiesDirection,
+    capacity: tuple[CapacityDocument, str] | None = None,
 ) -> FormedOptionObligation:
     pattern = profile.settlement_pattern
+    seller_capacity, capacity_digest = _seller_capacity(
+        account, securities, firm_securities_direction, capacity
+    )
     legs = [
         leg for leg, present in ((LegKind.SECURITIES, securities), (LegKind.CASH, cash)) if present
     ]
@@ -275,7 +300,8 @@ def _form(  # noqa: PLR0913 - every part of the envelope stays explicit
         ),
         expected_finality=tuple(_finality(leg, route) for leg in legs),
         corrections=(),
-        seller_capacity=_seller_capacity(account, securities, firm_securities_direction),
+        seller_capacity=seller_capacity,
+        account_capacity_digest=capacity_digest,
     )
     envelope = SettlementObligationEnvelope(
         obligation_id=_obligation_id(formed_at, seed),
@@ -430,6 +456,7 @@ def form_exercise_obligations(  # noqa: PLR0913 - every boundary input remains e
     route: SettlementRoute,
     session: SessionContext,
     formed_at: datetime,
+    account_capacity: AttestedInput | None,
     strike_multiplier: Decimal | None = None,
 ) -> tuple[FormedOptionObligation, ...]:
     """Every obligation an exercise and its assignment form, holder side then writer side.
@@ -439,6 +466,7 @@ def form_exercise_obligations(  # noqa: PLR0913 - every boundary input remains e
     """
     if session.business_date.value != settlement_date:
         raise ValueError("SETTLEMENT_DATE_CONFLICT: the session is not the settlement date")
+    capacity = read_capacity_document(account_capacity) if account_capacity is not None else None
     exercised = _exercised_by_account(series, exercise)
     if assignment.outcome is not Outcome.DETERMINED:
         raise ValueError(f"the assignment is {assignment.outcome.value}: {assignment.reason}")
@@ -506,6 +534,7 @@ def form_exercise_obligations(  # noqa: PLR0913 - every boundary input remains e
                     session=session,
                     formed_at=formed_at,
                     seed=f"exercise:{assignment.result_digest}:{'holder' if holder else 'writer'}",
+                    capacity=capacity,
                 )
             )
     return tuple(formed)
@@ -528,6 +557,7 @@ def _account_obligations(  # noqa: PLR0913 - every part of the obligation stays 
     session: SessionContext,
     formed_at: datetime,
     seed: str,
+    capacity: tuple[CapacityDocument, str] | None,
 ) -> list[FormedOptionObligation]:
     # Deliverable flows from ``giver`` to ``taker``; the strike flows back.
     giver, taker = (counterparty, member) if receives_deliverable else (member, counterparty)
@@ -586,6 +616,7 @@ def _account_obligations(  # noqa: PLR0913 - every part of the obligation stays 
                 if receives_deliverable
                 else FirmSecuritiesDirection.DELIVER
             ),
+            capacity=capacity,
         )
 
     formed: list[FormedOptionObligation] = []

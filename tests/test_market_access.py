@@ -33,6 +33,7 @@ from lc.market_access import (
     MarketAccessGate,
     SellMark,
     consume_producer_attestation,
+    read_capacity_document,
     record_decision,
     record_limit_change,
 )
@@ -46,17 +47,48 @@ def attested(model: BaseModel) -> AttestedInput:
     return AttestedInput(payload=payload, payload_digest=digest_bytes(payload))
 
 
-def capacity(as_of: datetime = NOW) -> AttestedInput:
+def capacity_document(
+    *accounts: tuple[str, str],
+    firm_participant_id: str = "participant-buyer",
+    as_of: datetime = NOW,
+) -> AttestedInput:
+    """An attested ``atreides.equities_account_capacity/3`` document; SYNTHETIC accounts."""
     return attested(
         CapacityDocument(
-            schema_version="atreides.equities_account_capacity/2",
+            schema_version="atreides.equities_account_capacity/3",
             as_of=as_of,
             maximum_age_seconds=300,
             synthetic=True,
             journal_digest="sha256:" + "1" * 64,
+            firm_participant_id=firm_participant_id,
+            accounts=tuple(
+                CapacityAccount(
+                    account_id=account_id,
+                    capacity=stated,  # type: ignore[arg-type]
+                    buying_power=Decimal(10000),
+                    margin_excess=Decimal(5000),
+                    margin_result_digest="sha256:" + "2" * 64,
+                    positions=(),
+                )
+                for account_id, stated in accounts
+            ),
+        )
+    )
+
+
+def capacity(as_of: datetime = NOW) -> AttestedInput:
+    return attested(
+        CapacityDocument(
+            schema_version="atreides.equities_account_capacity/3",
+            as_of=as_of,
+            maximum_age_seconds=300,
+            synthetic=True,
+            journal_digest="sha256:" + "1" * 64,
+            firm_participant_id="participant-buyer",
             accounts=(
                 CapacityAccount(
                     account_id="A",
+                    capacity="CUSTOMER",
                     buying_power=Decimal(10000),
                     margin_excess=Decimal(5000),
                     margin_result_digest="sha256:" + "2" * 64,
@@ -352,3 +384,21 @@ def test_locate_consumes_and_cannot_be_reused_past_quantity() -> None:
         locates_input=document,
     )
     failed(second, "LOCATE", "LOCATE_INSUFFICIENT")
+
+
+def test_inst1_capacity_reader_returns_the_document_and_names_every_refusal() -> None:
+    """INST-1 Amendment 3 (WP1b items 1 and 4): an unusable capacity document is never read."""
+    good = capacity_document(("A", "PAB"), firm_participant_id="participant-firm")
+    document, document_digest = read_capacity_document(good)
+    assert document.firm_participant_id == "participant-firm"
+    assert document.accounts[0].capacity == "PAB"
+    assert document_digest == good.payload_digest
+    with pytest.raises(ValueError, match="CAPACITY_DOCUMENT_MISSING"):
+        read_capacity_document(None)
+    with pytest.raises(ValueError, match="CAPACITY_DOCUMENT_TAMPERED"):
+        read_capacity_document(good.model_copy(update={"payload": good.payload + b" "}))
+    unreadable = b'{"schema_version":"atreides.equities_account_capacity/2"}'
+    with pytest.raises(ValueError, match="CAPACITY_DOCUMENT_UNREADABLE"):
+        read_capacity_document(
+            AttestedInput(payload=unreadable, payload_digest=digest_bytes(unreadable))
+        )

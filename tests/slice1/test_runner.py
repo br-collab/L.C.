@@ -95,6 +95,7 @@ from lc.lifecycle import (
     split_parent,
     transition,
 )
+from lc.market_access import AttestedInput, CapacityAccount, CapacityDocument
 from lc.obligation import (
     AccountRole,
     CandidatePathDescriptor,
@@ -238,6 +239,31 @@ def _artifact_envelope(
         artifact_kind=artifact_kind,
         payload_digest=digest_bytes(payload_bytes),
     )
+
+
+def _attested_capacity() -> AttestedInput:
+    """Atreides' attested capacity for the slice's accounts; the firm settles as ``buyer``."""
+    document = CapacityDocument(
+        schema_version="atreides.equities_account_capacity/3",
+        as_of=AT,
+        maximum_age_seconds=300,
+        synthetic=True,
+        journal_digest="sha256:" + "4" * 64,
+        firm_participant_id="buyer",
+        accounts=tuple(
+            CapacityAccount(
+                account_id=account_id,
+                capacity="CUSTOMER",
+                buying_power=Decimal(10000),
+                margin_excess=Decimal(5000),
+                margin_result_digest="sha256:" + "5" * 64,
+                positions=(),
+            )
+            for account_id in ("ACCOUNT-W5", "ACCOUNT-A", "ACCOUNT-B")
+        ),
+    )
+    payload = canonical_bytes_of(document)
+    return AttestedInput(payload=payload, payload_digest=digest_bytes(payload))
 
 
 def _run(  # noqa: PLR0915 - the ordered lifecycle remains visible as one experiment
@@ -489,6 +515,7 @@ def _run(  # noqa: PLR0915 - the ordered lifecycle remains visible as one experi
         clearing_event=_event(26),
         obligation_event=_event(27),
         candidate_event=_event(28),
+        account_capacity=_attested_capacity(),
     )
     operation = OperationContext(
         notional=Decimal("99.50"), currency="USD", is_material=False, is_lvps_material=False
