@@ -184,43 +184,6 @@ def apply_execution(  # noqa: PLR0911, PLR0912, PLR0913 - every outcome is expli
         )
     snapshot = replay(register.events)
     order = snapshot.orders[report.order_id]
-    terms = order.terms
-    if terms is not None and not terms.session_activity_permitted:
-        return ExecutionApplication(
-            journal=register,
-            disposition=Disposition.HOLD,
-            reason="SESSION_CLOSED: the named session does not permit execution activity",
-        )
-    if terms is not None and terms.policy_expires_at is not None:
-        if execution.times.event_time > terms.policy_expires_at:
-            return ExecutionApplication(
-                journal=register,
-                disposition=Disposition.HOLD,
-                reason="POLICY_EXPIRED: fill occurred after policy_expires_at",
-            )
-    if terms is not None and terms.limit_price is not None:
-        outside_limit = (terms.side == "BUY" and report.price > terms.limit_price) or (
-            terms.side == "SELL" and report.price < terms.limit_price
-        )
-        if outside_limit:
-            return ExecutionApplication(
-                journal=register,
-                disposition=Disposition.HOLD,
-                reason="FILL_OUTSIDE_LIMIT: venue price violates the sealed limit",
-            )
-    consideration = report.quantity * report.price
-    if (
-        terms is not None
-        and terms.quantity_basis == "NOTIONAL"
-        and terms.approved_notional is not None
-        and order.executed_consideration + consideration > terms.approved_notional
-    ):
-        return ExecutionApplication(
-            journal=register,
-            disposition=Disposition.HOLD,
-            reason="APPROVED_NOTIONAL_EXCEEDED: cumulative consideration exceeds authority",
-        )
-    # Quantity-denominated intent notional is an estimate, not a binding cap (Aureon contract).
     if report.outcome == "OVERFILL":
         return ExecutionApplication(
             journal=register,
@@ -267,6 +230,55 @@ def apply_execution(  # noqa: PLR0911, PLR0912, PLR0913 - every outcome is expli
             disposition=Disposition.HOLD,
             reason="execution refused because market access has not passed",
         )
+    terms = order.terms
+    # INST-1 Amendment 3 (V6): every control below needs the sealed terms. Without them,
+    # or without the authority's expiry, the execution HOLDs instead of skipping checks.
+    if terms is None:
+        return ExecutionApplication(
+            journal=register,
+            disposition=Disposition.HOLD,
+            reason="TERMS_ABSENT: the order carries no sealed terms to control the fill against",
+        )
+    if terms.policy_expires_at is None:
+        return ExecutionApplication(
+            journal=register,
+            disposition=Disposition.HOLD,
+            reason="POLICY_EXPIRY_ABSENT: the sealed authority states no expiry",
+        )
+    if not terms.session_activity_permitted:
+        return ExecutionApplication(
+            journal=register,
+            disposition=Disposition.HOLD,
+            reason="SESSION_CLOSED: the named session does not permit execution activity",
+        )
+    if execution.times.event_time > terms.policy_expires_at:
+        return ExecutionApplication(
+            journal=register,
+            disposition=Disposition.HOLD,
+            reason="POLICY_EXPIRED: fill occurred after policy_expires_at",
+        )
+    if terms.limit_price is not None:
+        outside_limit = (terms.side == "BUY" and report.price > terms.limit_price) or (
+            terms.side == "SELL" and report.price < terms.limit_price
+        )
+        if outside_limit:
+            return ExecutionApplication(
+                journal=register,
+                disposition=Disposition.HOLD,
+                reason="FILL_OUTSIDE_LIMIT: venue price violates the sealed limit",
+            )
+    consideration = report.quantity * report.price
+    if (
+        terms.quantity_basis == "NOTIONAL"
+        and terms.approved_notional is not None
+        and order.executed_consideration + consideration > terms.approved_notional
+    ):
+        return ExecutionApplication(
+            journal=register,
+            disposition=Disposition.HOLD,
+            reason="APPROVED_NOTIONAL_EXCEEDED: cumulative consideration exceeds authority",
+        )
+    # Quantity-denominated intent notional is an estimate, not a binding cap (Aureon contract).
     remaining = order.quantity - order.executed_quantity
     if report.quantity > remaining:
         return ExecutionApplication(

@@ -17,6 +17,7 @@ from test_option_obligation import (
     exercise_obligations,
     legs,
     party,
+    settling,
 )
 
 from lc.option_clearing import admit_novation
@@ -50,7 +51,7 @@ def test_option_premium_conserves_money_for_200_generated_examples() -> None:
                     central_counterparty=CCP,
                     settlement_date=SETTLES,
                     route=ROUTE,
-                    session=event.session,
+                    session=settling(event.session),
                     formed_at=FORMED_AT,
                 )
             )

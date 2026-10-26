@@ -7,6 +7,7 @@ from calendar import monthrange
 from datetime import date, timedelta
 from decimal import ROUND_HALF_EVEN, Decimal
 from enum import StrEnum
+from itertools import pairwise
 from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -20,7 +21,9 @@ __all__ = [
     "TickBucket",
     "TreasuryReference",
     "accrued_interest_actual_actual_icma",
+    "coupon_schedule",
     "derive_cash",
+    "derive_cash_from_fills",
     "minimum_price_increment",
     "validate_settlement_date",
 ]
@@ -64,6 +67,9 @@ class TreasuryReference(_Record):
     dated_date: date
     maturity_date: date
     payments_per_year: int = Field(gt=0, le=12)
+    #: The first coupon date when it is not the first scheduled date after the dated date
+    #: (a long first coupon). Absent means a regular or short first coupon.
+    first_coupon_date: date | None = None
 
     @model_validator(mode="after")
     def _dates_are_ordered(self) -> Self:
@@ -145,27 +151,78 @@ def _shift_month(value: date, months: int) -> date:
     return date(year, month, min(value.day, monthrange(year, month)[1]))
 
 
+def _last_day(value: date) -> int:
+    return monthrange(value.year, value.month)[1]
+
+
+def _back_from_maturity(maturity: date, months: int, *, end_of_month: bool) -> date:
+    """A coupon date ``months`` before maturity, keeping maturity's day of month.
+
+    End-of-month rule: when maturity falls on the last day of its month, every coupon
+    falls on the last day of its month (31 Aug, 28 or 29 Feb, 31 Aug ...), so the schedule
+    never drifts to the 28th after passing through February.
+    """
+    shifted = _shift_month(maturity, -months)
+    if end_of_month:
+        return shifted.replace(day=_last_day(shifted))
+    return shifted
+
+
+def coupon_schedule(reference: TreasuryReference) -> tuple[date, ...]:
+    """Quasi-coupon dates from the one on or before the dated date through maturity.
+
+    Generated backward from maturity, as U.S. Treasury notes and bonds pay on the
+    maturity date's day of month (or the last day, under the end-of-month rule).
+    """
+    months = 12 // reference.payments_per_year
+    end_of_month = reference.maturity_date.day == _last_day(reference.maturity_date)
+    dates = [reference.maturity_date]
+    step = 1
+    while dates[-1] > reference.dated_date:
+        dates.append(
+            _back_from_maturity(reference.maturity_date, months * step, end_of_month=end_of_month)
+        )
+        step += 1
+    return tuple(reversed(dates))
+
+
 def accrued_interest_actual_actual_icma(
     *, face: Decimal, settlement_date: date, reference: TreasuryReference
 ) -> Decimal:
-    """Actual/Actual (ICMA): actual days over actual coupon-period days.
+    """Actual/Actual (ICMA): actual days accrued over actual days in the coupon period.
 
-    The stated convention is the order's U.S. Treasury market convention. The
-    cent rounding is declared firm policy because the cited convention does not
-    prescribe this simulator's cash-ledger rounding.
+    INST-1 Amendment 3 (V3). The schedule is built backward from maturity with the
+    end-of-month rule (``coupon_schedule``). Before the first coupon, interest accrues
+    from the dated date, measured against the quasi-coupon period(s) it falls in, so a
+    short or long first coupon is valued correctly. The convention is the order's stated
+    U.S. Treasury market convention; cent rounding is declared firm policy because the
+    convention does not prescribe this simulator's cash-ledger rounding.
     """
     if not reference.dated_date <= settlement_date <= reference.maturity_date:
         raise ValueError("SETTLEMENT_OUTSIDE_TREASURY_TERM")
-    months = 12 // reference.payments_per_year
-    previous = reference.dated_date
-    following = _shift_month(previous, months)
-    while following < settlement_date:
-        previous, following = following, _shift_month(following, months)
-    coupon = face * reference.annual_coupon_rate / reference.payments_per_year
-    accrued = (
-        coupon * Decimal((settlement_date - previous).days) / Decimal((following - previous).days)
+    quasi = coupon_schedule(reference)
+    first_payment = reference.first_coupon_date or next(
+        item for item in quasi if item > reference.dated_date
     )
-    return accrued.quantize(CENT, rounding=ROUND_HALF_EVEN)
+    if first_payment not in quasi or first_payment <= reference.dated_date:
+        raise ValueError("FIRST_COUPON_NOT_ON_SCHEDULE")
+    payments = tuple(item for item in quasi if item >= first_payment)
+    paid = [item for item in payments if item <= settlement_date]
+    coupon = face * reference.annual_coupon_rate / reference.payments_per_year
+    if paid:
+        last = paid[-1]
+        following = next((item for item in quasi if item > last), last)
+        if following == last:
+            return Decimal("0.00")
+        fraction = Decimal((settlement_date - last).days) / Decimal((following - last).days)
+    else:
+        fraction = Decimal(0)
+        for begin, finish in pairwise(quasi):
+            low = max(begin, reference.dated_date)
+            high = min(finish, settlement_date)
+            if high > low:
+                fraction += Decimal((high - low).days) / Decimal((finish - begin).days)
+    return (coupon * fraction).quantize(CENT, rounding=ROUND_HALF_EVEN)
 
 
 def derive_cash(
@@ -191,6 +248,40 @@ def derive_cash(
         )
     else:
         principal = quantity * price
+        accrued = Decimal(0)
+    principal = principal.quantize(CENT, rounding=ROUND_HALF_EVEN)
+    return principal, accrued, (principal + accrued).quantize(CENT, rounding=ROUND_HALF_EVEN)
+
+
+def derive_cash_from_fills(
+    *,
+    quantity: Decimal,
+    consideration: Decimal,
+    settlement_date: date,
+    instrument: InstrumentReference,
+) -> tuple[Decimal, Decimal, Decimal]:
+    """Principal, accrued and total from the order's sealed fills.
+
+    INST-1 Amendment 3 (V1). ``consideration`` is the sum of quantity x price over the
+    sealed fills (``OrderSnapshot.executed_consideration``), so an average price is never
+    rounded first. Treasury prices are per 100 of par, so principal is consideration / 100.
+    """
+    if (
+        not quantity.is_finite()
+        or not consideration.is_finite()
+        or quantity <= 0
+        or consideration <= 0
+    ):
+        raise ValueError("NON_FINITE_OR_NON_POSITIVE_ECONOMICS")
+    if instrument.asset_class is AssetClass.US_TREASURY:
+        if instrument.treasury is None:
+            raise ValueError("TREASURY_REFERENCE_REQUIRED")
+        principal = consideration / Decimal(100)
+        accrued = accrued_interest_actual_actual_icma(
+            face=quantity, settlement_date=settlement_date, reference=instrument.treasury
+        )
+    else:
+        principal = consideration
         accrued = Decimal(0)
     principal = principal.quantize(CENT, rounding=ROUND_HALF_EVEN)
     return principal, accrued, (principal + accrued).quantize(CENT, rounding=ROUND_HALF_EVEN)

@@ -32,6 +32,7 @@ __all__ = [
     "accept_intent",
     "activate_parent",
     "authorize_strategy",
+    "read_approved_intent",
     "record_not_reached",
     "replay",
     "split_parent",
@@ -145,6 +146,19 @@ def _read_aureon_payload(
         ),
         allocation_accounts=wire.allocation_accounts,
     )
+
+
+def read_approved_intent(
+    envelope: ApprovedIntentEnvelope, payload_bytes: bytes
+) -> ApprovedIntentPayload:
+    """The sealed intent's payload, read only from bytes whose digest the envelope names.
+
+    INST-1 Amendment 3 (V2): a later stage reads the approved side and instrument from here,
+    never from a caller's string.
+    """
+    if digest_bytes(payload_bytes) != envelope.payload_digest:
+        raise ValueError("APPROVED_INTENT_UNBOUND: the bytes are not the sealed intent payload")
+    return _read_aureon_payload(envelope, payload_bytes)
 
 
 class EventInput(_Record):

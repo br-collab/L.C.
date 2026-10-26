@@ -14,12 +14,12 @@ from cannae_kernel.canonical import digest
 from cannae_kernel.disposition import Disposition
 from cannae_kernel.ids import AllocationId, EventId, OrderId
 from test_lifecycle import NOW, _actor, _event, _id, _payload
-from test_policy_and_venue import _child_register, _venue_order
+from test_policy_and_venue import _child_register, _venue_order, default_terms
 
 from emulators.matching import MatchingEmulator, MatchingOutcome, MatchRequest
 from emulators.venue import VenueEmulator, VenueOutcome
-from lc.events import LifecycleState
-from lc.lifecycle import EventInput, LifecycleRegister, replay
+from lc.events import LifecycleState, OrderTerms, OrderType
+from lc.lifecycle import ApprovedIntentPayload, EventInput, LifecycleRegister, replay
 from lc.policy import ExecutionReport, apply_execution
 from lc.trade import (
     AllocationPlan,
@@ -38,12 +38,19 @@ from lc.trade import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def _executed() -> tuple[LifecycleRegister, ExecutionReport]:
+def _market_terms() -> OrderTerms:
+    """A market order: generated prints at any price are inside its terms."""
+    return default_terms(order_type=OrderType.MARKET, limit_price=None)
+
+
+def _executed(
+    terms: OrderTerms | None = None, intent_payload: ApprovedIntentPayload | None = None
+) -> tuple[LifecycleRegister, ExecutionReport]:
     venue = VenueEmulator(seed=8).execute(_venue_order(), outcome=VenueOutcome.FILL, event_time=NOW)
     assert isinstance(venue.event, Recorded) and isinstance(venue.report, Recorded)
     report = ExecutionReport.model_validate(venue.report.value.model_dump(mode="python"))
     applied = apply_execution(
-        _child_register(),
+        _child_register(terms=terms, intent_payload=intent_payload),
         venue.event.value,
         report,
         actor=_actor(),
@@ -57,13 +64,16 @@ def _executed() -> tuple[LifecycleRegister, ExecutionReport]:
     return applied.journal, report
 
 
-def _allocated() -> tuple[LifecycleRegister, CaptureRecord, AllocationRecord]:
-    journal, report = _executed()
-    journal, captured = capture(journal, report, _payload(), actor=_actor(), event=_event(22))
+def _allocated(
+    terms: OrderTerms | None = None, intent_payload: ApprovedIntentPayload | None = None
+) -> tuple[LifecycleRegister, CaptureRecord, AllocationRecord]:
+    payload = intent_payload or _payload()
+    journal, report = _executed(terms, intent_payload)
+    journal, captured = capture(journal, report, payload, actor=_actor(), event=_event(22))
     journal, allocation = allocate(
         journal,
         captured,
-        _payload(),
+        payload,
         allocation_id=AllocationId(_id("alc_", 23)),
         actor=_actor(),
         event=_event(23),
@@ -152,7 +162,7 @@ def test_generated_multifill_capture_and_allocation_conserve_share_and_cent() ->
                 }
             ),
         )
-        journal = _child_register()
+        journal = _child_register(terms=_market_terms())
         for index, report in enumerate(reports):
             execution = base.event.value.model_copy(update={"payload_digest": digest(report)})
             applied = apply_execution(
@@ -209,7 +219,7 @@ def test_grok_multifill_case_books_exact_money() -> None:
             outcome="FILL",
         ),
     )
-    journal = _child_register()
+    journal = _child_register(terms=_market_terms())
     base = VenueEmulator(seed=8).execute(_venue_order(), outcome=VenueOutcome.FILL, event_time=NOW)
     assert isinstance(base.event, Recorded)
     for index, report in enumerate(reports):

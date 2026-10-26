@@ -47,7 +47,8 @@ OCC's adjustment and must be supplied: it is never inferred.
 WHAT THE CALLER SUPPLIES
 ------------------------
 The strike currency (a series does not state one), the settlement date (L.C.
-holds no business calendar), the settlement session,
+holds no business calendar), the settlement session (whose business date must be that
+settlement date: INST-1 Amendment 3, so Atreides can bind control evidence to it),
 each clearing member's settlement accounts, the central counterparty's, the
 route, and the lifecycle each position belongs to. L.C. mints no lifecycle
 identifier. It does derive each obligation identifier, deterministically, from
@@ -60,7 +61,7 @@ import hashlib
 from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
-from typing import Final, Self
+from typing import Final, Literal, Self
 
 from cannae_kernel.canonical import digest, digest_bytes
 from cannae_kernel.envelopes import (
@@ -105,6 +106,7 @@ from lc.options import (
     OptionRight,
     OptionSeries,
     PositionAccount,
+    PositionAccountType,
     SharesComponent,
 )
 
@@ -205,6 +207,27 @@ def _participants(
     )
 
 
+#: INST-1 Amendment 3: the position account's sealed type, as the payload's seller capacity.
+_CAPACITY_BY_ACCOUNT_TYPE: dict[PositionAccountType, Literal["CUSTOMER", "PAB", "PROPRIETARY"]] = {
+    PositionAccountType.CUSTOMER: "CUSTOMER",
+    PositionAccountType.FIRM: "PROPRIETARY",
+    PositionAccountType.MARKET_MAKER: "PROPRIETARY",
+}
+
+
+def _seller_capacity(
+    account: PositionAccount | None,
+    securities: SecuritiesLeg | None,
+    direction: FirmSecuritiesDirection,
+) -> Literal["CUSTOMER", "PAB", "PROPRIETARY"] | None:
+    """Set exactly when the firm delivers securities out of a typed position account."""
+    if direction is not FirmSecuritiesDirection.DELIVER or securities is None:
+        return None
+    if account is None:
+        raise ValueError("ACCOUNT_CAPACITY_ABSENT: a securities delivery needs its account")
+    return _CAPACITY_BY_ACCOUNT_TYPE[account.account_type]
+
+
 def _form(  # noqa: PLR0913 - every part of the envelope stays explicit
     *,
     purpose: ObligationPurpose,
@@ -252,6 +275,7 @@ def _form(  # noqa: PLR0913 - every part of the envelope stays explicit
         ),
         expected_finality=tuple(_finality(leg, route) for leg in legs),
         corrections=(),
+        seller_capacity=_seller_capacity(account, securities, firm_securities_direction),
     )
     envelope = SettlementObligationEnvelope(
         obligation_id=_obligation_id(formed_at, seed),
@@ -293,6 +317,8 @@ def form_premium_obligation(  # noqa: PLR0913 - every boundary input remains exp
     ``side`` says which party the admitted event attests. ``payload_bytes`` are the
     novation bytes L.C. admitted, re-checked against the event here.
     """
+    if session.business_date.value != settlement_date:
+        raise ValueError("SETTLEMENT_DATE_CONFLICT: the session is not the settlement date")
     event, trade = novation.event, novation.trade
     if digest_bytes(payload_bytes) != event.payload_digest:
         raise ValueError("the novation bytes are not the bytes the event attests")
@@ -411,6 +437,8 @@ def form_exercise_obligations(  # noqa: PLR0913 - every boundary input remains e
     ``parties`` holds each clearing member's settlement accounts, keyed by participant
     identifier. ``lifecycles`` names the lifecycle each position account belongs to.
     """
+    if session.business_date.value != settlement_date:
+        raise ValueError("SETTLEMENT_DATE_CONFLICT: the session is not the settlement date")
     exercised = _exercised_by_account(series, exercise)
     if assignment.outcome is not Outcome.DETERMINED:
         raise ValueError(f"the assignment is {assignment.outcome.value}: {assignment.reason}")
