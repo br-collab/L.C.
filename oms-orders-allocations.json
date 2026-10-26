@@ -22,8 +22,7 @@
         "approved_notional": null,
         "policy_expires_at": null,
         "minimum_price_increment": "0.01",
-        "session_activity_permitted": true,
-        "account_capacity": null
+        "session_activity_permitted": true
       },
       "states": [
         "PARENT_ACTIVE",
