@@ -16,7 +16,13 @@
         "limit_price": "99.5",
         "stop_price": null,
         "fractional_enabled": false,
-        "allocation_plan_digest": null
+        "allocation_plan_digest": null,
+        "approved_intent_digest": null,
+        "quantity_basis": "QUANTITY",
+        "approved_notional": null,
+        "policy_expires_at": null,
+        "minimum_price_increment": "0.01",
+        "session_activity_permitted": true
       },
       "states": [
         "PARENT_ACTIVE",
@@ -70,7 +76,7 @@
         }
       ],
       "executed_quantity": "100",
-      "executed_consideration": "9950",
+      "executed_consideration": "99.50",
       "average_price": "99.5",
       "average_price_decimal_places": 6,
       "average_price_rounding": "ROUND_HALF_EVEN",
