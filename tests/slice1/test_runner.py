@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Literal
 
@@ -122,8 +124,8 @@ from lc.trade import (
     record_match,
 )
 
-AUREON_COMMIT = "b22ed26050021468b5cd9a638636a2828c2afd54"
-ATREIDES_COMMIT = "123ce5a33a37f60cc40a7a436c4a7f993334331e"
+AUREON_COMMIT = "0dbe19976aab4dd53adae281a8d45922c2e38fb7"
+ATREIDES_COMMIT = "7f15ff8985b56b1f7156e7aec0323fca3539fe01"
 AT = datetime(2026, 9, 29, 15, 0, tzinfo=UTC)
 
 
@@ -878,3 +880,15 @@ def test_lineage_escalation_four_cases_from_transcript() -> None:
             ),
         )
     assert refused.value.gaps and "LIFECYCLE_MISMATCH" in refused.value.gaps[0]
+
+
+def test_the_scenario_records_the_commits_ci_actually_checks_out() -> None:
+    """The scenario's pinned commits are evidence; they must name what the slice job runs.
+
+    Before this, the record named Atreides 123ce5a and Aureon b22ed26 while CI checked out
+    other commits, so a replayed transcript claimed provenance it did not have.
+    """
+    workflow = (Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml").read_text()
+    job = workflow[workflow.index("  slice1:") : workflow.index("  harness:")]
+    refs = set(re.findall(r"ref: ([0-9a-f]{40})", job))
+    assert refs == {AUREON_COMMIT, ATREIDES_COMMIT}

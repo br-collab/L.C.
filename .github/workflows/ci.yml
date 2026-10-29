@@ -148,8 +148,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: br-collab/aureon
-          # Ancestry verified against aureon/main after PR #56 deployed.
-          ref: 3e90f72a1ffa177045d4e4f3e7f9770689e037f1
+          # aureon/main after INST-1 WP3 (PR #123), verified an ancestor of main on 29 Oct 2026.
+          ref: 0dbe19976aab4dd53adae281a8d45922c2e38fb7
           path: .handoff/aureon
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
@@ -184,8 +184,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: br-collab/aureon
-          # FIX-7 verified this commit is on aureon/main.
-          ref: b22ed26050021468b5cd9a638636a2828c2afd54
+          # aureon/main after INST-1 WP3 (PR #123), verified an ancestor of main on 29 Oct 2026.
+          ref: 0dbe19976aab4dd53adae281a8d45922c2e38fb7
           path: .slice1/aureon
 
       - name: Check out ancestry-verified Atreides
