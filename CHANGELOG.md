@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.3 - 7 Nov 2026
+
+Resolve pinned sibling packages in a required strict typing job.
+
 ## 0.2.2 - 7 Nov 2026
 
 Allow builders to enable check-gated auto-merge while preserving Bill's sole release authority.
