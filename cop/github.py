@@ -130,9 +130,7 @@ def _parse(adapter: TypeAdapter[M], data: object, what: str) -> M:
 
 
 def _parse_run_list(data: object) -> list[WorkflowRun]:
-    runs: _WorkflowRunList = _parse(
-        TypeAdapter(_WorkflowRunList), data, "workflow run list"
-    )
+    runs: _WorkflowRunList = _parse(TypeAdapter(_WorkflowRunList), data, "workflow run list")
     if runs.total_count > len(runs.workflow_runs):
         # A partial list could hide a failing run; refuse rather than show part of it.
         raise SourceMalformedError(
@@ -185,9 +183,7 @@ class HttpxGitHubClient:
 
     def scheduled_runs(self, repo: str) -> list[WorkflowRun]:
         data = self._get(runs_url(repo), {"event": "schedule", "per_page": _PER_PAGE})
-        runs: _WorkflowRunList = _parse(
-            TypeAdapter(_WorkflowRunList), data, "workflow run list"
-        )
+        runs: _WorkflowRunList = _parse(TypeAdapter(_WorkflowRunList), data, "workflow run list")
         # Runs arrive newest first and only the newest run per workflow is shown, so the
         # first page is read. Limit: a scheduled workflow whose newest run is not among the
         # newest 100 scheduled runs of the repository does not appear.
