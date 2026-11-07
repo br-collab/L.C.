@@ -14,6 +14,11 @@ from enum import StrEnum
 from typing import Literal, Self, TypeVar
 
 from cannae_kernel.absence import require_recorded
+from cannae_kernel.account import (
+    AccountStatus,
+    AccountStatusDocument,
+    AttestedAccountStatusDocument,
+)
 from cannae_kernel.actor import ActorRef
 from cannae_kernel.canonical import digest, digest_bytes
 from cannae_kernel.disposition import Disposition
@@ -237,13 +242,14 @@ class MarketAccessGate:
         self._locate_used: dict[str, Decimal] = {}
         self.decisions: list[MarketAccessDecision] = []
 
-    def evaluate(  # noqa: PLR0912, PLR0915 - controls remain explicit evidence
+    def evaluate(  # noqa: PLR0912, PLR0913, PLR0915 - controls remain explicit evidence
         self,
         order: ChildRelease,
         *,
         limits: LimitsManifest,
         capacity_input: AttestedInput | None,
         locates_input: AttestedInput | None,
+        account_status_input: bytes | None = None,
         halts: tuple[FirmHalt, ...] = (),
     ) -> MarketAccessDecision:
         terms = order.order_event.payload.terms
@@ -275,9 +281,51 @@ class MarketAccessGate:
         capacity, capacity_status = _parse_attested(capacity_input, CapacityDocument)
         locates, locates_status = _parse_attested(locates_input, LocateDocument)
         checks: list[CheckResult] = []
+        now = order.submitted_at
 
         def check(code: str, passed: bool, reason: str) -> None:
             checks.append(CheckResult(code=code, passed=passed, reason=reason))
+
+        status_document: AccountStatusDocument | None = None
+        status_reason = "ACCOUNT_STATUS_DOCUMENT_MISSING"
+        if account_status_input is not None:
+            try:
+                wrapper = AttestedAccountStatusDocument.model_validate_json(
+                    account_status_input, strict=True
+                )
+                payload = wrapper.payload.encode()
+                if digest_bytes(payload) != wrapper.payload_digest:
+                    status_reason = "ACCOUNT_STATUS_DOCUMENT_TAMPERED"
+                else:
+                    status_document = AccountStatusDocument.model_validate_json(
+                        payload, strict=True
+                    )
+                    if now - status_document.as_of > timedelta(
+                        seconds=status_document.maximum_age_seconds
+                    ):
+                        status_reason = "ACCOUNT_STATUS_DOCUMENT_STALE"
+                        status_document = None
+            except ValidationError:
+                status_reason = "ACCOUNT_STATUS_DOCUMENT_UNREADABLE"
+        account_status = (
+            next(
+                (
+                    item.status
+                    for item in status_document.accounts
+                    if item.account_id == terms.account_id
+                ),
+                None,
+            )
+            if status_document
+            else None
+        )
+        if status_document is not None and account_status is None:
+            status_reason = "ACCOUNT_STATUS_UNKNOWN"
+        elif account_status is not None and account_status is not AccountStatus.ACTIVE:
+            status_reason = f"ACCOUNT_NOT_ACTIVE:{account_status.value}"
+        elif account_status is AccountStatus.ACTIVE:
+            status_reason = "OK"
+        check("ACCOUNT_STATUS", account_status is AccountStatus.ACTIVE, status_reason)
 
         check(
             "OPEN_ORDER_TERMS",
@@ -289,7 +337,6 @@ class MarketAccessGate:
             ),
         )
 
-        now = order.submitted_at
         capacity_fresh = capacity is not None and now - capacity.as_of <= timedelta(
             seconds=capacity.maximum_age_seconds
         )
@@ -331,8 +378,8 @@ class MarketAccessGate:
         check("TRADING_HALT", terms.issue not in limits.halted_issues, "TRADING_HALT")
         check(
             "ACCOUNT_RESTRICTION",
-            terms.account_id not in limits.restricted_accounts,
-            "ACCOUNT_RESTRICTED",
+            account_status is AccountStatus.ACTIVE,
+            status_reason,
         )
         active_halt = next(
             (

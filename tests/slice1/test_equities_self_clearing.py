@@ -11,7 +11,14 @@ from pathlib import Path
 
 import pytest
 from cannae_kernel.absence import Recorded
+from cannae_kernel.account import (
+    AccountStatus,
+    AccountStatusDocument,
+    AccountStatusEntry,
+    AttestedAccountStatusDocument,
+)
 from cannae_kernel.actor import ActorKind, ActorRef
+from cannae_kernel.canonical import canonical_bytes, digest_bytes
 from cannae_kernel.clocks import EventTimes
 from cannae_kernel.disposition import Disposition
 from cannae_kernel.ids import ActorId, EventId, IntentId, LifecycleId, OrderId
@@ -131,6 +138,26 @@ def _run() -> tuple[dict[str, bytes], bytes]:
         duplicate_window_seconds=30,
     )
     gate = MarketAccessGate()
+    status_payload = canonical_bytes(
+        AccountStatusDocument(
+            as_of=AT,
+            maximum_age_seconds=300,
+            accounts=(
+                AccountStatusEntry(
+                    account_id="CUSTOMER-1",
+                    status=AccountStatus.ACTIVE,
+                    last_event_id="SYN-EQ1-ACCOUNT-ACTIVE",
+                ),
+            ),
+        )
+    )
+    status_document = (
+        AttestedAccountStatusDocument(
+            payload_digest=digest_bytes(status_payload), payload=status_payload.decode()
+        )
+        .model_dump_json()
+        .encode()
+    )
     orders = (
         _order("1"),
         _order("2", quantity=Decimal(2)),
@@ -144,6 +171,7 @@ def _run() -> tuple[dict[str, bytes], bytes]:
             limits=limits,
             capacity_input=capacity,
             locates_input=locates,
+            account_status_input=status_document,
         )
         for order in orders
     )
