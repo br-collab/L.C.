@@ -168,6 +168,7 @@ def replace_order(  # noqa: PLR0913 - every control input remains explicit evide
     limits: LimitsManifest,
     capacity_input: AttestedInput | None,
     locates_input: AttestedInput | None,
+    account_status_input: bytes | None,
     reference_price: Decimal,
     processing_time: datetime,
     halts: tuple[FirmHalt, ...] = (),
@@ -198,6 +199,7 @@ def replace_order(  # noqa: PLR0913 - every control input remains explicit evide
         limits=limits,
         capacity_input=capacity_input,
         locates_input=locates_input,
+        account_status_input=account_status_input,
         halts=halts,
     )
     disposition = (
