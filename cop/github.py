@@ -78,8 +78,8 @@ class PullDetail(_Parsed):
     mergeable_state: str | None = None
 
 
-_TAGS = TypeAdapter(list[Tag])
-_PULLS = TypeAdapter(list[Pull])
+_TAGS: TypeAdapter[list[Tag]] = TypeAdapter(list[Tag])
+_PULLS: TypeAdapter[list[Pull]] = TypeAdapter(list[Pull])
 
 
 def repo_api_url(repo: str) -> str:
@@ -130,7 +130,7 @@ def _parse(adapter: TypeAdapter[M], data: object, what: str) -> M:
 
 
 def _parse_run_list(data: object) -> list[WorkflowRun]:
-    runs = _parse(TypeAdapter(_WorkflowRunList), data, "workflow run list")
+    runs: _WorkflowRunList = _parse(TypeAdapter(_WorkflowRunList), data, "workflow run list")
     if runs.total_count > len(runs.workflow_runs):
         # A partial list could hide a failing run; refuse rather than show part of it.
         raise SourceMalformedError(
@@ -171,7 +171,7 @@ class HttpxGitHubClient:
 
     def open_pulls(self, repo: str) -> list[Pull]:
         data = self._get(pulls_url(repo), {"state": "open", "per_page": _PER_PAGE})
-        pulls = _parse(_PULLS, data, "pull request list")
+        pulls: list[Pull] = _parse(_PULLS, data, "pull request list")
         if len(pulls) >= _PER_PAGE:
             raise SourceMalformedError(
                 f"More than {_PER_PAGE - 1} open pull requests; list truncated"
@@ -183,7 +183,7 @@ class HttpxGitHubClient:
 
     def scheduled_runs(self, repo: str) -> list[WorkflowRun]:
         data = self._get(runs_url(repo), {"event": "schedule", "per_page": _PER_PAGE})
-        runs = _parse(TypeAdapter(_WorkflowRunList), data, "workflow run list")
+        runs: _WorkflowRunList = _parse(TypeAdapter(_WorkflowRunList), data, "workflow run list")
         # Runs arrive newest first and only the newest run per workflow is shown, so the
         # first page is read. Limit: a scheduled workflow whose newest run is not among the
         # newest 100 scheduled runs of the repository does not appear.
