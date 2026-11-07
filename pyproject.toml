@@ -1,6 +1,6 @@
 [project]
 name = "legiones-cannenses"
-version = "0.1.0"
+version = "0.2.0"
 description = "Legiones Cannenses (L.C.) — the synthetic middle layer of Project Cannae Legion"
 authors = [{name = "Guillermo Ravelo"}]
 readme = "README.md"
@@ -14,7 +14,7 @@ classifiers = [
 
 dependencies = [
     "pydantic>=2.6,<3.0",
-    "cannae-kernel @ git+https://github.com/br-collab/cannae-kernel.git@v2.0.0",
+    "cannae-kernel @ git+https://github.com/br-collab/cannae-kernel.git@onb1/kernel",
 ]
 
 [project.optional-dependencies]
