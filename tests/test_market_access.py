@@ -113,14 +113,21 @@ def locates(*records: Locate) -> AttestedInput:
     )
 
 
-def account_status(status: AccountStatus = AccountStatus.ACTIVE, *, as_of: datetime = NOW) -> bytes:
+def account_status(
+    status: AccountStatus = AccountStatus.ACTIVE,
+    *,
+    as_of: datetime = NOW,
+    account_id: str = "A",
+) -> bytes:
     payload = canonical_bytes(
         AccountStatusDocument(
             as_of=as_of,
             maximum_age_seconds=300,
             accounts=(
                 AccountStatusEntry(
-                    account_id="A", status=status, last_event_id="SYN-ACCOUNT-EVENT-001"
+                    account_id=account_id,
+                    status=status,
+                    last_event_id="SYN-ACCOUNT-EVENT-001",
                 ),
             ),
         )
@@ -294,6 +301,39 @@ def test_stale_account_status_is_refused() -> None:
         account_status_input=account_status(as_of=NOW - timedelta(hours=1)),
     )
     failed(decision, "ACCOUNT_STATUS", "ACCOUNT_STATUS_DOCUMENT_STALE")
+
+
+@pytest.mark.parametrize(
+    ("status_input", "reason"),
+    [
+        (None, "ACCOUNT_STATUS_DOCUMENT_MISSING"),
+        (b"{}", "ACCOUNT_STATUS_DOCUMENT_UNREADABLE"),
+        (account_status(account_id="B"), "ACCOUNT_STATUS_UNKNOWN"),
+    ],
+)
+def test_unusable_account_status_is_refused(status_input: bytes | None, reason: str) -> None:
+    decision = MarketAccessGate().evaluate(
+        order(),
+        limits=limits(),
+        capacity_input=capacity(),
+        locates_input=locates(),
+        account_status_input=status_input,
+    )
+    failed(decision, "ACCOUNT_STATUS", reason)
+
+
+def test_tampered_account_status_is_refused() -> None:
+    wrapper = json.loads(account_status())
+    wrapper["payload_digest"] = "sha256:" + "0" * 64
+    raw = json.dumps(wrapper).encode()
+    decision = MarketAccessGate().evaluate(
+        order(),
+        limits=limits(),
+        capacity_input=capacity(),
+        locates_input=locates(),
+        account_status_input=raw,
+    )
+    failed(decision, "ACCOUNT_STATUS", "ACCOUNT_STATUS_DOCUMENT_TAMPERED")
 
 
 def test_producer_attestation_parser_refuses_type_and_tamper() -> None:
