@@ -125,9 +125,13 @@ def account_status(status: AccountStatus = AccountStatus.ACTIVE, *, as_of: datet
             ),
         )
     )
-    return AttestedAccountStatusDocument(
-        payload_digest=digest_bytes(payload), payload=payload.decode()
-    ).model_dump_json().encode()
+    return (
+        AttestedAccountStatusDocument(
+            payload_digest=digest_bytes(payload), payload=payload.decode()
+        )
+        .model_dump_json()
+        .encode()
+    )
 
 
 def locate(**changes: object) -> Locate:
@@ -272,7 +276,10 @@ def test_pass_duplicate_and_limit_change_record() -> None:
 )
 def test_non_active_account_is_refused(status: AccountStatus) -> None:
     decision = MarketAccessGate().evaluate(
-        order(), limits=limits(), capacity_input=capacity(), locates_input=locates(),
+        order(),
+        limits=limits(),
+        capacity_input=capacity(),
+        locates_input=locates(),
         account_status_input=account_status(status),
     )
     failed(decision, "ACCOUNT_STATUS", f"ACCOUNT_NOT_ACTIVE:{status.value}")
@@ -280,7 +287,10 @@ def test_non_active_account_is_refused(status: AccountStatus) -> None:
 
 def test_stale_account_status_is_refused() -> None:
     decision = MarketAccessGate().evaluate(
-        order(), limits=limits(), capacity_input=capacity(), locates_input=locates(),
+        order(),
+        limits=limits(),
+        capacity_input=capacity(),
+        locates_input=locates(),
         account_status_input=account_status(as_of=NOW - timedelta(hours=1)),
     )
     failed(decision, "ACCOUNT_STATUS", "ACCOUNT_STATUS_DOCUMENT_STALE")
