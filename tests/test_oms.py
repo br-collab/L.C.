@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from random import Random
@@ -9,10 +10,11 @@ from typing import Any
 
 import pytest
 from cannae_kernel.absence import Recorded
+from cannae_kernel.account import AccountStatus
 from cannae_kernel.canonical import digest
 from cannae_kernel.ids import AllocationId, EventId, IntentId, LifecycleId, OrderId
 from test_lifecycle import NOW, _actor, _event, _id, _payload
-from test_market_access import capacity, limits, locates
+from test_market_access import account_status, capacity, limits, locates
 from test_policy_and_venue import _child_register, _evidence, _policy, _venue_order
 
 from emulators.venue import VenueEmulator, VenueOutcome
@@ -86,6 +88,12 @@ def _register(
         prior_event_digest=None,
     )
     return LifecycleRegister(lifecycle_id=event.lifecycle_id).append(event)
+
+
+def _tampered_account_status() -> bytes:
+    wrapper = json.loads(account_status().decode())
+    wrapper["payload_digest"] = "sha256:" + "0" * 64
+    return json.dumps(wrapper).encode()
 
 
 def _append_order(
@@ -239,6 +247,7 @@ def test_open_order_notional_is_replayed_and_changes_after_cancel() -> None:
         limits=limits(),
         capacity_input=capacity(),
         locates_input=locates(),
+        account_status_input=account_status(AccountStatus.ACTIVE),
     )
     assert next(check for check in passed.checks if check.code == "ACCOUNT_CREDIT").passed
 
@@ -822,6 +831,7 @@ def test_replace_reruns_strategy_and_market_access_on_new_terms() -> None:
         limits=limits(),
         capacity_input=capacity(),
         locates_input=locates(),
+        account_status_input=account_status(AccountStatus.ACTIVE),
         reference_price=Decimal(100),
         processing_time=NOW,
     )
@@ -830,3 +840,69 @@ def test_replace_reruns_strategy_and_market_access_on_new_terms() -> None:
     assert replay(outcome.journal.events).orders[OrderId(_id("ord_", 80))].state is (
         LifecycleState.MARKET_ACCESS_REFUSED
     )
+
+
+@pytest.mark.parametrize(
+    ("status_document", "reason"),
+    [
+        (None, "ACCOUNT_STATUS_DOCUMENT_MISSING"),
+        (account_status(AccountStatus.APPLIED), "ACCOUNT_NOT_ACTIVE:APPLIED"),
+        (account_status(AccountStatus.APPROVED), "ACCOUNT_NOT_ACTIVE:APPROVED"),
+        (account_status(AccountStatus.RESTRICTED), "ACCOUNT_NOT_ACTIVE:RESTRICTED"),
+        (account_status(AccountStatus.FUNDED), "ACCOUNT_NOT_ACTIVE:FUNDED"),
+        (account_status(AccountStatus.CLOSED), "ACCOUNT_NOT_ACTIVE:CLOSED"),
+        (
+            account_status(AccountStatus.ACTIVE, as_of=datetime(2026, 1, 1, tzinfo=UTC)),
+            "ACCOUNT_STATUS_DOCUMENT_STALE",
+        ),
+        (_tampered_account_status(), "ACCOUNT_STATUS_DOCUMENT_TAMPERED"),
+    ],
+)
+def test_replace_refuses_missing_and_non_active_account_status(
+    status_document: bytes | None, reason: str
+) -> None:
+    outcome = replace_order(
+        _register(),
+        order_id=OrderId(_id("ord_", 80)),
+        replacement_event=_event(81),
+        decision_event=_event(82),
+        replacement_terms=_terms(),
+        actor=_actor(),
+        strategy_policy=_policy(),
+        market_evidence=_evidence(),
+        market_gate=MarketAccessGate(),
+        limits=limits(),
+        capacity_input=capacity(),
+        locates_input=locates(),
+        account_status_input=status_document,
+        reference_price=Decimal(100),
+        processing_time=NOW,
+    )
+    check = next(
+        item for item in outcome.market_access_decision.checks if item.code == "ACCOUNT_STATUS"
+    )
+    assert not check.passed and check.reason == reason
+
+
+def test_replace_active_account_status_passes_account_gate() -> None:
+    outcome = replace_order(
+        _register(),
+        order_id=OrderId(_id("ord_", 80)),
+        replacement_event=_event(81),
+        decision_event=_event(82),
+        replacement_terms=_terms(),
+        actor=_actor(),
+        strategy_policy=_policy(),
+        market_evidence=_evidence(),
+        market_gate=MarketAccessGate(),
+        limits=limits(),
+        capacity_input=capacity(),
+        locates_input=locates(),
+        account_status_input=account_status(AccountStatus.ACTIVE),
+        reference_price=Decimal(100),
+        processing_time=NOW,
+    )
+    check = next(
+        item for item in outcome.market_access_decision.checks if item.code == "ACCOUNT_STATUS"
+    )
+    assert check.passed

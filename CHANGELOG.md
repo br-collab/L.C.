@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.4 - 7 Nov 2026
+
+Pass attested account status through cancel and replace controls.
+
 ## 0.2.3 - 7 Nov 2026
 
 Resolve pinned sibling packages in a required strict typing job.
