@@ -24,7 +24,6 @@
         "minimum_price_increment": "0.01",
         "session_activity_permitted": true,
         "recommended": false,
-        "account_type": "INSTITUTIONAL",
         "customer_profile_record_id": null
       },
       "states": [
