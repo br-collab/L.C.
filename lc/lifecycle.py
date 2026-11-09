@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
 from typing import Literal, Self
@@ -17,6 +18,10 @@ from cannae_kernel.ids import ActorId, EventId, IntentId, LifecycleId, OrderId
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from lc.events import LifecycleState, OrderEvent, OrderEventPayload, OrderTerms, seal_order_event
+from lc.recommendation_profile import (
+    RecommendationProfileResolver,
+    enforce_recommendation_profile,
+)
 
 __all__ = [
     "ApprovedIntentPayload",
@@ -376,7 +381,12 @@ def activate_parent(outcome: IntentOutcome, *, actor: ActorRef, event: EventInpu
 
 
 def split_parent(
-    outcome: IntentOutcome, *, actor: ActorRef, children: tuple[ChildOrder, ...]
+    outcome: IntentOutcome,
+    *,
+    actor: ActorRef,
+    children: tuple[ChildOrder, ...],
+    recommendation_profile_resolver: RecommendationProfileResolver | None = None,
+    evaluated_at: datetime | None = None,
 ) -> IntentOutcome:
     """Record a conserved parent-to-child split, or refuse before appending anything."""
     if outcome.refusal is not None:
@@ -388,6 +398,13 @@ def split_parent(
         raise ValueError("child quantity must equal parent quantity")
     if len({child.order_id for child in children}) != len(children):
         raise ValueError("child order identifiers must be unique")
+    for child in children:
+        if child.terms is not None:
+            enforce_recommendation_profile(
+                child.terms,
+                resolver=recommendation_profile_resolver,
+                evaluated_at=evaluated_at,
+            )
     register = outcome.journal
     for child in children:
         register = _append(

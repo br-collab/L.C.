@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.5 - 9 Nov 2026
+
+Gate recommended synthetic retail orders on current complete customer profile evidence.
+
 ## 0.2.4 - 7 Nov 2026
 
 Pass attested account status through cancel and replace controls.
