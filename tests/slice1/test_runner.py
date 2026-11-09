@@ -338,6 +338,7 @@ def _run(  # noqa: PLR0915 - the ordered lifecycle remains visible as one experi
                     limit_price=Decimal("99.5"),
                     approved_intent_digest=digest(intent),
                     policy_expires_at=AT + timedelta(hours=1),
+                    recommended=False,
                 ),
             ),
         ),
