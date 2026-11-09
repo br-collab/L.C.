@@ -12,7 +12,6 @@ from cannae_kernel.signed_attestation import (
     pinned_public_key_registry,
     sign_attestation,
 )
-from signed_status_fixture import KEY_ID, PRIVATE_KEY, PUBLIC_KEYS, attest_status
 from test_lifecycle import (
     NOW,
     _accepted,
@@ -35,6 +34,7 @@ from lc.recommendation_profile import (
     MappingRecommendationProfileResolver,
     RecommendationRefusedError,
 )
+from test_fixtures.signed_status import KEY_ID, PRIVATE_KEY, PUBLIC_KEYS, attest_status
 
 PROFILE_ID = "SYN-PROFILE-RETAIL1"
 

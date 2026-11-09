@@ -16,7 +16,6 @@ from cannae_kernel.actor import ActorKind, ActorRef
 from cannae_kernel.clocks import EventTimes
 from cannae_kernel.disposition import Disposition
 from cannae_kernel.ids import ActorId, EventId, IntentId, LifecycleId, OrderId
-from test_market_access import PUBLIC_KEYS, attest_status
 
 from lc.events import (
     LifecycleState,
@@ -40,6 +39,7 @@ from lc.recommendation_profile import (
     AccountTypeStatusDocument,
     AccountTypeStatusEntry,
 )
+from test_fixtures.signed_status import PUBLIC_KEYS, attest_status
 
 AT = datetime(2026, 10, 22, 14, tzinfo=UTC)
 

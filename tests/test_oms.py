@@ -13,7 +13,6 @@ from cannae_kernel.absence import Recorded
 from cannae_kernel.account import AccountStatus
 from cannae_kernel.canonical import digest
 from cannae_kernel.ids import AllocationId, EventId, IntentId, LifecycleId, OrderId
-from signed_status_fixture import PUBLIC_KEYS
 from test_lifecycle import NOW, _actor, _event, _id, _payload
 from test_market_access import account_status, capacity, limits, locates
 from test_policy_and_venue import _child_register, _evidence, _policy, _venue_order
@@ -53,6 +52,7 @@ from lc.trade import (
     allocate,
     capture,
 )
+from test_fixtures.signed_status import PUBLIC_KEYS
 
 
 def _terms(**changes: object) -> OrderTerms:

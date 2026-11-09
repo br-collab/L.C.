@@ -11,7 +11,6 @@ from cannae_kernel.canonical import canonical_bytes, digest_bytes
 from cannae_kernel.disposition import Disposition
 from cannae_kernel.ids import EventId, IntentId, LifecycleId, OrderId
 from pydantic import BaseModel
-from signed_status_fixture import PUBLIC_KEYS, attest_status
 from test_lifecycle import _actor, _event, _id
 
 from lc.events import (
@@ -44,6 +43,7 @@ from lc.recommendation_profile import (
     AccountTypeStatusDocument,
     AccountTypeStatusEntry,
 )
+from test_fixtures.signed_status import PUBLIC_KEYS, attest_status
 
 NOW = datetime(2026, 10, 22, 14, tzinfo=UTC)
 ORDER = OrderId("ord_" + "1" * 26)
