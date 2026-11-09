@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -46,7 +46,10 @@ def _child(terms: OrderTerms) -> ChildOrder:
 
 
 def _resolver(
-    *, complete: bool = True, verified_at=NOW, account_id: str = "SYN-ACCOUNT-RETAIL1"
+    *,
+    complete: bool = True,
+    verified_at: datetime = NOW,
+    account_id: str = "SYN-ACCOUNT-RETAIL1",
 ) -> MappingRecommendationProfileResolver:
     return MappingRecommendationProfileResolver(
         {
