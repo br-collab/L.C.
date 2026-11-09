@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.6 - 9 Nov 2026
+
+Resolve account type from Atreides status evidence and run the recommendation profile gate on
+intent acceptance, parent splitting, and order replacement.
+
 ## 0.2.5 - 9 Nov 2026
 
 Gate recommended synthetic retail orders on current complete customer profile evidence.

@@ -14,11 +14,7 @@ from enum import StrEnum
 from typing import Literal, Self, TypeVar
 
 from cannae_kernel.absence import require_recorded
-from cannae_kernel.account import (
-    AccountStatus,
-    AccountStatusDocument,
-    AttestedAccountStatusDocument,
-)
+from cannae_kernel.account import AccountStatus
 from cannae_kernel.actor import ActorRef
 from cannae_kernel.canonical import digest, digest_bytes
 from cannae_kernel.disposition import Disposition
@@ -27,6 +23,11 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 
 from lc.events import LifecycleState, OrderEvent
 from lc.lifecycle import EventInput, LifecycleRegister, replay, transition
+from lc.recommendation_profile import (
+    AccountTypeStatusDocument,
+    RecommendationRefusedError,
+    read_account_status_document,
+)
 
 # 17 CFR 240.15c3-5 and 17 CFR 242.200/203, quoted from the pinned sources
 # beside the market-access and short-sale controls that implement them.
@@ -286,25 +287,24 @@ class MarketAccessGate:
         def check(code: str, passed: bool, reason: str) -> None:
             checks.append(CheckResult(code=code, passed=passed, reason=reason))
 
-        status_document: AccountStatusDocument | None = None
+        status_document: AccountTypeStatusDocument | None = None
         status_reason = "ACCOUNT_STATUS_DOCUMENT_MISSING"
         if account_status_input is not None:
             try:
-                wrapper = AttestedAccountStatusDocument.model_validate_json(
-                    account_status_input, strict=True
+                status_document = read_account_status_document(
+                    account_status_input, evaluated_at=now
                 )
-                payload = wrapper.payload.encode()
-                if digest_bytes(payload) != wrapper.payload_digest:
-                    status_reason = "ACCOUNT_STATUS_DOCUMENT_TAMPERED"
-                else:
-                    status_document = AccountStatusDocument.model_validate_json(
-                        payload, strict=True
-                    )
-                    if now - status_document.as_of > timedelta(
-                        seconds=status_document.maximum_age_seconds
-                    ):
-                        status_reason = "ACCOUNT_STATUS_DOCUMENT_STALE"
-                        status_document = None
+            except RecommendationRefusedError as exc:
+                status_reason = {
+                    "RECOMMENDATION_ACCOUNT_STATUS_STALE": "ACCOUNT_STATUS_DOCUMENT_STALE",
+                    "RECOMMENDATION_ACCOUNT_STATUS_TAMPERED": "ACCOUNT_STATUS_DOCUMENT_TAMPERED",
+                    "RECOMMENDATION_ACCOUNT_STATUS_UNREADABLE": (
+                        "ACCOUNT_STATUS_DOCUMENT_UNREADABLE"
+                    ),
+                }.get(
+                    exc.reason.value, exc.reason.value.replace("RECOMMENDATION_", "")
+                )
+                status_document = None
             except ValidationError:
                 status_reason = "ACCOUNT_STATUS_DOCUMENT_UNREADABLE"
         account_status = (

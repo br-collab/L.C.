@@ -23,6 +23,10 @@ from lc.market_access import (
     MarketAccessGate,
 )
 from lc.policy import ExecutionPolicy, GateDecision, MarketEvidenceSnapshot, evaluate_policy
+from lc.recommendation_profile import (
+    RecommendationProfileResolver,
+    enforce_recommendation_profile,
+)
 
 
 class _Record(BaseModel):
@@ -171,8 +175,15 @@ def replace_order(  # noqa: PLR0913 - every control input remains explicit evide
     account_status_input: bytes | None,
     reference_price: Decimal,
     processing_time: datetime,
+    recommendation_profile_resolver: RecommendationProfileResolver | None = None,
     halts: tuple[FirmHalt, ...] = (),
 ) -> ReplacementOutcome:
+    enforce_recommendation_profile(
+        replacement_terms,
+        resolver=recommendation_profile_resolver,
+        evaluated_at=processing_time,
+        account_status_input=account_status_input,
+    )
     replaced = transition(
         register,
         order_id=order_id,

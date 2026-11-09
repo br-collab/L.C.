@@ -20,6 +20,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from lc.events import LifecycleState, OrderEvent, OrderEventPayload, OrderTerms, seal_order_event
 from lc.recommendation_profile import (
     RecommendationProfileResolver,
+    RecommendationRefusal,
+    RecommendationRefusedError,
     enforce_recommendation_profile,
 )
 
@@ -263,13 +265,17 @@ def _append(  # noqa: PLR0913 - every sealed-event field remains explicit
     return register.append(sealed)
 
 
-def accept_intent(
+def accept_intent(  # noqa: PLR0913 - every gate input is explicit evidence
     envelope: ApprovedIntentEnvelope,
     payload_bytes: bytes,
     *,
     parent_order_id: OrderId,
     actor: ActorRef,
     event: EventInput,
+    terms: OrderTerms | None = None,
+    recommendation_profile_resolver: RecommendationProfileResolver | None = None,
+    account_status_input: bytes | None = None,
+    evaluated_at: datetime | None = None,
 ) -> IntentOutcome:
     """Verify exact received bytes before parsing and checking their manifests."""
     received_digest = digest_bytes(payload_bytes)
@@ -295,6 +301,13 @@ def accept_intent(
         ),
     )
     failed = next(((name, evidence) for name, passed, evidence in checks if not passed), None)
+    if failed is None and terms is not None:
+        enforce_recommendation_profile(
+            terms,
+            resolver=recommendation_profile_resolver,
+            evaluated_at=evaluated_at,
+            account_status_input=account_status_input,
+        )
     state = LifecycleState.REFUSED if failed else LifecycleState.INTENT_ACCEPTED
     reason = failed[1] if failed else "payload, policy manifest and authority manifest verified"
     register = _append(
@@ -308,6 +321,7 @@ def accept_intent(
         reason=reason,
         quantity=payload.quantity,
         rule_version="lc-m3-intent/1.0",
+        terms=terms,
     )
     refusal = IntentRefused(predicate=failed[0], evidence=failed[1]) if failed else None
     return IntentOutcome(journal=register, parent_order_id=parent_order_id, refusal=refusal)
@@ -380,13 +394,14 @@ def activate_parent(outcome: IntentOutcome, *, actor: ActorRef, event: EventInpu
     )
 
 
-def split_parent(
+def split_parent(  # noqa: PLR0913 - every gate input is explicit evidence
     outcome: IntentOutcome,
     *,
     actor: ActorRef,
     children: tuple[ChildOrder, ...],
     recommendation_profile_resolver: RecommendationProfileResolver | None = None,
     evaluated_at: datetime | None = None,
+    account_status_input: bytes | None = None,
 ) -> IntentOutcome:
     """Record a conserved parent-to-child split, or refuse before appending anything."""
     if outcome.refusal is not None:
@@ -399,12 +414,14 @@ def split_parent(
     if len({child.order_id for child in children}) != len(children):
         raise ValueError("child order identifiers must be unique")
     for child in children:
-        if child.terms is not None:
-            enforce_recommendation_profile(
-                child.terms,
-                resolver=recommendation_profile_resolver,
-                evaluated_at=evaluated_at,
-            )
+        if child.terms is None:
+            raise RecommendationRefusedError(RecommendationRefusal.ORDER_TERMS_MISSING)
+        enforce_recommendation_profile(
+            child.terms,
+            resolver=recommendation_profile_resolver,
+            evaluated_at=evaluated_at,
+            account_status_input=account_status_input,
+        )
     register = outcome.journal
     for child in children:
         register = _append(

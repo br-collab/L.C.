@@ -6,12 +6,7 @@ from decimal import Decimal
 
 import pytest
 from cannae_kernel.absence import Recorded
-from cannae_kernel.account import (
-    AccountStatus,
-    AccountStatusDocument,
-    AccountStatusEntry,
-    AttestedAccountStatusDocument,
-)
+from cannae_kernel.account import AccountStatus
 from cannae_kernel.canonical import canonical_bytes, digest_bytes
 from cannae_kernel.disposition import Disposition
 from cannae_kernel.ids import EventId, IntentId, LifecycleId, OrderId
@@ -42,6 +37,12 @@ from lc.market_access import (
     read_capacity_document,
     record_decision,
     record_limit_change,
+)
+from lc.recommendation_profile import (
+    AccountType,
+    AccountTypeStatusDocument,
+    AccountTypeStatusEntry,
+    AttestedAccountTypeStatusDocument,
 )
 
 NOW = datetime(2026, 10, 22, 14, tzinfo=UTC)
@@ -118,14 +119,17 @@ def account_status(
     *,
     as_of: datetime = NOW,
     account_id: str = "A",
+    account_type: AccountType = AccountType.INSTITUTIONAL,
 ) -> bytes:
     payload = canonical_bytes(
-        AccountStatusDocument(
+        AccountTypeStatusDocument(
+            schema_version="atreides.account_type_status/1",
             as_of=as_of,
             maximum_age_seconds=300,
             accounts=(
-                AccountStatusEntry(
+                AccountTypeStatusEntry(
                     account_id=account_id,
+                    account_type=account_type,
                     status=status,
                     last_event_id="SYN-ACCOUNT-EVENT-001",
                 ),
@@ -133,8 +137,10 @@ def account_status(
         )
     )
     return (
-        AttestedAccountStatusDocument(
-            payload_digest=digest_bytes(payload), payload=payload.decode()
+        AttestedAccountTypeStatusDocument(
+            schema_version="atreides.attested_account_type_status/1",
+            payload_digest=digest_bytes(payload),
+            payload=payload.decode(),
         )
         .model_dump_json()
         .encode()

@@ -34,6 +34,7 @@ from lc.policy import (
     apply_execution,
     evaluate_policy,
 )
+from lc.recommendation_profile import RecommendationRefusedError
 
 
 def _policy() -> ExecutionPolicy:
@@ -246,6 +247,7 @@ def test_execution_cannot_bypass_market_access() -> None:
                 order_id=OrderId(_id("ord_", 11)),
                 quantity=Decimal("100"),
                 event=_event(13),
+                terms=default_terms(),
             ),
         ),
     ).journal
@@ -342,11 +344,11 @@ def _fill(register: LifecycleRegister, price: Decimal) -> ExecutionApplication:
     return apply_execution(register, execution, report, actor=_actor(), event=_event(20))
 
 
-def test_v6_an_order_without_sealed_terms_holds_at_any_price() -> None:
-    for price in (Decimal(100), Decimal(1_000_000)):
-        outcome = _fill(_child_register(unsealed=True), price)
-        assert outcome.disposition is Disposition.HOLD
-        assert outcome.reason.startswith("TERMS_ABSENT")
+def test_v6_an_order_without_sealed_terms_is_refused_at_split() -> None:
+    with pytest.raises(
+        RecommendationRefusedError, match="RECOMMENDATION_ORDER_TERMS_MISSING"
+    ):
+        _child_register(unsealed=True)
 
 
 def test_v6_terms_without_a_policy_expiry_hold() -> None:
@@ -355,10 +357,24 @@ def test_v6_terms_without_a_policy_expiry_hold() -> None:
     assert outcome.reason.startswith("POLICY_EXPIRY_ABSENT")
 
 
-def test_v6_the_unsealed_hold_records_no_fill() -> None:
-    register = _child_register(unsealed=True)
-    outcome = _fill(register, Decimal(100))
-    assert outcome.journal == register
+def test_v6_the_unsealed_refusal_appends_no_child() -> None:
+    outcome = _accepted()
+    before = outcome.journal.canonical_bytes()
+    with pytest.raises(
+        RecommendationRefusedError, match="RECOMMENDATION_ORDER_TERMS_MISSING"
+    ):
+        split_parent(
+            outcome,
+            actor=_actor(),
+            children=(
+                ChildOrder(
+                    order_id=OrderId(_id("ord_", 11)),
+                    quantity=Decimal("100"),
+                    event=_event(13),
+                ),
+            ),
+        )
+    assert outcome.journal.canonical_bytes() == before
 
 
 def test_notional_basis_is_binding_but_quantity_estimate_is_not() -> None:
