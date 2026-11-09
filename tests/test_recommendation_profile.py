@@ -104,6 +104,4 @@ def test_non_recommended_retail_order_is_not_blocked_by_profile_gate() -> None:
         actor=_actor(),
         children=(_child(_terms(recommended=False, profile_id=None)),),
     )
-    assert outcome.journal.events[-1].payload.terms == _terms(
-        recommended=False, profile_id=None
-    )
+    assert outcome.journal.events[-1].payload.terms == _terms(recommended=False, profile_id=None)
