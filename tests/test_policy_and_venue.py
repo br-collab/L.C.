@@ -345,9 +345,7 @@ def _fill(register: LifecycleRegister, price: Decimal) -> ExecutionApplication:
 
 
 def test_v6_an_order_without_sealed_terms_is_refused_at_split() -> None:
-    with pytest.raises(
-        RecommendationRefusedError, match="RECOMMENDATION_ORDER_TERMS_MISSING"
-    ):
+    with pytest.raises(RecommendationRefusedError, match="RECOMMENDATION_ORDER_TERMS_MISSING"):
         _child_register(unsealed=True)
 
 
@@ -360,9 +358,7 @@ def test_v6_terms_without_a_policy_expiry_hold() -> None:
 def test_v6_the_unsealed_refusal_appends_no_child() -> None:
     outcome = _accepted()
     before = outcome.journal.canonical_bytes()
-    with pytest.raises(
-        RecommendationRefusedError, match="RECOMMENDATION_ORDER_TERMS_MISSING"
-    ):
+    with pytest.raises(RecommendationRefusedError, match="RECOMMENDATION_ORDER_TERMS_MISSING"):
         split_parent(
             outcome,
             actor=_actor(),
