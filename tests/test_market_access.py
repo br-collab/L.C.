@@ -11,6 +11,7 @@ from cannae_kernel.canonical import canonical_bytes, digest_bytes
 from cannae_kernel.disposition import Disposition
 from cannae_kernel.ids import EventId, IntentId, LifecycleId, OrderId
 from pydantic import BaseModel
+from signed_status_fixture import PUBLIC_KEYS, attest_status
 from test_lifecycle import _actor, _event, _id
 
 from lc.events import (
@@ -42,7 +43,6 @@ from lc.recommendation_profile import (
     AccountType,
     AccountTypeStatusDocument,
     AccountTypeStatusEntry,
-    AttestedAccountTypeStatusDocument,
 )
 
 NOW = datetime(2026, 10, 22, 14, tzinfo=UTC)
@@ -121,7 +121,7 @@ def account_status(
     account_id: str = "A",
     account_type: AccountType = AccountType.INSTITUTIONAL,
 ) -> bytes:
-    payload = canonical_bytes(
+    return attest_status(
         AccountTypeStatusDocument(
             schema_version="atreides.account_type_status/1",
             as_of=as_of,
@@ -135,15 +135,6 @@ def account_status(
                 ),
             ),
         )
-    )
-    return (
-        AttestedAccountTypeStatusDocument(
-            schema_version="atreides.attested_account_type_status/1",
-            payload_digest=digest_bytes(payload),
-            payload=payload.decode(),
-        )
-        .model_dump_json()
-        .encode()
     )
 
 
@@ -268,7 +259,7 @@ def failed(decision, code: str, reason: str) -> None:
 
 
 def test_pass_duplicate_and_limit_change_record() -> None:
-    gate = MarketAccessGate()
+    gate = MarketAccessGate(PUBLIC_KEYS)
     first = decide(gate, order())
     assert first.disposition is Disposition.PASS and not first.terminal
     assert first.capacity_journal_digest == "sha256:" + "1" * 64
@@ -288,7 +279,7 @@ def test_pass_duplicate_and_limit_change_record() -> None:
     ],
 )
 def test_non_active_account_is_refused(status: AccountStatus) -> None:
-    decision = MarketAccessGate().evaluate(
+    decision = MarketAccessGate(PUBLIC_KEYS).evaluate(
         order(),
         limits=limits(),
         capacity_input=capacity(),
@@ -299,7 +290,7 @@ def test_non_active_account_is_refused(status: AccountStatus) -> None:
 
 
 def test_stale_account_status_is_refused() -> None:
-    decision = MarketAccessGate().evaluate(
+    decision = MarketAccessGate(PUBLIC_KEYS).evaluate(
         order(),
         limits=limits(),
         capacity_input=capacity(),
@@ -318,7 +309,7 @@ def test_stale_account_status_is_refused() -> None:
     ],
 )
 def test_unusable_account_status_is_refused(status_input: bytes | None, reason: str) -> None:
-    decision = MarketAccessGate().evaluate(
+    decision = MarketAccessGate(PUBLIC_KEYS).evaluate(
         order(),
         limits=limits(),
         capacity_input=capacity(),
@@ -330,16 +321,16 @@ def test_unusable_account_status_is_refused(status_input: bytes | None, reason: 
 
 def test_tampered_account_status_is_refused() -> None:
     wrapper = json.loads(account_status())
-    wrapper["payload_digest"] = "sha256:" + "0" * 64
+    wrapper["payload_b64"] = "dGFtcGVyZWQ="
     raw = json.dumps(wrapper).encode()
-    decision = MarketAccessGate().evaluate(
+    decision = MarketAccessGate(PUBLIC_KEYS).evaluate(
         order(),
         limits=limits(),
         capacity_input=capacity(),
         locates_input=locates(),
         account_status_input=raw,
     )
-    failed(decision, "ACCOUNT_STATUS", "ACCOUNT_STATUS_DOCUMENT_TAMPERED")
+    failed(decision, "ACCOUNT_STATUS", "ACCOUNT_STATUS_SIGNATURE_INVALID")
 
 
 def test_producer_attestation_parser_refuses_type_and_tamper() -> None:
@@ -362,7 +353,7 @@ def test_producer_attestation_parser_refuses_type_and_tamper() -> None:
 
 
 def test_decision_is_recorded_in_lifecycle(monkeypatch) -> None:
-    decision = decide(MarketAccessGate(), order())
+    decision = decide(MarketAccessGate(PUBLIC_KEYS), order())
     captured = {}
     monkeypatch.setattr(
         "lc.market_access.transition",
@@ -406,7 +397,7 @@ def test_individual_control_refusals(
 ) -> None:
     failed(
         decide(
-            MarketAccessGate(),
+            MarketAccessGate(PUBLIC_KEYS),
             order(**order_changes),
             lim=limits(**limit_changes),
             firm=Decimal(firm),
@@ -418,7 +409,7 @@ def test_individual_control_refusals(
 
 
 def test_capacity_missing_tampered_stale_and_unreadable() -> None:
-    gate = MarketAccessGate()
+    gate = MarketAccessGate(PUBLIC_KEYS)
     missing = gate.evaluate(
         order(),
         limits=limits(),
@@ -430,15 +421,21 @@ def test_capacity_missing_tampered_stale_and_unreadable() -> None:
     good = capacity()
     tampered = good.model_copy(update={"payload": good.payload + b" "})
     failed(
-        decide(MarketAccessGate(), order(), cap=tampered), "CAPACITY_DOCUMENT", "DOCUMENT_TAMPERED"
+        decide(MarketAccessGate(PUBLIC_KEYS), order(), cap=tampered),
+        "CAPACITY_DOCUMENT",
+        "DOCUMENT_TAMPERED",
     )
     failed(
-        decide(MarketAccessGate(), order(), cap=capacity(NOW - timedelta(hours=1))),
+        decide(MarketAccessGate(PUBLIC_KEYS), order(), cap=capacity(NOW - timedelta(hours=1))),
         "CAPACITY_DOCUMENT",
         "DOCUMENT_STALE",
     )
     bad = AttestedInput(payload=b"{}", payload_digest=digest_bytes(b"{}"))
-    failed(decide(MarketAccessGate(), order(), cap=bad), "CAPACITY_DOCUMENT", "DOCUMENT_UNREADABLE")
+    failed(
+        decide(MarketAccessGate(PUBLIC_KEYS), order(), cap=bad),
+        "CAPACITY_DOCUMENT",
+        "DOCUMENT_UNREADABLE",
+    )
 
 
 @pytest.mark.parametrize(
@@ -456,7 +453,7 @@ def test_capacity_missing_tampered_stale_and_unreadable() -> None:
 )
 def test_locate_refusals(loc_input, order_changes, reason) -> None:
     item = order(side="SELL", sell_mark=SellMark.SHORT, **order_changes)
-    decision = MarketAccessGate().evaluate(
+    decision = MarketAccessGate(PUBLIC_KEYS).evaluate(
         item,
         limits=limits(),
         capacity_input=capacity(),
@@ -467,7 +464,7 @@ def test_locate_refusals(loc_input, order_changes, reason) -> None:
 
 
 def test_locate_consumes_and_cannot_be_reused_past_quantity() -> None:
-    gate = MarketAccessGate()
+    gate = MarketAccessGate(PUBLIC_KEYS)
     document = locates(locate(quantity=Decimal(15)))
     first = gate.evaluate(
         order(side="SELL", sell_mark=SellMark.SHORT, locate_id="L1", quantity=Decimal(10)),

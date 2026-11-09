@@ -81,6 +81,7 @@ def default_terms(**changes: object) -> OrderTerms:
         "limit_price": Decimal("100"),
         "approved_intent_digest": INTENT_DIGEST,
         "policy_expires_at": NOW + timedelta(hours=1),
+        "recommended": False,
     }
     values.update(changes)
     return OrderTerms.model_validate(values)
@@ -282,6 +283,7 @@ def _terms(**changes: object) -> OrderTerms:
         "approved_intent_digest": "sha256:" + "a" * 64,
         "quantity_basis": "QUANTITY",
         "policy_expires_at": NOW + timedelta(hours=1),
+        "recommended": False,
     }
     values.update(changes)
     return OrderTerms.model_validate(values)

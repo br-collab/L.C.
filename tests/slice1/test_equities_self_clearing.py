@@ -13,10 +13,10 @@ import pytest
 from cannae_kernel.absence import Recorded
 from cannae_kernel.account import AccountStatus
 from cannae_kernel.actor import ActorKind, ActorRef
-from cannae_kernel.canonical import canonical_bytes, digest_bytes
 from cannae_kernel.clocks import EventTimes
 from cannae_kernel.disposition import Disposition
 from cannae_kernel.ids import ActorId, EventId, IntentId, LifecycleId, OrderId
+from test_market_access import PUBLIC_KEYS, attest_status
 
 from lc.events import (
     LifecycleState,
@@ -39,7 +39,6 @@ from lc.recommendation_profile import (
     AccountType,
     AccountTypeStatusDocument,
     AccountTypeStatusEntry,
-    AttestedAccountTypeStatusDocument,
 )
 
 AT = datetime(2026, 10, 22, 14, tzinfo=UTC)
@@ -74,6 +73,7 @@ def _order(number: str, **changes: object) -> ChildRelease:
             "time_in_force": TimeInForce.DAY,
             "control_price": limit_price,
             "limit_price": limit_price,
+            "recommended": False,
         }
     )
     actor = ActorRef(
@@ -138,8 +138,8 @@ def _run() -> tuple[dict[str, bytes], bytes]:
         maximum_notional=Decimal(50000),
         duplicate_window_seconds=30,
     )
-    gate = MarketAccessGate()
-    status_payload = canonical_bytes(
+    gate = MarketAccessGate(PUBLIC_KEYS)
+    status_document = attest_status(
         AccountTypeStatusDocument(
             schema_version="atreides.account_type_status/1",
             as_of=AT,
@@ -153,15 +153,6 @@ def _run() -> tuple[dict[str, bytes], bytes]:
                 ),
             ),
         )
-    )
-    status_document = (
-        AttestedAccountTypeStatusDocument(
-            schema_version="atreides.attested_account_type_status/1",
-            payload_digest=digest_bytes(status_payload),
-            payload=status_payload.decode(),
-        )
-        .model_dump_json()
-        .encode()
     )
     orders = (
         _order("1"),

@@ -12,7 +12,12 @@ from enum import StrEnum
 from typing import Literal, Protocol
 
 from cannae_kernel.account import AccountStatus
-from cannae_kernel.canonical import digest_bytes
+from cannae_kernel.signed_attestation import (
+    AttestationRefusal,
+    AttestationVerificationError,
+    PublicKeyRegistry,
+    verify_attestation,
+)
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from lc.events import OrderTerms
@@ -36,12 +41,16 @@ class RecommendationRefusal(StrEnum):
     ACCOUNT_STATUS_TAMPERED = "RECOMMENDATION_ACCOUNT_STATUS_TAMPERED"
     ACCOUNT_STATUS_UNREADABLE = "RECOMMENDATION_ACCOUNT_STATUS_UNREADABLE"
     ACCOUNT_STATUS_STALE = "RECOMMENDATION_ACCOUNT_STATUS_STALE"
+    ACCOUNT_STATUS_SIGNING_KEY_UNKNOWN = "RECOMMENDATION_ACCOUNT_STATUS_SIGNING_KEY_UNKNOWN"
+    ACCOUNT_STATUS_PRODUCER_MISMATCH = "RECOMMENDATION_ACCOUNT_STATUS_PRODUCER_MISMATCH"
+    ACCOUNT_STATUS_SIGNATURE_INVALID = "RECOMMENDATION_ACCOUNT_STATUS_SIGNATURE_INVALID"
     ACCOUNT_TYPE_UNKNOWN = "RECOMMENDATION_ACCOUNT_TYPE_UNKNOWN"
     ORDER_TERMS_MISSING = "RECOMMENDATION_ORDER_TERMS_MISSING"
     PROFILE_MISSING = "RECOMMENDATION_PROFILE_MISSING"
     PROFILE_INCOMPLETE = "RECOMMENDATION_PROFILE_INCOMPLETE"
     PROFILE_STALE = "RECOMMENDATION_PROFILE_STALE"
     PROFILE_ACCOUNT_MISMATCH = "RECOMMENDATION_PROFILE_ACCOUNT_MISMATCH"
+    RECOMMENDATION_STATE_REQUIRED = "RECOMMENDATION_STATE_REQUIRED"
 
 
 class RecommendationRefusedError(ValueError):
@@ -94,24 +103,31 @@ class AccountTypeStatusDocument(BaseModel):
     accounts: tuple[AccountTypeStatusEntry, ...]
 
 
-class AttestedAccountTypeStatusDocument(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
-    schema_version: Literal["atreides.attested_account_type_status/1"]
-    payload_digest: str
-    payload: str
-
-
 def read_account_status_document(
-    raw: bytes | None, *, evaluated_at: datetime
+    raw: bytes | None,
+    *,
+    evaluated_at: datetime,
+    key_registry: PublicKeyRegistry,
 ) -> AccountTypeStatusDocument:
     if raw is None:
         raise RecommendationRefusedError(RecommendationRefusal.ACCOUNT_STATUS_MISSING)
     try:
-        wrapper = AttestedAccountTypeStatusDocument.model_validate_json(raw, strict=True)
-        payload = wrapper.payload.encode()
-        if digest_bytes(payload) != wrapper.payload_digest:
-            raise RecommendationRefusedError(RecommendationRefusal.ACCOUNT_STATUS_TAMPERED)
+        payload = verify_attestation(raw, expected_producer="atreides", registry=key_registry)
         document = AccountTypeStatusDocument.model_validate_json(payload, strict=True)
+    except AttestationVerificationError as exc:
+        refusals = {
+            AttestationRefusal.UNKNOWN_KEY: (
+                RecommendationRefusal.ACCOUNT_STATUS_SIGNING_KEY_UNKNOWN
+            ),
+            AttestationRefusal.WRONG_PRODUCER: (
+                RecommendationRefusal.ACCOUNT_STATUS_PRODUCER_MISMATCH
+            ),
+            AttestationRefusal.INVALID_SIGNATURE: (
+                RecommendationRefusal.ACCOUNT_STATUS_SIGNATURE_INVALID
+            ),
+            AttestationRefusal.MALFORMED: RecommendationRefusal.ACCOUNT_STATUS_UNREADABLE,
+        }
+        raise RecommendationRefusedError(refusals[exc.refusal]) from exc
     except ValidationError as exc:
         raise RecommendationRefusedError(RecommendationRefusal.ACCOUNT_STATUS_UNREADABLE) from exc
     if evaluated_at - document.as_of > timedelta(seconds=document.maximum_age_seconds):
@@ -140,17 +156,24 @@ def enforce_recommendation_profile(
     resolver: RecommendationProfileResolver | None,
     evaluated_at: datetime | None,
     account_status_input: bytes | None,
+    account_status_key_registry: PublicKeyRegistry,
 ) -> None:
-    if not terms.recommended:
+    if terms.recommended is False:
         return
     if evaluated_at is None:
         raise RecommendationRefusedError(RecommendationRefusal.ACCOUNT_STATUS_MISSING)
-    document = read_account_status_document(account_status_input, evaluated_at=evaluated_at)
+    document = read_account_status_document(
+        account_status_input,
+        evaluated_at=evaluated_at,
+        key_registry=account_status_key_registry,
+    )
     account = next((row for row in document.accounts if row.account_id == terms.account_id), None)
     if account is None:
         raise RecommendationRefusedError(RecommendationRefusal.ACCOUNT_TYPE_UNKNOWN)
     if account.account_type is not AccountType.NATURAL_PERSON:
         return
+    if terms.recommended is None:
+        raise RecommendationRefusedError(RecommendationRefusal.RECOMMENDATION_STATE_REQUIRED)
     if resolver is None or evaluated_at is None or terms.customer_profile_record_id is None:
         raise RecommendationRefusedError(RecommendationRefusal.PROFILE_MISSING)
     profile = resolver.resolve_profile(terms.customer_profile_record_id)

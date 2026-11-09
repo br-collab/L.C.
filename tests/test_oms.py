@@ -13,6 +13,7 @@ from cannae_kernel.absence import Recorded
 from cannae_kernel.account import AccountStatus
 from cannae_kernel.canonical import digest
 from cannae_kernel.ids import AllocationId, EventId, IntentId, LifecycleId, OrderId
+from signed_status_fixture import PUBLIC_KEYS
 from test_lifecycle import NOW, _actor, _event, _id, _payload
 from test_market_access import account_status, capacity, limits, locates
 from test_policy_and_venue import _child_register, _evidence, _policy, _venue_order
@@ -65,6 +66,7 @@ def _terms(**changes: object) -> OrderTerms:
         "control_price": Decimal(100),
         "limit_price": Decimal(100),
         "policy_expires_at": datetime(2026, 12, 31, tzinfo=UTC),
+        "recommended": False,
     }
     values.update(changes)
     return OrderTerms.model_validate(values)
@@ -97,7 +99,7 @@ def _register(
 
 def _tampered_account_status() -> bytes:
     wrapper = json.loads(account_status().decode())
-    wrapper["payload_digest"] = "sha256:" + "0" * 64
+    wrapper["payload_b64"] = "dGFtcGVyZWQ="
     return json.dumps(wrapper).encode()
 
 
@@ -492,14 +494,13 @@ def test_allocation_plan_and_rounding_refusal_paths_are_explicit() -> None:
         capture(_child_register(), report, _payload(), actor=_actor(), event=_event(90))
     journal, captured = capture(journal, report, _payload(), actor=_actor(), event=_event(92))
     sealed = transition(
-        _child_register(),
+        _child_register(terms=_terms(allocation_plan_digest=digest(plan))),
         order_id=order_id,
         target=LifecycleState.EXECUTED,
         reason="complete with allocation plan",
         actor=_actor(),
         event=_event(98),
         quantity=Decimal(100),
-        terms=_terms(allocation_plan_digest=digest(plan)),
     )
     sealed, sealed_capture = capture(sealed, report, _payload(), actor=_actor(), event=_event(99))
     with pytest.raises(ValueError, match="plan sealed"):
@@ -832,11 +833,12 @@ def test_replace_reruns_strategy_and_market_access_on_new_terms() -> None:
         actor=_actor(),
         strategy_policy=_policy(),
         market_evidence=_evidence(price=Decimal(120)),
-        market_gate=MarketAccessGate(),
+        market_gate=MarketAccessGate(PUBLIC_KEYS),
         limits=limits(),
         capacity_input=capacity(),
         locates_input=locates(),
         account_status_input=account_status(AccountStatus.ACTIVE),
+        account_status_key_registry=PUBLIC_KEYS,
         reference_price=Decimal(100),
         processing_time=NOW,
     )
@@ -879,13 +881,14 @@ def test_replace_order_runs_recommendation_gate() -> None:
         actor=_actor(),
         strategy_policy=_policy(),
         market_evidence=_evidence(),
-        market_gate=MarketAccessGate(),
+        market_gate=MarketAccessGate(PUBLIC_KEYS),
         limits=limits(),
         capacity_input=capacity(),
         locates_input=locates(),
         account_status_input=account_status(
             AccountStatus.ACTIVE, account_type=AccountType.NATURAL_PERSON
         ),
+        account_status_key_registry=PUBLIC_KEYS,
         reference_price=Decimal(100),
         processing_time=NOW,
         recommendation_profile_resolver=resolver,
@@ -906,7 +909,7 @@ def test_replace_order_runs_recommendation_gate() -> None:
             account_status(AccountStatus.ACTIVE, as_of=datetime(2026, 1, 1, tzinfo=UTC)),
             "ACCOUNT_STATUS_DOCUMENT_STALE",
         ),
-        (_tampered_account_status(), "ACCOUNT_STATUS_DOCUMENT_TAMPERED"),
+        (_tampered_account_status(), "ACCOUNT_STATUS_SIGNATURE_INVALID"),
     ],
 )
 def test_replace_refuses_missing_and_non_active_account_status(
@@ -921,11 +924,12 @@ def test_replace_refuses_missing_and_non_active_account_status(
         actor=_actor(),
         strategy_policy=_policy(),
         market_evidence=_evidence(),
-        market_gate=MarketAccessGate(),
+        market_gate=MarketAccessGate(PUBLIC_KEYS),
         limits=limits(),
         capacity_input=capacity(),
         locates_input=locates(),
         account_status_input=status_document,
+        account_status_key_registry=PUBLIC_KEYS,
         reference_price=Decimal(100),
         processing_time=NOW,
     )
@@ -945,11 +949,12 @@ def test_replace_active_account_status_passes_account_gate() -> None:
         actor=_actor(),
         strategy_policy=_policy(),
         market_evidence=_evidence(),
-        market_gate=MarketAccessGate(),
+        market_gate=MarketAccessGate(PUBLIC_KEYS),
         limits=limits(),
         capacity_input=capacity(),
         locates_input=locates(),
         account_status_input=account_status(AccountStatus.ACTIVE),
+        account_status_key_registry=PUBLIC_KEYS,
         reference_price=Decimal(100),
         processing_time=NOW,
     )
