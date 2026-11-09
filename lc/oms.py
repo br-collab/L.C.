@@ -9,10 +9,11 @@ from typing import Protocol
 from cannae_kernel.actor import ActorRef
 from cannae_kernel.disposition import Disposition
 from cannae_kernel.ids import OrderId
+from cannae_kernel.signed_attestation import PublicKeyRegistry
 from pydantic import BaseModel, ConfigDict
 
 from lc.events import LifecycleState, OrderEvent, OrderTerms, TimeInForce
-from lc.lifecycle import EventInput, LifecycleRegister, replay, transition
+from lc.lifecycle import EventInput, LifecycleRegister, _transition_with_terms, replay, transition
 from lc.market_access import (
     AttestedInput,
     ChildRelease,
@@ -173,6 +174,7 @@ def replace_order(  # noqa: PLR0913 - every control input remains explicit evide
     capacity_input: AttestedInput | None,
     locates_input: AttestedInput | None,
     account_status_input: bytes | None,
+    account_status_key_registry: PublicKeyRegistry,
     reference_price: Decimal,
     processing_time: datetime,
     recommendation_profile_resolver: RecommendationProfileResolver | None = None,
@@ -183,15 +185,16 @@ def replace_order(  # noqa: PLR0913 - every control input remains explicit evide
         resolver=recommendation_profile_resolver,
         evaluated_at=processing_time,
         account_status_input=account_status_input,
+        account_status_key_registry=account_status_key_registry,
     )
-    replaced = transition(
+    replaced = _transition_with_terms(
         register,
         order_id=order_id,
         target=LifecycleState.REPLACED,
         reason="cancel/replace terms sealed; controls must rerun",
         actor=actor,
         event=replacement_event,
-        terms=replacement_terms,
+        replacement_terms=replacement_terms,
     )
     order_event: OrderEvent = replaced.events[-1]
     strategy = evaluate_policy(

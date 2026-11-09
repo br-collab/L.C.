@@ -19,6 +19,7 @@ from cannae_kernel.actor import ActorRef
 from cannae_kernel.canonical import digest, digest_bytes
 from cannae_kernel.disposition import Disposition
 from cannae_kernel.ids import OrderId
+from cannae_kernel.signed_attestation import PublicKeyRegistry
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from lc.events import LifecycleState, OrderEvent
@@ -238,7 +239,10 @@ def _parse_attested(item: AttestedInput | None, model: type[T]) -> tuple[T | Non
 
 
 class MarketAccessGate:
-    def __init__(self) -> None:
+    def __init__(self, account_status_key_registry: PublicKeyRegistry | None = None) -> None:
+        self._account_status_key_registry = (
+            {} if account_status_key_registry is None else account_status_key_registry
+        )
         self._seen: dict[tuple[str, str, str, Decimal, Decimal], datetime] = {}
         self._locate_used: dict[str, Decimal] = {}
         self.decisions: list[MarketAccessDecision] = []
@@ -292,7 +296,9 @@ class MarketAccessGate:
         if account_status_input is not None:
             try:
                 status_document = read_account_status_document(
-                    account_status_input, evaluated_at=now
+                    account_status_input,
+                    evaluated_at=now,
+                    key_registry=self._account_status_key_registry,
                 )
             except RecommendationRefusedError as exc:
                 status_reason = {
@@ -300,6 +306,15 @@ class MarketAccessGate:
                     "RECOMMENDATION_ACCOUNT_STATUS_TAMPERED": "ACCOUNT_STATUS_DOCUMENT_TAMPERED",
                     "RECOMMENDATION_ACCOUNT_STATUS_UNREADABLE": (
                         "ACCOUNT_STATUS_DOCUMENT_UNREADABLE"
+                    ),
+                    "RECOMMENDATION_ACCOUNT_STATUS_SIGNING_KEY_UNKNOWN": (
+                        "ACCOUNT_STATUS_SIGNING_KEY_UNKNOWN"
+                    ),
+                    "RECOMMENDATION_ACCOUNT_STATUS_PRODUCER_MISMATCH": (
+                        "ACCOUNT_STATUS_PRODUCER_MISMATCH"
+                    ),
+                    "RECOMMENDATION_ACCOUNT_STATUS_SIGNATURE_INVALID": (
+                        "ACCOUNT_STATUS_SIGNATURE_INVALID"
                     ),
                 }.get(exc.reason.value, exc.reason.value.replace("RECOMMENDATION_", ""))
                 status_document = None

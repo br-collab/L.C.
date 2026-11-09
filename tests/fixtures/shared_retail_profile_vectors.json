@@ -1,0 +1,38 @@
+{
+  "schema_version": "cfma.retail_profile_vectors/1",
+  "vectors": [
+    {
+      "name": "current_complete",
+      "account_id": "SYN-ACCOUNT-VECTOR1",
+      "person_id": "SYN-PERSON-VECTOR1",
+      "employment_status": "SYNTHETIC_EMPLOYED",
+      "annual_income_band": "SYNTHETIC_BAND_A",
+      "net_worth_band": "SYNTHETIC_BAND_B",
+      "liquid_net_worth_band": "SYNTHETIC_BAND_C",
+      "tax_status": "SYNTHETIC_STATUS",
+      "investment_objectives": ["SYNTHETIC_GROWTH"],
+      "risk_tolerance": "SYNTHETIC_MODERATE",
+      "time_horizon": "SYNTHETIC_LONG",
+      "liquidity_needs": "SYNTHETIC_LOW",
+      "investment_experience": ["SYNTHETIC_EQUITIES"],
+      "expected": "ACCEPT"
+    },
+    {
+      "name": "missing_income",
+      "account_id": "SYN-ACCOUNT-VECTOR2",
+      "person_id": "SYN-PERSON-VECTOR2",
+      "employment_status": "SYNTHETIC_EMPLOYED",
+      "annual_income_band": null,
+      "net_worth_band": "SYNTHETIC_BAND_B",
+      "liquid_net_worth_band": "SYNTHETIC_BAND_C",
+      "tax_status": "SYNTHETIC_STATUS",
+      "investment_objectives": ["SYNTHETIC_GROWTH"],
+      "risk_tolerance": "SYNTHETIC_MODERATE",
+      "time_horizon": "SYNTHETIC_LONG",
+      "liquidity_needs": "SYNTHETIC_LOW",
+      "investment_experience": ["SYNTHETIC_EQUITIES"],
+      "expected": "REFUSE_PROFILE_INCOMPLETE"
+    }
+  ]
+}
+

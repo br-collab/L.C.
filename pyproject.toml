@@ -1,6 +1,6 @@
 [project]
 name = "legiones-cannenses"
-version = "0.2.6"
+version = "0.2.7"
 description = "Legiones Cannenses (L.C.) — the synthetic middle layer of Project Cannae Legion"
 authors = [{name = "Guillermo Ravelo"}]
 readme = "README.md"
@@ -14,11 +14,12 @@ classifiers = [
 
 dependencies = [
     "pydantic>=2.6,<3.0",
-    "cannae-kernel @ git+https://github.com/br-collab/cannae-kernel.git@b7b81600de6b3f0f2f81d293611172d38fbda0b9",
+    "cannae-kernel @ git+https://github.com/br-collab/cannae-kernel.git@d062cebca06bf1c925c38c3514e036abf3b49ab3",
 ]
 
 [project.optional-dependencies]
 dev = [
+    "cryptography==50.0.0",
     "pytest>=8.0",
     "pytest-cov>=4.1",
     "ruff>=0.4",
@@ -32,7 +33,7 @@ dev = [
 # fail there rather than pass because `cop` happened to bring it along.
 harness = [
     "pydantic>=2.6,<3.0",
-    "cannae-kernel @ git+https://github.com/br-collab/cannae-kernel.git@b7b81600de6b3f0f2f81d293611172d38fbda0b9",
+    "cannae-kernel @ git+https://github.com/br-collab/cannae-kernel.git@d062cebca06bf1c925c38c3514e036abf3b49ab3",
 ]
 # Thifur-H, the adaptive intelligence class (thifur_h/). Phase C.
 #
@@ -46,7 +47,7 @@ harness = [
 # how a reader will know conditions B, C and D arrived.
 h = [
     "pydantic>=2.6,<3.0",
-    "cannae-kernel @ git+https://github.com/br-collab/cannae-kernel.git@b7b81600de6b3f0f2f81d293611172d38fbda0b9",
+    "cannae-kernel @ git+https://github.com/br-collab/cannae-kernel.git@d062cebca06bf1c925c38c3514e036abf3b49ab3",
 ]
 # COP-0 (Common Operating Picture) program picture (cop/). Not needed by `lc`, which keeps
 # zero runtime dependencies. Install with: pip install -e ".[cop,dev]"
@@ -56,7 +57,7 @@ cop = [
     "httpx>=0.27,<1.0",
     "PyYAML>=6.0",
     "pydantic>=2.6,<3.0",
-    "cannae-kernel @ git+https://github.com/br-collab/cannae-kernel.git@b7b81600de6b3f0f2f81d293611172d38fbda0b9",
+    "cannae-kernel @ git+https://github.com/br-collab/cannae-kernel.git@d062cebca06bf1c925c38c3514e036abf3b49ab3",
 ]
 
 [build-system]
@@ -65,7 +66,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["lc*", "emulators*", "cop*", "harness_c2*", "thifur_h*"]
+include = ["lc*", "emulators*", "cop*", "harness_c2*", "thifur_h*", "test_fixtures*"]
 
 # Files the code reads at runtime through Path(__file__). An editable install reads them
 # in place; a built wheel carries only what is declared here.

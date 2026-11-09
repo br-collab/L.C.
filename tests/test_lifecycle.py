@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from inspect import signature
 
 import pytest
 from cannae_kernel.actor import ActorKind, ActorRef
@@ -45,6 +46,7 @@ def _order_terms() -> OrderTerms:
         time_in_force=TimeInForce.DAY,
         control_price=Decimal(100),
         limit_price=Decimal(100),
+        recommended=False,
     )
 
 
@@ -280,6 +282,11 @@ def test_replay_reconstructs_state_without_an_emulator() -> None:
     second = replay(tuple(outcome.journal.events))
     assert first == second
     assert first.last_event_digest == outcome.journal.events[-1].envelope_digest
+
+
+def test_generic_transition_cannot_change_order_terms() -> None:
+    assert "terms" not in signature(transition).parameters
+    assert "replacement_terms" not in signature(transition).parameters
 
 
 def test_a_silent_skip_is_recorded_as_not_reached() -> None:

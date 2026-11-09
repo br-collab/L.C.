@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.7 - 9 Nov 2026
+
+Verify Atreides account status with producer-bound Ed25519 signatures, require explicit
+recommendation state for natural persons, and prevent generic lifecycle transitions from
+changing sealed order terms.
+
 ## 0.2.6 - 9 Nov 2026
 
 Resolve account type from Atreides status evidence and run the recommendation profile gate on

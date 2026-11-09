@@ -15,6 +15,7 @@ from cannae_kernel.disposition import Disposition
 from cannae_kernel.envelopes import ApprovedIntentEnvelope
 from cannae_kernel.events import verify
 from cannae_kernel.ids import ActorId, EventId, IntentId, LifecycleId, OrderId
+from cannae_kernel.signed_attestation import PublicKeyRegistry
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from lc.events import LifecycleState, OrderEvent, OrderEventPayload, OrderTerms, seal_order_event
@@ -275,6 +276,7 @@ def accept_intent(  # noqa: PLR0913 - every gate input is explicit evidence
     terms: OrderTerms | None = None,
     recommendation_profile_resolver: RecommendationProfileResolver | None = None,
     account_status_input: bytes | None = None,
+    account_status_key_registry: PublicKeyRegistry | None = None,
     evaluated_at: datetime | None = None,
 ) -> IntentOutcome:
     """Verify exact received bytes before parsing and checking their manifests."""
@@ -302,11 +304,14 @@ def accept_intent(  # noqa: PLR0913 - every gate input is explicit evidence
     )
     failed = next(((name, evidence) for name, passed, evidence in checks if not passed), None)
     if failed is None and terms is not None:
+        if account_status_key_registry is None:
+            account_status_key_registry = {}
         enforce_recommendation_profile(
             terms,
             resolver=recommendation_profile_resolver,
             evaluated_at=evaluated_at,
             account_status_input=account_status_input,
+            account_status_key_registry=account_status_key_registry,
         )
     state = LifecycleState.REFUSED if failed else LifecycleState.INTENT_ACCEPTED
     reason = failed[1] if failed else "payload, policy manifest and authority manifest verified"
@@ -402,6 +407,7 @@ def split_parent(  # noqa: PLR0913 - every gate input is explicit evidence
     recommendation_profile_resolver: RecommendationProfileResolver | None = None,
     evaluated_at: datetime | None = None,
     account_status_input: bytes | None = None,
+    account_status_key_registry: PublicKeyRegistry | None = None,
 ) -> IntentOutcome:
     """Record a conserved parent-to-child split, or refuse before appending anything."""
     if outcome.refusal is not None:
@@ -421,6 +427,9 @@ def split_parent(  # noqa: PLR0913 - every gate input is explicit evidence
             resolver=recommendation_profile_resolver,
             evaluated_at=evaluated_at,
             account_status_input=account_status_input,
+            account_status_key_registry=(
+                {} if account_status_key_registry is None else account_status_key_registry
+            ),
         )
     register = outcome.journal
     for child in children:
@@ -491,7 +500,30 @@ def transition(  # noqa: PLR0913 - transition evidence is explicit at the call s
     actor: ActorRef,
     event: EventInput,
     quantity: Decimal | None = None,
-    terms: OrderTerms | None = None,
+    consideration: Decimal = Decimal(0),
+) -> LifecycleRegister:
+    return _transition_with_terms(
+        register,
+        order_id=order_id,
+        target=target,
+        reason=reason,
+        actor=actor,
+        event=event,
+        quantity=quantity,
+        consideration=consideration,
+    )
+
+
+def _transition_with_terms(  # noqa: PLR0913
+    register: LifecycleRegister,
+    *,
+    order_id: OrderId,
+    target: LifecycleState,
+    reason: str,
+    actor: ActorRef,
+    event: EventInput,
+    quantity: Decimal | None = None,
+    replacement_terms: OrderTerms | None = None,
     consideration: Decimal = Decimal(0),
 ) -> LifecycleRegister:
     snapshot = replay(register.events)
@@ -515,7 +547,7 @@ def transition(  # noqa: PLR0913 - transition evidence is explicit at the call s
         reason=recorded_reason,
         quantity=quantity if quantity is not None else current.quantity,
         rule_version="lc-m3-lifecycle/1.0",
-        terms=terms if terms is not None else current.terms,
+        terms=replacement_terms if replacement_terms is not None else current.terms,
         consideration=consideration,
     )
 
