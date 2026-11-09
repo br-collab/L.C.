@@ -23,7 +23,7 @@
         "policy_expires_at": null,
         "minimum_price_increment": "0.01",
         "session_activity_permitted": true,
-        "recommended": false,
+        "recommended": null,
         "customer_profile_record_id": null
       },
       "states": [
