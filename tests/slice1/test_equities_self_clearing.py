@@ -11,12 +11,7 @@ from pathlib import Path
 
 import pytest
 from cannae_kernel.absence import Recorded
-from cannae_kernel.account import (
-    AccountStatus,
-    AccountStatusDocument,
-    AccountStatusEntry,
-    AttestedAccountStatusDocument,
-)
+from cannae_kernel.account import AccountStatus
 from cannae_kernel.actor import ActorKind, ActorRef
 from cannae_kernel.canonical import canonical_bytes, digest_bytes
 from cannae_kernel.clocks import EventTimes
@@ -40,6 +35,12 @@ from lc.market_access import (
     consume_producer_attestation,
 )
 from lc.oms import expire_day_orders
+from lc.recommendation_profile import (
+    AccountType,
+    AccountTypeStatusDocument,
+    AccountTypeStatusEntry,
+    AttestedAccountTypeStatusDocument,
+)
 
 AT = datetime(2026, 10, 22, 14, tzinfo=UTC)
 
@@ -139,12 +140,14 @@ def _run() -> tuple[dict[str, bytes], bytes]:
     )
     gate = MarketAccessGate()
     status_payload = canonical_bytes(
-        AccountStatusDocument(
+        AccountTypeStatusDocument(
+            schema_version="atreides.account_type_status/1",
             as_of=AT,
             maximum_age_seconds=300,
             accounts=(
-                AccountStatusEntry(
+                AccountTypeStatusEntry(
                     account_id="CUSTOMER-1",
+                    account_type=AccountType.INSTITUTIONAL,
                     status=AccountStatus.ACTIVE,
                     last_event_id="SYN-EQ1-ACCOUNT-ACTIVE",
                 ),
@@ -152,8 +155,10 @@ def _run() -> tuple[dict[str, bytes], bytes]:
         )
     )
     status_document = (
-        AttestedAccountStatusDocument(
-            payload_digest=digest_bytes(status_payload), payload=status_payload.decode()
+        AttestedAccountTypeStatusDocument(
+            schema_version="atreides.attested_account_type_status/1",
+            payload_digest=digest_bytes(status_payload),
+            payload=status_payload.decode(),
         )
         .model_dump_json()
         .encode()

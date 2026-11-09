@@ -96,7 +96,6 @@ class OrderTerms(BaseModel):
     minimum_price_increment: Decimal = Field(default=Decimal("0.01"), gt=0)
     session_activity_permitted: bool = True
     recommended: bool = False
-    account_type: Literal["INSTITUTIONAL", "RETAIL"] = "INSTITUTIONAL"
     customer_profile_record_id: str | None = None
 
     @model_validator(mode="after")

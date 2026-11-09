@@ -38,6 +38,11 @@ from lc.oms import (
     replace_order,
 )
 from lc.policy import ExecutionReport, apply_execution
+from lc.recommendation_profile import (
+    AccountType,
+    CustomerProfileEvidence,
+    MappingRecommendationProfileResolver,
+)
 from lc.trade import (
     AllocationPlan,
     AllocationRefusalError,
@@ -840,6 +845,52 @@ def test_replace_reruns_strategy_and_market_access_on_new_terms() -> None:
     assert replay(outcome.journal.events).orders[OrderId(_id("ord_", 80))].state is (
         LifecycleState.MARKET_ACCESS_REFUSED
     )
+
+
+def test_replace_order_runs_recommendation_gate() -> None:
+    profile_id = "SYN-PROFILE-REPLACE1"
+    resolver = MappingRecommendationProfileResolver(
+        {
+            profile_id: CustomerProfileEvidence(
+                record_id=profile_id,
+                account_id="A",
+                employment_status="SYNTHETIC_EMPLOYED",
+                annual_income_band="SYNTHETIC_A",
+                net_worth_band="SYNTHETIC_B",
+                liquid_net_worth_band="SYNTHETIC_C",
+                tax_status="SYNTHETIC_STATUS",
+                investment_objectives=("SYNTHETIC_GROWTH",),
+                risk_tolerance="SYNTHETIC_MODERATE",
+                time_horizon="SYNTHETIC_LONG",
+                liquidity_needs="SYNTHETIC_LOW",
+                investment_experience=("SYNTHETIC_EQUITIES",),
+                verified_at=NOW,
+                maximum_age_seconds=300,
+                source="SYNTHETIC_ATREIDES_PROFILE",
+            )
+        }
+    )
+    outcome = replace_order(
+        _register(),
+        order_id=OrderId(_id("ord_", 80)),
+        replacement_event=_event(81),
+        decision_event=_event(82),
+        replacement_terms=_terms(recommended=True, customer_profile_record_id=profile_id),
+        actor=_actor(),
+        strategy_policy=_policy(),
+        market_evidence=_evidence(),
+        market_gate=MarketAccessGate(),
+        limits=limits(),
+        capacity_input=capacity(),
+        locates_input=locates(),
+        account_status_input=account_status(
+            AccountStatus.ACTIVE, account_type=AccountType.NATURAL_PERSON
+        ),
+        reference_price=Decimal(100),
+        processing_time=NOW,
+        recommendation_profile_resolver=resolver,
+    )
+    assert outcome.journal.events[-2].payload.terms is not None
 
 
 @pytest.mark.parametrize(
