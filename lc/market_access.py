@@ -303,8 +303,6 @@ class MarketAccessGate:
                     ),
                 }.get(exc.reason.value, exc.reason.value.replace("RECOMMENDATION_", ""))
                 status_document = None
-            except ValidationError:
-                status_reason = "ACCOUNT_STATUS_DOCUMENT_UNREADABLE"
         account_status = (
             next(
                 (
