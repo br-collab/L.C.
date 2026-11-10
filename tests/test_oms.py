@@ -13,6 +13,8 @@ from cannae_kernel.absence import Recorded
 from cannae_kernel.account import AccountStatus
 from cannae_kernel.canonical import digest
 from cannae_kernel.ids import AllocationId, EventId, IntentId, LifecycleId, OrderId
+from cannae_kernel.signed_attestation import sign_attestation
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from test_lifecycle import NOW, _actor, _event, _id, _payload
 from test_market_access import account_status, capacity, limits, locates
 from test_policy_and_venue import _child_register, _evidence, _policy, _venue_order
@@ -40,8 +42,11 @@ from lc.oms import (
 from lc.policy import ExecutionReport, apply_execution
 from lc.recommendation_profile import (
     AccountType,
+    AccountTypeStatusDocument,
+    AccountTypeStatusEntry,
     CustomerProfileEvidence,
     MappingRecommendationProfileResolver,
+    RecommendationRefusedError,
 )
 from lc.trade import (
     AllocationPlan,
@@ -52,7 +57,6 @@ from lc.trade import (
     allocate,
     capture,
 )
-from test_fixtures.signed_status import PUBLIC_KEYS
 
 
 def _terms(**changes: object) -> OrderTerms:
@@ -833,12 +837,11 @@ def test_replace_reruns_strategy_and_market_access_on_new_terms() -> None:
         actor=_actor(),
         strategy_policy=_policy(),
         market_evidence=_evidence(price=Decimal(120)),
-        market_gate=MarketAccessGate(PUBLIC_KEYS),
+        market_gate=MarketAccessGate(),
         limits=limits(),
         capacity_input=capacity(),
         locates_input=locates(),
         account_status_input=account_status(AccountStatus.ACTIVE),
-        account_status_key_registry=PUBLIC_KEYS,
         reference_price=Decimal(100),
         processing_time=NOW,
     )
@@ -881,19 +884,60 @@ def test_replace_order_runs_recommendation_gate() -> None:
         actor=_actor(),
         strategy_policy=_policy(),
         market_evidence=_evidence(),
-        market_gate=MarketAccessGate(PUBLIC_KEYS),
+        market_gate=MarketAccessGate(),
         limits=limits(),
         capacity_input=capacity(),
         locates_input=locates(),
         account_status_input=account_status(
             AccountStatus.ACTIVE, account_type=AccountType.NATURAL_PERSON
         ),
-        account_status_key_registry=PUBLIC_KEYS,
         reference_price=Decimal(100),
         processing_time=NOW,
         recommendation_profile_resolver=resolver,
     )
     assert outcome.journal.events[-2].payload.terms is not None
+
+
+def test_replace_refuses_valid_signature_from_unpinned_key() -> None:
+    document = AccountTypeStatusDocument(
+        schema_version="atreides.account_type_status/1",
+        as_of=NOW,
+        maximum_age_seconds=300,
+        accounts=(
+            AccountTypeStatusEntry(
+                account_id="A",
+                account_type=AccountType.INSTITUTIONAL,
+                status=AccountStatus.ACTIVE,
+                last_event_id="SYN-ACCOUNT-EVENT-UNPINNED",
+            ),
+        ),
+    )
+    unpinned = sign_attestation(
+        document.model_dump_json().encode(),
+        producer="atreides",
+        key_id="synthetic-unpinned-atreides-1",
+        private_key=Ed25519PrivateKey.from_private_bytes(bytes([3]) * 32),
+    )
+    with pytest.raises(
+        RecommendationRefusedError, match="RECOMMENDATION_ACCOUNT_STATUS_SIGNING_KEY_UNKNOWN"
+    ):
+        replace_order(
+            _register(),
+            order_id=OrderId(_id("ord_", 80)),
+            replacement_event=_event(81),
+            decision_event=_event(82),
+            replacement_terms=_terms(recommended=True),
+            actor=_actor(),
+            strategy_policy=_policy(),
+            market_evidence=_evidence(),
+            market_gate=MarketAccessGate(),
+            limits=limits(),
+            capacity_input=capacity(),
+            locates_input=locates(),
+            account_status_input=unpinned,
+            reference_price=Decimal(100),
+            processing_time=NOW,
+        )
 
 
 @pytest.mark.parametrize(
@@ -924,12 +968,11 @@ def test_replace_refuses_missing_and_non_active_account_status(
         actor=_actor(),
         strategy_policy=_policy(),
         market_evidence=_evidence(),
-        market_gate=MarketAccessGate(PUBLIC_KEYS),
+        market_gate=MarketAccessGate(),
         limits=limits(),
         capacity_input=capacity(),
         locates_input=locates(),
         account_status_input=status_document,
-        account_status_key_registry=PUBLIC_KEYS,
         reference_price=Decimal(100),
         processing_time=NOW,
     )
@@ -949,12 +992,11 @@ def test_replace_active_account_status_passes_account_gate() -> None:
         actor=_actor(),
         strategy_policy=_policy(),
         market_evidence=_evidence(),
-        market_gate=MarketAccessGate(PUBLIC_KEYS),
+        market_gate=MarketAccessGate(),
         limits=limits(),
         capacity_input=capacity(),
         locates_input=locates(),
         account_status_input=account_status(AccountStatus.ACTIVE),
-        account_status_key_registry=PUBLIC_KEYS,
         reference_price=Decimal(100),
         processing_time=NOW,
     )

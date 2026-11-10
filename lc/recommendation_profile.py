@@ -15,12 +15,17 @@ from cannae_kernel.account import AccountStatus
 from cannae_kernel.signed_attestation import (
     AttestationRefusal,
     AttestationVerificationError,
-    PublicKeyRegistry,
     verify_attestation,
 )
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from lc.events import OrderTerms
+from lc.trust_anchors import (
+    TrustAnchorError,
+    TrustAnchorRefusal,
+    require_anchor_valid_at,
+    resolve_pinned_anchor,
+)
 
 PROFILE_COMPLETENESS_FIELDS = (
     "employment_status",
@@ -42,6 +47,10 @@ class RecommendationRefusal(StrEnum):
     ACCOUNT_STATUS_UNREADABLE = "RECOMMENDATION_ACCOUNT_STATUS_UNREADABLE"
     ACCOUNT_STATUS_STALE = "RECOMMENDATION_ACCOUNT_STATUS_STALE"
     ACCOUNT_STATUS_SIGNING_KEY_UNKNOWN = "RECOMMENDATION_ACCOUNT_STATUS_SIGNING_KEY_UNKNOWN"
+    ACCOUNT_STATUS_SIGNING_KEY_REVOKED = "RECOMMENDATION_ACCOUNT_STATUS_SIGNING_KEY_REVOKED"
+    ACCOUNT_STATUS_SIGNING_KEY_OUTSIDE_VALIDITY = (
+        "RECOMMENDATION_ACCOUNT_STATUS_SIGNING_KEY_OUTSIDE_VALIDITY"
+    )
     ACCOUNT_STATUS_PRODUCER_MISMATCH = "RECOMMENDATION_ACCOUNT_STATUS_PRODUCER_MISMATCH"
     ACCOUNT_STATUS_SIGNATURE_INVALID = "RECOMMENDATION_ACCOUNT_STATUS_SIGNATURE_INVALID"
     ACCOUNT_TYPE_UNKNOWN = "RECOMMENDATION_ACCOUNT_TYPE_UNKNOWN"
@@ -107,15 +116,31 @@ def read_account_status_document(
     raw: bytes | None,
     *,
     evaluated_at: datetime,
-    key_registry: PublicKeyRegistry,
 ) -> AccountTypeStatusDocument:
     if raw is None:
         raise RecommendationRefusedError(RecommendationRefusal.ACCOUNT_STATUS_MISSING)
     try:
-        payload = verify_attestation(raw, expected_producer="atreides", registry=key_registry)
+        anchor, registry = resolve_pinned_anchor(raw, expected_producer="atreides")
+        payload = verify_attestation(raw, expected_producer="atreides", registry=registry)
         document = AccountTypeStatusDocument.model_validate_json(payload, strict=True)
+        require_anchor_valid_at(anchor, document.as_of)
+    except TrustAnchorError as exc:
+        trust_refusals = {
+            TrustAnchorRefusal.UNKNOWN_KEY: (
+                RecommendationRefusal.ACCOUNT_STATUS_SIGNING_KEY_UNKNOWN
+            ),
+            TrustAnchorRefusal.WRONG_PRODUCER: (
+                RecommendationRefusal.ACCOUNT_STATUS_PRODUCER_MISMATCH
+            ),
+            TrustAnchorRefusal.REVOKED: (RecommendationRefusal.ACCOUNT_STATUS_SIGNING_KEY_REVOKED),
+            TrustAnchorRefusal.OUTSIDE_VALIDITY: (
+                RecommendationRefusal.ACCOUNT_STATUS_SIGNING_KEY_OUTSIDE_VALIDITY
+            ),
+            TrustAnchorRefusal.MALFORMED: RecommendationRefusal.ACCOUNT_STATUS_UNREADABLE,
+        }
+        raise RecommendationRefusedError(trust_refusals[exc.refusal]) from exc
     except AttestationVerificationError as exc:
-        refusals = {
+        attestation_refusals = {
             AttestationRefusal.UNKNOWN_KEY: (
                 RecommendationRefusal.ACCOUNT_STATUS_SIGNING_KEY_UNKNOWN
             ),
@@ -127,7 +152,7 @@ def read_account_status_document(
             ),
             AttestationRefusal.MALFORMED: RecommendationRefusal.ACCOUNT_STATUS_UNREADABLE,
         }
-        raise RecommendationRefusedError(refusals[exc.refusal]) from exc
+        raise RecommendationRefusedError(attestation_refusals[exc.refusal]) from exc
     except ValidationError as exc:
         raise RecommendationRefusedError(RecommendationRefusal.ACCOUNT_STATUS_UNREADABLE) from exc
     if evaluated_at - document.as_of > timedelta(seconds=document.maximum_age_seconds):
@@ -156,7 +181,6 @@ def enforce_recommendation_profile(
     resolver: RecommendationProfileResolver | None,
     evaluated_at: datetime | None,
     account_status_input: bytes | None,
-    account_status_key_registry: PublicKeyRegistry,
 ) -> None:
     if terms.recommended is False:
         return
@@ -165,7 +189,6 @@ def enforce_recommendation_profile(
     document = read_account_status_document(
         account_status_input,
         evaluated_at=evaluated_at,
-        key_registry=account_status_key_registry,
     )
     account = next((row for row in document.accounts if row.account_id == terms.account_id), None)
     if account is None:

@@ -39,7 +39,7 @@ from lc.recommendation_profile import (
     AccountTypeStatusDocument,
     AccountTypeStatusEntry,
 )
-from test_fixtures.signed_status import PUBLIC_KEYS, attest_status
+from test_fixtures.signed_status import attest_status
 
 AT = datetime(2026, 10, 22, 14, tzinfo=UTC)
 
@@ -138,7 +138,7 @@ def _run() -> tuple[dict[str, bytes], bytes]:
         maximum_notional=Decimal(50000),
         duplicate_window_seconds=30,
     )
-    gate = MarketAccessGate(PUBLIC_KEYS)
+    gate = MarketAccessGate()
     status_document = attest_status(
         AccountTypeStatusDocument(
             schema_version="atreides.account_type_status/1",

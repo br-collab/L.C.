@@ -9,7 +9,6 @@ from typing import Protocol
 from cannae_kernel.actor import ActorRef
 from cannae_kernel.disposition import Disposition
 from cannae_kernel.ids import OrderId
-from cannae_kernel.signed_attestation import PublicKeyRegistry
 from pydantic import BaseModel, ConfigDict
 
 from lc.events import LifecycleState, OrderEvent, OrderTerms, TimeInForce
@@ -174,7 +173,6 @@ def replace_order(  # noqa: PLR0913 - every control input remains explicit evide
     capacity_input: AttestedInput | None,
     locates_input: AttestedInput | None,
     account_status_input: bytes | None,
-    account_status_key_registry: PublicKeyRegistry,
     reference_price: Decimal,
     processing_time: datetime,
     recommendation_profile_resolver: RecommendationProfileResolver | None = None,
@@ -185,7 +183,6 @@ def replace_order(  # noqa: PLR0913 - every control input remains explicit evide
         resolver=recommendation_profile_resolver,
         evaluated_at=processing_time,
         account_status_input=account_status_input,
-        account_status_key_registry=account_status_key_registry,
     )
     replaced = _transition_with_terms(
         register,

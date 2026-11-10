@@ -7,11 +7,9 @@ import pytest
 from cannae_kernel.account import AccountStatus
 from cannae_kernel.ids import OrderId
 from cannae_kernel.signed_attestation import (
-    PublicKeyRecord,
-    PublicKeyRegistry,
-    pinned_public_key_registry,
     sign_attestation,
 )
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from test_lifecycle import (
     NOW,
     _accepted,
@@ -34,7 +32,7 @@ from lc.recommendation_profile import (
     MappingRecommendationProfileResolver,
     RecommendationRefusedError,
 )
-from test_fixtures.signed_status import KEY_ID, PRIVATE_KEY, PUBLIC_KEYS, attest_status
+from test_fixtures.signed_status import attest_status
 
 PROFILE_ID = "SYN-PROFILE-RETAIL1"
 
@@ -129,7 +127,6 @@ def test_recommended_retail_order_with_missing_profile_is_refused_by_name() -> N
             recommendation_profile_resolver=_resolver(),
             evaluated_at=NOW,
             account_status_input=_status(),
-            account_status_key_registry=PUBLIC_KEYS,
         )
 
 
@@ -142,7 +139,6 @@ def test_recommended_retail_order_with_stale_profile_is_refused_by_name() -> Non
             recommendation_profile_resolver=_resolver(verified_at=NOW - timedelta(seconds=301)),
             evaluated_at=NOW,
             account_status_input=_status(),
-            account_status_key_registry=PUBLIC_KEYS,
         )
 
 
@@ -154,7 +150,6 @@ def test_recommended_retail_order_with_current_complete_profile_is_admitted() ->
         recommendation_profile_resolver=_resolver(),
         evaluated_at=NOW,
         account_status_input=_status(),
-        account_status_key_registry=PUBLIC_KEYS,
     )
     assert outcome.journal.events[-1].payload.terms == _terms(recommended=True)
 
@@ -177,7 +172,6 @@ def test_profile_content_and_account_binding_are_enforced(
             recommendation_profile_resolver=_resolver(complete=complete, account_id=account_id),
             evaluated_at=NOW,
             account_status_input=_status(),
-            account_status_key_registry=PUBLIC_KEYS,
         )
 
 
@@ -188,7 +182,6 @@ def test_account_type_comes_from_atreides_status_document() -> None:
         children=(_child(_terms(recommended=True, profile_id=None)),),
         evaluated_at=NOW,
         account_status_input=_status(AccountType.INSTITUTIONAL),
-        account_status_key_registry=PUBLIC_KEYS,
     )
     assert outcome.journal.events[-1].payload.terms is not None
 
@@ -219,10 +212,45 @@ def test_intent_acceptance_runs_recommendation_gate() -> None:
         terms=_terms(recommended=True),
         recommendation_profile_resolver=_resolver(),
         account_status_input=_status(),
-        account_status_key_registry=PUBLIC_KEYS,
         evaluated_at=NOW,
     )
     assert outcome.journal.events[-1].payload.terms == _terms(recommended=True)
+
+
+def test_intent_acceptance_refuses_valid_signature_from_unpinned_key() -> None:
+    document = AccountTypeStatusDocument(
+        schema_version="atreides.account_type_status/1",
+        as_of=NOW,
+        maximum_age_seconds=300,
+        accounts=(
+            AccountTypeStatusEntry(
+                account_id="SYN-ACCOUNT-RETAIL1",
+                account_type=AccountType.INSTITUTIONAL,
+                status=AccountStatus.ACTIVE,
+                last_event_id="SYN-ACCOUNT-EVENT-UNPINNED",
+            ),
+        ),
+    )
+    unpinned = sign_attestation(
+        document.model_dump_json().encode(),
+        producer="atreides",
+        key_id="synthetic-unpinned-atreides-1",
+        private_key=Ed25519PrivateKey.from_private_bytes(bytes([3]) * 32),
+    )
+    payload = _payload()
+    with pytest.raises(
+        RecommendationRefusedError, match="RECOMMENDATION_ACCOUNT_STATUS_SIGNING_KEY_UNKNOWN"
+    ):
+        accept_intent(
+            _envelope(payload),
+            _wire_bytes(payload),
+            parent_order_id=OrderId(_id("ord_", 16)),
+            actor=_actor(),
+            event=_event(16),
+            terms=_terms(recommended=True, profile_id=None),
+            account_status_input=unpinned,
+            evaluated_at=NOW,
+        )
 
 
 def test_non_recommended_retail_order_is_not_blocked_by_profile_gate() -> None:
@@ -251,35 +279,56 @@ def test_self_built_institutional_status_document_is_refused_by_name() -> None:
             children=(_child(_terms(recommended=True, profile_id=None)),),
             evaluated_at=NOW,
             account_status_input=forged,
-            account_status_key_registry=PUBLIC_KEYS,
         )
 
 
 @pytest.mark.parametrize(
-    ("wire", "registry", "refusal"),
+    ("key_id", "private_key", "producer", "refusal"),
     [
         (
-            _status(),
-            pinned_public_key_registry({}),
+            "synthetic-unpinned-atreides-1",
+            Ed25519PrivateKey.from_private_bytes(bytes([3]) * 32),
+            "atreides",
             "RECOMMENDATION_ACCOUNT_STATUS_SIGNING_KEY_UNKNOWN",
         ),
         (
-            sign_attestation(
-                b"{}",
-                producer="legiones-cannenses",
-                key_id=KEY_ID,
-                private_key=PRIVATE_KEY,
-            ),
-            pinned_public_key_registry(
-                {KEY_ID: PublicKeyRecord("legiones-cannenses", PRIVATE_KEY.public_key())}
-            ),
+            "synthetic-atreides-key-1",
+            Ed25519PrivateKey.from_private_bytes(bytes(range(32))),
+            "legiones-cannenses",
             "RECOMMENDATION_ACCOUNT_STATUS_PRODUCER_MISMATCH",
+        ),
+        (
+            "synthetic-atreides-revoked-1",
+            Ed25519PrivateKey.from_private_bytes(bytes([1]) * 32),
+            "atreides",
+            "RECOMMENDATION_ACCOUNT_STATUS_SIGNING_KEY_REVOKED",
+        ),
+        (
+            "synthetic-atreides-expired-1",
+            Ed25519PrivateKey.from_private_bytes(bytes([2]) * 32),
+            "atreides",
+            "RECOMMENDATION_ACCOUNT_STATUS_SIGNING_KEY_OUTSIDE_VALIDITY",
         ),
     ],
 )
 def test_status_signer_identity_is_pinned(
-    wire: bytes, registry: PublicKeyRegistry, refusal: str
+    key_id: str,
+    private_key: Ed25519PrivateKey,
+    producer: str,
+    refusal: str,
 ) -> None:
+    document = AccountTypeStatusDocument(
+        schema_version="atreides.account_type_status/1",
+        as_of=NOW,
+        maximum_age_seconds=300,
+        accounts=(),
+    )
+    wire = sign_attestation(
+        document.model_dump_json().encode(),
+        producer=producer,
+        key_id=key_id,
+        private_key=private_key,
+    )
     with pytest.raises(RecommendationRefusedError, match=refusal):
         split_parent(
             _active_outcome(),
@@ -287,7 +336,6 @@ def test_status_signer_identity_is_pinned(
             children=(_child(_terms(recommended=True)),),
             evaluated_at=NOW,
             account_status_input=wire,
-            account_status_key_registry=registry,
         )
 
 
@@ -302,5 +350,4 @@ def test_natural_person_recommendation_state_must_be_explicit() -> None:
             children=(_child(terms),),
             evaluated_at=NOW,
             account_status_input=_status(),
-            account_status_key_registry=PUBLIC_KEYS,
         )
