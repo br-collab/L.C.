@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.8 - 9 Nov 2026
+
+Load synthetic account-status trust anchors from checksum-pinned package configuration and
+refuse unpinned, revoked, expired, and wrong-producer signatures by name.
+
 ## 0.2.7 - 9 Nov 2026
 
 Verify Atreides account status with producer-bound Ed25519 signatures, require explicit

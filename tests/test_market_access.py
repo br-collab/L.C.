@@ -43,7 +43,7 @@ from lc.recommendation_profile import (
     AccountTypeStatusDocument,
     AccountTypeStatusEntry,
 )
-from test_fixtures.signed_status import PUBLIC_KEYS, attest_status
+from test_fixtures.signed_status import attest_status
 
 NOW = datetime(2026, 10, 22, 14, tzinfo=UTC)
 ORDER = OrderId("ord_" + "1" * 26)
@@ -259,7 +259,7 @@ def failed(decision, code: str, reason: str) -> None:
 
 
 def test_pass_duplicate_and_limit_change_record() -> None:
-    gate = MarketAccessGate(PUBLIC_KEYS)
+    gate = MarketAccessGate()
     first = decide(gate, order())
     assert first.disposition is Disposition.PASS and not first.terminal
     assert first.capacity_journal_digest == "sha256:" + "1" * 64
@@ -279,7 +279,7 @@ def test_pass_duplicate_and_limit_change_record() -> None:
     ],
 )
 def test_non_active_account_is_refused(status: AccountStatus) -> None:
-    decision = MarketAccessGate(PUBLIC_KEYS).evaluate(
+    decision = MarketAccessGate().evaluate(
         order(),
         limits=limits(),
         capacity_input=capacity(),
@@ -290,7 +290,7 @@ def test_non_active_account_is_refused(status: AccountStatus) -> None:
 
 
 def test_stale_account_status_is_refused() -> None:
-    decision = MarketAccessGate(PUBLIC_KEYS).evaluate(
+    decision = MarketAccessGate().evaluate(
         order(),
         limits=limits(),
         capacity_input=capacity(),
@@ -309,7 +309,7 @@ def test_stale_account_status_is_refused() -> None:
     ],
 )
 def test_unusable_account_status_is_refused(status_input: bytes | None, reason: str) -> None:
-    decision = MarketAccessGate(PUBLIC_KEYS).evaluate(
+    decision = MarketAccessGate().evaluate(
         order(),
         limits=limits(),
         capacity_input=capacity(),
@@ -323,7 +323,7 @@ def test_tampered_account_status_is_refused() -> None:
     wrapper = json.loads(account_status())
     wrapper["payload_b64"] = "dGFtcGVyZWQ="
     raw = json.dumps(wrapper).encode()
-    decision = MarketAccessGate(PUBLIC_KEYS).evaluate(
+    decision = MarketAccessGate().evaluate(
         order(),
         limits=limits(),
         capacity_input=capacity(),
@@ -353,7 +353,7 @@ def test_producer_attestation_parser_refuses_type_and_tamper() -> None:
 
 
 def test_decision_is_recorded_in_lifecycle(monkeypatch) -> None:
-    decision = decide(MarketAccessGate(PUBLIC_KEYS), order())
+    decision = decide(MarketAccessGate(), order())
     captured = {}
     monkeypatch.setattr(
         "lc.market_access.transition",
@@ -397,7 +397,7 @@ def test_individual_control_refusals(
 ) -> None:
     failed(
         decide(
-            MarketAccessGate(PUBLIC_KEYS),
+            MarketAccessGate(),
             order(**order_changes),
             lim=limits(**limit_changes),
             firm=Decimal(firm),
@@ -409,7 +409,7 @@ def test_individual_control_refusals(
 
 
 def test_capacity_missing_tampered_stale_and_unreadable() -> None:
-    gate = MarketAccessGate(PUBLIC_KEYS)
+    gate = MarketAccessGate()
     missing = gate.evaluate(
         order(),
         limits=limits(),
@@ -421,18 +421,18 @@ def test_capacity_missing_tampered_stale_and_unreadable() -> None:
     good = capacity()
     tampered = good.model_copy(update={"payload": good.payload + b" "})
     failed(
-        decide(MarketAccessGate(PUBLIC_KEYS), order(), cap=tampered),
+        decide(MarketAccessGate(), order(), cap=tampered),
         "CAPACITY_DOCUMENT",
         "DOCUMENT_TAMPERED",
     )
     failed(
-        decide(MarketAccessGate(PUBLIC_KEYS), order(), cap=capacity(NOW - timedelta(hours=1))),
+        decide(MarketAccessGate(), order(), cap=capacity(NOW - timedelta(hours=1))),
         "CAPACITY_DOCUMENT",
         "DOCUMENT_STALE",
     )
     bad = AttestedInput(payload=b"{}", payload_digest=digest_bytes(b"{}"))
     failed(
-        decide(MarketAccessGate(PUBLIC_KEYS), order(), cap=bad),
+        decide(MarketAccessGate(), order(), cap=bad),
         "CAPACITY_DOCUMENT",
         "DOCUMENT_UNREADABLE",
     )
@@ -453,7 +453,7 @@ def test_capacity_missing_tampered_stale_and_unreadable() -> None:
 )
 def test_locate_refusals(loc_input, order_changes, reason) -> None:
     item = order(side="SELL", sell_mark=SellMark.SHORT, **order_changes)
-    decision = MarketAccessGate(PUBLIC_KEYS).evaluate(
+    decision = MarketAccessGate().evaluate(
         item,
         limits=limits(),
         capacity_input=capacity(),
@@ -464,7 +464,7 @@ def test_locate_refusals(loc_input, order_changes, reason) -> None:
 
 
 def test_locate_consumes_and_cannot_be_reused_past_quantity() -> None:
-    gate = MarketAccessGate(PUBLIC_KEYS)
+    gate = MarketAccessGate()
     document = locates(locate(quantity=Decimal(15)))
     first = gate.evaluate(
         order(side="SELL", sell_mark=SellMark.SHORT, locate_id="L1", quantity=Decimal(10)),
