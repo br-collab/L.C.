@@ -13,7 +13,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "cryptography==50.0.0",
+    "cryptography==50.0.2",
     "pydantic>=2.6,<3.0",
     "cannae-kernel @ git+https://github.com/br-collab/cannae-kernel.git@d062cebca06bf1c925c38c3514e036abf3b49ab3",
 ]
