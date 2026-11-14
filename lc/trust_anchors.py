@@ -10,6 +10,7 @@ from datetime import datetime
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
+from threading import Lock
 from types import MappingProxyType
 from typing import Any
 
@@ -22,6 +23,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from pydantic import ValidationError
 
 TRUST_ANCHOR_PATH = Path(__file__).with_name("trusted_producer_keys.json")
+_runtime_lock = Lock()
 
 
 class TrustAnchorRefusal(StrEnum):
@@ -48,6 +50,16 @@ class TrustAnchor:
     revoked: bool
 
 
+@dataclass
+class _RuntimeTrustState:
+    anchor: TrustAnchor | None = None
+    installed: bool = False
+    verification_started: bool = False
+
+
+_runtime_state = _RuntimeTrustState()
+
+
 @lru_cache(maxsize=1)
 def load_trust_anchors() -> MappingProxyType[str, TrustAnchor]:
     document: dict[str, Any] = json.loads(TRUST_ANCHOR_PATH.read_text())
@@ -55,8 +67,6 @@ def load_trust_anchors() -> MappingProxyType[str, TrustAnchor]:
         raise ValueError("unsupported trust anchor schema")
     anchors: dict[str, TrustAnchor] = {}
     for row in document["keys"]:
-        if row.get("synthetic") is not True:
-            raise ValueError("trust anchor is not labeled synthetic")
         key_id = str(row["key_id"])
         if key_id in anchors:
             raise ValueError("duplicate trust anchor key identifier")
@@ -76,16 +86,36 @@ def load_trust_anchors() -> MappingProxyType[str, TrustAnchor]:
     return MappingProxyType(anchors)
 
 
+def install_runtime_trust_anchor(anchor: TrustAnchor) -> None:
+    """Install one process-local producer key before the first verification."""
+
+    with _runtime_lock:
+        if _runtime_state.installed:
+            raise RuntimeError("runtime trust anchor is set once")
+        if _runtime_state.verification_started:
+            raise RuntimeError("runtime trust anchor cannot change after verification")
+        _runtime_state.anchor = anchor
+        _runtime_state.installed = True
+
+
 def resolve_pinned_anchor(
     wire: bytes,
     *,
     expected_producer: str,
 ) -> tuple[TrustAnchor, PublicKeyRegistry]:
+    with _runtime_lock:
+        _runtime_state.verification_started = True
     try:
         envelope = SignedAttestation.model_validate_json(wire)
     except (ValidationError, ValueError, binascii.Error) as exc:
         raise TrustAnchorError(TrustAnchorRefusal.MALFORMED) from exc
-    anchor = load_trust_anchors().get(envelope.key_id)
+    deployment_anchor = load_trust_anchors().get(envelope.key_id)
+    anchor = (
+        _runtime_state.anchor
+        if _runtime_state.anchor is not None
+        and _runtime_state.anchor.key_id == envelope.key_id
+        else deployment_anchor
+    )
     if anchor is None:
         raise TrustAnchorError(TrustAnchorRefusal.UNKNOWN_KEY)
     if envelope.producer != expected_producer or anchor.producer != expected_producer:

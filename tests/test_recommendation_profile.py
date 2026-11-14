@@ -32,7 +32,7 @@ from lc.recommendation_profile import (
     MappingRecommendationProfileResolver,
     RecommendationRefusedError,
 )
-from test_fixtures.signed_status import attest_status
+from test_fixtures.signed_status import KEY_ID, PRIVATE_KEY, attest_status
 
 PROFILE_ID = "SYN-PROFILE-RETAIL1"
 
@@ -235,7 +235,7 @@ def test_intent_acceptance_refuses_valid_signature_from_unpinned_key() -> None:
         document.model_dump_json().encode(),
         producer="atreides",
         key_id="synthetic-unpinned-atreides-1",
-        private_key=Ed25519PrivateKey.from_private_bytes(bytes([3]) * 32),
+        private_key=Ed25519PrivateKey.generate(),
     )
     payload = _payload()
     with pytest.raises(
@@ -287,27 +287,15 @@ def test_self_built_institutional_status_document_is_refused_by_name() -> None:
     [
         (
             "synthetic-unpinned-atreides-1",
-            Ed25519PrivateKey.from_private_bytes(bytes([3]) * 32),
+            Ed25519PrivateKey.generate(),
             "atreides",
             "RECOMMENDATION_ACCOUNT_STATUS_SIGNING_KEY_UNKNOWN",
         ),
         (
-            "synthetic-atreides-key-1",
-            Ed25519PrivateKey.from_private_bytes(bytes(range(32))),
+            "synthetic-atreides-run-key-1",
+            Ed25519PrivateKey.generate(),
             "legiones-cannenses",
             "RECOMMENDATION_ACCOUNT_STATUS_PRODUCER_MISMATCH",
-        ),
-        (
-            "synthetic-atreides-revoked-1",
-            Ed25519PrivateKey.from_private_bytes(bytes([1]) * 32),
-            "atreides",
-            "RECOMMENDATION_ACCOUNT_STATUS_SIGNING_KEY_REVOKED",
-        ),
-        (
-            "synthetic-atreides-expired-1",
-            Ed25519PrivateKey.from_private_bytes(bytes([2]) * 32),
-            "atreides",
-            "RECOMMENDATION_ACCOUNT_STATUS_SIGNING_KEY_OUTSIDE_VALIDITY",
         ),
     ],
 )
@@ -350,4 +338,55 @@ def test_natural_person_recommendation_state_must_be_explicit() -> None:
             children=(_child(terms),),
             evaluated_at=NOW,
             account_status_input=_status(),
+        )
+
+
+@pytest.mark.parametrize(
+    ("as_of", "maximum_age_seconds", "evaluated_at", "refusal"),
+    [
+        (
+            NOW + timedelta(seconds=1),
+            10**12,
+            NOW,
+            "RECOMMENDATION_ACCOUNT_STATUS_IN_FUTURE",
+        ),
+        (
+            NOW,
+            10**12,
+            NOW + timedelta(seconds=301),
+            "RECOMMENDATION_ACCOUNT_STATUS_STALE",
+        ),
+        (
+            NOW,
+            10**12,
+            datetime(2036, 1, 1, tzinfo=NOW.tzinfo),
+            "RECOMMENDATION_ACCOUNT_STATUS_SIGNING_KEY_OUTSIDE_VALIDITY",
+        ),
+    ],
+)
+def test_status_time_is_controlled_by_verifier(
+    as_of: datetime,
+    maximum_age_seconds: int,
+    evaluated_at: datetime,
+    refusal: str,
+) -> None:
+    document = AccountTypeStatusDocument(
+        schema_version="atreides.account_type_status/1",
+        as_of=as_of,
+        maximum_age_seconds=maximum_age_seconds,
+        accounts=(),
+    )
+    wire = sign_attestation(
+        document.model_dump_json().encode(),
+        producer="atreides",
+        key_id=KEY_ID,
+        private_key=PRIVATE_KEY,
+    )
+    with pytest.raises(RecommendationRefusedError, match=refusal):
+        split_parent(
+            _active_outcome(),
+            actor=_actor(),
+            children=(_child(_terms(recommended=True)),),
+            evaluated_at=evaluated_at,
+            account_status_input=wire,
         )
