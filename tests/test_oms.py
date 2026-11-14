@@ -258,7 +258,7 @@ def test_open_order_notional_is_replayed_and_changes_after_cancel() -> None:
         limits=limits(),
         capacity_input=capacity(),
         locates_input=locates(),
-        account_status_input=account_status(AccountStatus.ACTIVE),
+        account_status_input=account_status(AccountStatus.ACTIVE, as_of=NOW),
     )
     assert next(check for check in passed.checks if check.code == "ACCOUNT_CREDIT").passed
 
@@ -841,7 +841,7 @@ def test_replace_reruns_strategy_and_market_access_on_new_terms() -> None:
         limits=limits(),
         capacity_input=capacity(),
         locates_input=locates(),
-        account_status_input=account_status(AccountStatus.ACTIVE),
+        account_status_input=account_status(AccountStatus.ACTIVE, as_of=NOW),
         reference_price=Decimal(100),
         processing_time=NOW,
     )
@@ -889,7 +889,7 @@ def test_replace_order_runs_recommendation_gate() -> None:
         capacity_input=capacity(),
         locates_input=locates(),
         account_status_input=account_status(
-            AccountStatus.ACTIVE, account_type=AccountType.NATURAL_PERSON
+            AccountStatus.ACTIVE, as_of=NOW, account_type=AccountType.NATURAL_PERSON
         ),
         reference_price=Decimal(100),
         processing_time=NOW,
@@ -916,7 +916,7 @@ def test_replace_refuses_valid_signature_from_unpinned_key() -> None:
         document.model_dump_json().encode(),
         producer="atreides",
         key_id="synthetic-unpinned-atreides-1",
-        private_key=Ed25519PrivateKey.from_private_bytes(bytes([3]) * 32),
+        private_key=Ed25519PrivateKey.generate(),
     )
     with pytest.raises(
         RecommendationRefusedError, match="RECOMMENDATION_ACCOUNT_STATUS_SIGNING_KEY_UNKNOWN"
@@ -944,11 +944,11 @@ def test_replace_refuses_valid_signature_from_unpinned_key() -> None:
     ("status_document", "reason"),
     [
         (None, "ACCOUNT_STATUS_DOCUMENT_MISSING"),
-        (account_status(AccountStatus.APPLIED), "ACCOUNT_NOT_ACTIVE:APPLIED"),
-        (account_status(AccountStatus.APPROVED), "ACCOUNT_NOT_ACTIVE:APPROVED"),
-        (account_status(AccountStatus.RESTRICTED), "ACCOUNT_NOT_ACTIVE:RESTRICTED"),
-        (account_status(AccountStatus.FUNDED), "ACCOUNT_NOT_ACTIVE:FUNDED"),
-        (account_status(AccountStatus.CLOSED), "ACCOUNT_NOT_ACTIVE:CLOSED"),
+        (account_status(AccountStatus.APPLIED, as_of=NOW), "ACCOUNT_NOT_ACTIVE:APPLIED"),
+        (account_status(AccountStatus.APPROVED, as_of=NOW), "ACCOUNT_NOT_ACTIVE:APPROVED"),
+        (account_status(AccountStatus.RESTRICTED, as_of=NOW), "ACCOUNT_NOT_ACTIVE:RESTRICTED"),
+        (account_status(AccountStatus.FUNDED, as_of=NOW), "ACCOUNT_NOT_ACTIVE:FUNDED"),
+        (account_status(AccountStatus.CLOSED, as_of=NOW), "ACCOUNT_NOT_ACTIVE:CLOSED"),
         (
             account_status(AccountStatus.ACTIVE, as_of=datetime(2026, 1, 1, tzinfo=UTC)),
             "ACCOUNT_STATUS_DOCUMENT_STALE",
@@ -996,7 +996,7 @@ def test_replace_active_account_status_passes_account_gate() -> None:
         limits=limits(),
         capacity_input=capacity(),
         locates_input=locates(),
-        account_status_input=account_status(AccountStatus.ACTIVE),
+        account_status_input=account_status(AccountStatus.ACTIVE, as_of=NOW),
         reference_price=Decimal(100),
         processing_time=NOW,
     )

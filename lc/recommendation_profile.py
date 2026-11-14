@@ -39,6 +39,10 @@ PROFILE_COMPLETENESS_FIELDS = (
     "liquidity_needs",
     "investment_experience",
 )
+ACCOUNT_STATUS_MAXIMUM_AGE = timedelta(seconds=300)
+SYNTHETIC_SIGNATURE_SCOPE: Literal[
+    "synthetic mode: signatures authenticate within one run only"
+] = "synthetic mode: signatures authenticate within one run only"
 
 
 class RecommendationRefusal(StrEnum):
@@ -46,6 +50,7 @@ class RecommendationRefusal(StrEnum):
     ACCOUNT_STATUS_TAMPERED = "RECOMMENDATION_ACCOUNT_STATUS_TAMPERED"
     ACCOUNT_STATUS_UNREADABLE = "RECOMMENDATION_ACCOUNT_STATUS_UNREADABLE"
     ACCOUNT_STATUS_STALE = "RECOMMENDATION_ACCOUNT_STATUS_STALE"
+    ACCOUNT_STATUS_IN_FUTURE = "RECOMMENDATION_ACCOUNT_STATUS_IN_FUTURE"
     ACCOUNT_STATUS_SIGNING_KEY_UNKNOWN = "RECOMMENDATION_ACCOUNT_STATUS_SIGNING_KEY_UNKNOWN"
     ACCOUNT_STATUS_SIGNING_KEY_REVOKED = "RECOMMENDATION_ACCOUNT_STATUS_SIGNING_KEY_REVOKED"
     ACCOUNT_STATUS_SIGNING_KEY_OUTSIDE_VALIDITY = (
@@ -110,6 +115,9 @@ class AccountTypeStatusDocument(BaseModel):
     as_of: datetime
     maximum_age_seconds: int
     accounts: tuple[AccountTypeStatusEntry, ...]
+    signature_scope: Literal["synthetic mode: signatures authenticate within one run only"] = (
+        SYNTHETIC_SIGNATURE_SCOPE
+    )
 
 
 def read_account_status_document(
@@ -123,7 +131,7 @@ def read_account_status_document(
         anchor, registry = resolve_pinned_anchor(raw, expected_producer="atreides")
         payload = verify_attestation(raw, expected_producer="atreides", registry=registry)
         document = AccountTypeStatusDocument.model_validate_json(payload, strict=True)
-        require_anchor_valid_at(anchor, document.as_of)
+        require_anchor_valid_at(anchor, evaluated_at)
     except TrustAnchorError as exc:
         trust_refusals = {
             TrustAnchorRefusal.UNKNOWN_KEY: (
@@ -155,7 +163,9 @@ def read_account_status_document(
         raise RecommendationRefusedError(attestation_refusals[exc.refusal]) from exc
     except ValidationError as exc:
         raise RecommendationRefusedError(RecommendationRefusal.ACCOUNT_STATUS_UNREADABLE) from exc
-    if evaluated_at - document.as_of > timedelta(seconds=document.maximum_age_seconds):
+    if document.as_of > evaluated_at:
+        raise RecommendationRefusedError(RecommendationRefusal.ACCOUNT_STATUS_IN_FUTURE)
+    if evaluated_at - document.as_of > ACCOUNT_STATUS_MAXIMUM_AGE:
         raise RecommendationRefusedError(RecommendationRefusal.ACCOUNT_STATUS_STALE)
     return document
 

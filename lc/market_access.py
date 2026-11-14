@@ -102,7 +102,6 @@ class LimitsManifest(_Record):
     duplicate_window_seconds: int = Field(gt=0)
     restricted_issues: tuple[str, ...] = ()
     halted_issues: tuple[str, ...] = ()
-    restricted_accounts: tuple[str, ...] = ()
 
 
 class LimitChange(_Record):
