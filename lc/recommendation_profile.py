@@ -115,9 +115,9 @@ class AccountTypeStatusDocument(BaseModel):
     as_of: datetime
     maximum_age_seconds: int
     accounts: tuple[AccountTypeStatusEntry, ...]
-    signature_scope: Literal[
-        "synthetic mode: signatures authenticate within one run only"
-    ] = SYNTHETIC_SIGNATURE_SCOPE
+    signature_scope: Literal["synthetic mode: signatures authenticate within one run only"] = (
+        SYNTHETIC_SIGNATURE_SCOPE
+    )
 
 
 def read_account_status_document(

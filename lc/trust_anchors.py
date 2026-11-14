@@ -112,8 +112,7 @@ def resolve_pinned_anchor(
     deployment_anchor = load_trust_anchors().get(envelope.key_id)
     anchor = (
         _runtime_state.anchor
-        if _runtime_state.anchor is not None
-        and _runtime_state.anchor.key_id == envelope.key_id
+        if _runtime_state.anchor is not None and _runtime_state.anchor.key_id == envelope.key_id
         else deployment_anchor
     )
     if anchor is None:
