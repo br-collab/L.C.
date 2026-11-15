@@ -194,7 +194,6 @@ class ChildRelease(_Record):
     sell_mark: SellMark | None = None
     locate_id: str | None = None
     submitted_at: datetime
-    first_trade: bool = False
 
 
 class MarketAccessDecision(_Record):
@@ -261,6 +260,12 @@ class MarketAccessGate:
         snapshot = replay(order.lifecycle_register.events)
         if order_id not in snapshot.orders:
             raise ValueError("sealed order event is not in the lifecycle register")
+        first_account_order = not any(
+            item_id != order_id
+            and item.terms is not None
+            and item.terms.account_id == terms.account_id
+            for item_id, item in snapshot.orders.items()
+        )
         live = {
             LifecycleState.PARENT_ACTIVE,
             LifecycleState.MARKET_ACCESS_PASSED,
@@ -342,14 +347,14 @@ class MarketAccessGate:
         )
         if status_document is not None and account_status is None:
             status_reason = "ACCOUNT_STATUS_UNKNOWN"
-        elif account_status is AccountStatus.FUNDED and order.first_trade:
+        elif account_status is AccountStatus.FUNDED and first_account_order:
             status_reason = "OK_FIRST_TRADE_FROM_FUNDED"
         elif account_status is not None and account_status is not AccountStatus.ACTIVE:
             status_reason = f"ACCOUNT_NOT_ACTIVE:{account_status.value}"
         elif account_status is AccountStatus.ACTIVE:
             status_reason = "OK"
         account_releasable = account_status is AccountStatus.ACTIVE or (
-            account_status is AccountStatus.FUNDED and order.first_trade
+            account_status is AccountStatus.FUNDED and first_account_order
         )
         check("ACCOUNT_STATUS", account_releasable, status_reason)
 
