@@ -49,6 +49,7 @@ from cop.demo import (
 from cop.escalations import HttpxEscalationClient
 from cop.exceptions import PublishedBreakExceptionSource
 from cop.github import HttpxGitHubClient
+from cop.golden_path import load_golden_path
 from cop.layer_clock import HttpxLayerClockClient
 from cop.lifecycle import HttpxLifecycleClient
 from cop.observation import NOT_CONFIGURED, Observation
@@ -517,6 +518,7 @@ def create_app(  # noqa: PLR0915 - route definitions read best in one place
             active_section=active_section,
             exception_filter=exception_filter,
             selected_exception=selected_exception,
+            golden=load_golden_path(state.settings.golden_path_file),
         )
 
     @app.get("/")

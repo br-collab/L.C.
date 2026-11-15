@@ -5,7 +5,6 @@ from __future__ import annotations
 import fnmatch
 import re
 import tomllib
-from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -103,35 +102,9 @@ def test_packaged_program_file_is_valid() -> None:
     assert program.waves[0].status == "DONE" and program.waves[3].status == "DONE"
 
 
-def _assert_program_as_of_is_current(program: Program) -> None:
-    evidence = [
-        identifier
-        for item in (*program.waves, *program.other_work)
-        for identifier in (
-            *item.evidence,
-            *(entry for package in item.packages for entry in package.evidence),
-        )
-    ]
-    evidence_dates = [
-        date.fromisoformat(match.group())
-        for identifier in evidence
-        if (match := re.search(r"\d{4}-\d{2}-\d{2}", identifier))
-    ]
-    assert evidence_dates, "at least one evidence identifier must carry its observation date"
-    newest_evidence = max(evidence_dates)
-    assert newest_evidence >= program.as_of
-    assert (newest_evidence - program.as_of).days <= 2
-
-
-def test_program_as_of_tracks_its_newest_dated_evidence() -> None:
-    _assert_program_as_of_is_current(load_program(PROGRAM_FILE))
-
-
-def test_program_as_of_backdated_three_days_fails_the_freshness_check() -> None:
-    program = load_program(PROGRAM_FILE)
-    backdated = program.model_copy(update={"as_of": program.as_of - timedelta(days=3)})
-    with pytest.raises(AssertionError):
-        _assert_program_as_of_is_current(backdated)
+def test_program_does_not_publish_a_hand_maintained_as_of_date() -> None:
+    assert "as_of:" not in PROGRAM_FILE.read_text(encoding="utf-8")
+    assert "as_of" not in Program.model_fields
 
 
 def _write(tmp_path: Path, text: str) -> Path:
