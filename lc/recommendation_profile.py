@@ -191,6 +191,7 @@ def enforce_recommendation_profile(
     resolver: RecommendationProfileResolver | None,
     evaluated_at: datetime | None,
     account_status_input: bytes | None,
+    profile_maximum_age_seconds: int,
 ) -> None:
     if terms.recommended is False:
         return
@@ -214,5 +215,7 @@ def enforce_recommendation_profile(
         raise RecommendationRefusedError(RecommendationRefusal.PROFILE_ACCOUNT_MISMATCH)
     if not profile.complete:
         raise RecommendationRefusedError(RecommendationRefusal.PROFILE_INCOMPLETE)
-    if (evaluated_at - profile.verified_at).total_seconds() > profile.maximum_age_seconds:
+    if profile_maximum_age_seconds <= 0:
+        raise ValueError("profile maximum age must be positive")
+    if (evaluated_at - profile.verified_at).total_seconds() > profile_maximum_age_seconds:
         raise RecommendationRefusedError(RecommendationRefusal.PROFILE_STALE)

@@ -76,6 +76,7 @@ def _resolver(
     complete: bool = True,
     verified_at: datetime = NOW,
     account_id: str = "SYN-ACCOUNT-RETAIL1",
+    maximum_age_seconds: int = 300,
 ) -> MappingRecommendationProfileResolver:
     return MappingRecommendationProfileResolver(
         {
@@ -93,7 +94,7 @@ def _resolver(
                 liquidity_needs="SYNTHETIC_LOW",
                 investment_experience=("SYNTHETIC_EQUITIES",),
                 verified_at=verified_at,
-                maximum_age_seconds=300,
+                maximum_age_seconds=maximum_age_seconds,
                 source="SYNTHETIC_ATREIDES_PROFILE",
             )
         }
@@ -127,6 +128,21 @@ def test_recommended_retail_order_with_missing_profile_is_refused_by_name() -> N
             recommendation_profile_resolver=_resolver(),
             evaluated_at=NOW,
             account_status_input=_status(),
+        )
+
+
+def test_consumer_profile_age_overrides_producer_claim() -> None:
+    with pytest.raises(RecommendationRefusedError, match="RECOMMENDATION_PROFILE_STALE"):
+        split_parent(
+            _active_outcome(),
+            actor=_actor(),
+            children=(_child(_terms(recommended=True)),),
+            recommendation_profile_resolver=_resolver(
+                verified_at=NOW - timedelta(seconds=301), maximum_age_seconds=10**12
+            ),
+            evaluated_at=NOW,
+            account_status_input=_status(),
+            profile_maximum_age_seconds=300,
         )
 
 

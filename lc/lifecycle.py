@@ -276,6 +276,7 @@ def accept_intent(  # noqa: PLR0913 - every gate input is explicit evidence
     recommendation_profile_resolver: RecommendationProfileResolver | None = None,
     account_status_input: bytes | None = None,
     evaluated_at: datetime | None = None,
+    profile_maximum_age_seconds: int = 300,
 ) -> IntentOutcome:
     """Verify exact received bytes before parsing and checking their manifests."""
     received_digest = digest_bytes(payload_bytes)
@@ -307,6 +308,7 @@ def accept_intent(  # noqa: PLR0913 - every gate input is explicit evidence
             resolver=recommendation_profile_resolver,
             evaluated_at=evaluated_at,
             account_status_input=account_status_input,
+            profile_maximum_age_seconds=profile_maximum_age_seconds,
         )
     state = LifecycleState.REFUSED if failed else LifecycleState.INTENT_ACCEPTED
     reason = failed[1] if failed else "payload, policy manifest and authority manifest verified"
@@ -402,6 +404,7 @@ def split_parent(  # noqa: PLR0913 - every gate input is explicit evidence
     recommendation_profile_resolver: RecommendationProfileResolver | None = None,
     evaluated_at: datetime | None = None,
     account_status_input: bytes | None = None,
+    profile_maximum_age_seconds: int = 300,
 ) -> IntentOutcome:
     """Record a conserved parent-to-child split, or refuse before appending anything."""
     if outcome.refusal is not None:
@@ -421,6 +424,7 @@ def split_parent(  # noqa: PLR0913 - every gate input is explicit evidence
             resolver=recommendation_profile_resolver,
             evaluated_at=evaluated_at,
             account_status_input=account_status_input,
+            profile_maximum_age_seconds=profile_maximum_age_seconds,
         )
     register = outcome.journal
     for child in children:
