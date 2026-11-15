@@ -176,6 +176,7 @@ def replace_order(  # noqa: PLR0913 - every control input remains explicit evide
     reference_price: Decimal,
     processing_time: datetime,
     recommendation_profile_resolver: RecommendationProfileResolver | None = None,
+    profile_maximum_age_seconds: int = 300,
     halts: tuple[FirmHalt, ...] = (),
 ) -> ReplacementOutcome:
     enforce_recommendation_profile(
@@ -183,6 +184,7 @@ def replace_order(  # noqa: PLR0913 - every control input remains explicit evide
         resolver=recommendation_profile_resolver,
         evaluated_at=processing_time,
         account_status_input=account_status_input,
+        profile_maximum_age_seconds=profile_maximum_age_seconds,
     )
     replaced = _transition_with_terms(
         register,
