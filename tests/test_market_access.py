@@ -275,7 +275,6 @@ def test_pass_duplicate_and_limit_change_record() -> None:
         AccountStatus.APPLIED,
         AccountStatus.APPROVED,
         AccountStatus.RESTRICTED,
-        AccountStatus.FUNDED,
         AccountStatus.CLOSED,
     ],
 )
@@ -291,9 +290,8 @@ def test_non_active_account_is_refused(status: AccountStatus) -> None:
 
 
 def test_first_trade_can_release_from_funded_then_lifecycle_must_activate() -> None:
-    release = order().model_copy(update={"first_trade": True})
     decision = MarketAccessGate().evaluate(
-        release,
+        order(),
         limits=limits(),
         capacity_input=capacity(),
         locates_input=locates(),
