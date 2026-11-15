@@ -77,7 +77,10 @@ def _terms(**changes: object) -> OrderTerms:
 
 
 def _register(
-    *, quantity: Decimal = Decimal(100), terms: OrderTerms | None = None
+    *,
+    quantity: Decimal = Decimal(100),
+    terms: OrderTerms | None = None,
+    termless: bool = False,
 ) -> LifecycleRegister:
     event = seal_order_event(
         event_id=EventId(_id("evt_", 80)),
@@ -94,7 +97,7 @@ def _register(
             state=LifecycleState.PARENT_ACTIVE,
             reason="sealed OMS order",
             quantity=Recorded(value=quantity),
-            terms=terms or _terms(),
+            terms=None if termless else terms or _terms(),
         ),
         prior_event_digest=None,
     )
@@ -348,7 +351,7 @@ def test_live_order_without_terms_refuses_credit_and_names_order() -> None:
 
 
 def test_split_parent_without_terms_is_not_a_second_street_order() -> None:
-    register = _register(quantity=Decimal(1), terms=None)
+    register = _register(quantity=Decimal(1), termless=True)
     parent_id = OrderId(_id("ord_", 80))
     register, candidate = _append_order(
         register,
