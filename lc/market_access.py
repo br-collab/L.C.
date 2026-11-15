@@ -268,8 +268,17 @@ class MarketAccessGate:
         firm_open_order_notional = Decimal(0)
         account_open_order_notional = Decimal(0)
         termless_live_orders: list[str] = []
+        split_parent_ids = {
+            item.parent_order_id
+            for item in snapshot.orders.values()
+            if item.parent_order_id is not None
+        }
         for item_id, item in snapshot.orders.items():
             if item_id == order_id or item.state not in live:
+                continue
+            # A split parent carries conserved quantity but is not independently
+            # releasable. Its children carry the sealed street-order terms.
+            if item_id in split_parent_ids:
                 continue
             if item.terms is None:
                 termless_live_orders.append(str(item_id))
