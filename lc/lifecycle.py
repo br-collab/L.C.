@@ -79,6 +79,7 @@ class ApprovedIntentPayload(_Record):
     policy_manifest: PolicyManifest
     authority_manifest: AuthorityManifest
     allocation_accounts: tuple[str, ...]
+    source_event_id: str | None = Field(default=None, min_length=1)
 
     @model_validator(mode="after")
     def _allocation_intent_is_explicit(self) -> Self:
