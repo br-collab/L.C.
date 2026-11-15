@@ -194,6 +194,7 @@ class ChildRelease(_Record):
     sell_mark: SellMark | None = None
     locate_id: str | None = None
     submitted_at: datetime
+    first_trade: bool = False
 
 
 class MarketAccessDecision(_Record):
@@ -341,11 +342,16 @@ class MarketAccessGate:
         )
         if status_document is not None and account_status is None:
             status_reason = "ACCOUNT_STATUS_UNKNOWN"
+        elif account_status is AccountStatus.FUNDED and order.first_trade:
+            status_reason = "OK_FIRST_TRADE_FROM_FUNDED"
         elif account_status is not None and account_status is not AccountStatus.ACTIVE:
             status_reason = f"ACCOUNT_NOT_ACTIVE:{account_status.value}"
         elif account_status is AccountStatus.ACTIVE:
             status_reason = "OK"
-        check("ACCOUNT_STATUS", account_status is AccountStatus.ACTIVE, status_reason)
+        account_releasable = account_status is AccountStatus.ACTIVE or (
+            account_status is AccountStatus.FUNDED and order.first_trade
+        )
+        check("ACCOUNT_STATUS", account_releasable, status_reason)
 
         check(
             "OPEN_ORDER_TERMS",
@@ -398,7 +404,7 @@ class MarketAccessGate:
         check("TRADING_HALT", terms.issue not in limits.halted_issues, "TRADING_HALT")
         check(
             "ACCOUNT_RESTRICTION",
-            account_status is AccountStatus.ACTIVE,
+            account_releasable,
             status_reason,
         )
         active_halt = next(
