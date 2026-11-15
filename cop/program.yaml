@@ -10,8 +10,6 @@
 # Owners: Bill, Claude Code, Cowork.
 
 schema_version: 1
-as_of: 2026-10-22
-
 waves:
   - number: 0
     id: W0
