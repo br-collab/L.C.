@@ -181,6 +181,7 @@ def _public_problems(env: Mapping[str, str]) -> list[str]:
         ENV_ESCALATIONS_URL,
         ENV_LC_LAYER_CLOCK_URL,
         ENV_LIFECYCLE_BASE_URL,
+        ENV_GOLDEN_PATH_FILE,
     )
     for name in public_feed_variables:
         if _non_empty(env, name) is not None:
