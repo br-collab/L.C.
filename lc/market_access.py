@@ -261,10 +261,10 @@ class MarketAccessGate:
         if order_id not in snapshot.orders:
             raise ValueError("sealed order event is not in the lifecycle register")
         first_account_order = not any(
-            item_id != order_id
-            and item.terms is not None
-            and item.terms.account_id == terms.account_id
-            for item_id, item in snapshot.orders.items()
+            event.envelope_digest != order.order_event.envelope_digest
+            and event.payload.terms is not None
+            and event.payload.terms.account_id == terms.account_id
+            for event in order.lifecycle_register.events
         )
         live = {
             LifecycleState.PARENT_ACTIVE,
