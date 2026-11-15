@@ -108,7 +108,12 @@ def _tampered_account_status() -> bytes:
 
 
 def _append_order(
-    register: LifecycleRegister, *, number: int, quantity: Decimal, terms: OrderTerms | None
+    register: LifecycleRegister,
+    *,
+    number: int,
+    quantity: Decimal,
+    terms: OrderTerms | None,
+    parent_order_id: OrderId | None = None,
 ) -> tuple[LifecycleRegister, OrderEvent]:
     event = seal_order_event(
         event_id=EventId(_id("evt_", number)),
@@ -120,7 +125,7 @@ def _append_order(
         idempotency_key=f"oms1-{number}",
         payload=OrderEventPayload(
             order_id=OrderId(_id("ord_", number)),
-            parent_order_id=None,
+            parent_order_id=parent_order_id,
             intent_id=IntentId(_id("int_", number)),
             state=LifecycleState.PARENT_ACTIVE,
             reason="sealed OMS order",
@@ -340,6 +345,31 @@ def test_live_order_without_terms_refuses_credit_and_names_order() -> None:
     assert check.passed is False
     assert str(OrderId(_id("ord_", 81))) in check.reason
     assert decision.disposition.value == "HOLD"
+
+
+def test_split_parent_without_terms_is_not_a_second_street_order() -> None:
+    register = _register(quantity=Decimal(1), terms=None)
+    parent_id = OrderId(_id("ord_", 80))
+    register, candidate = _append_order(
+        register,
+        number=81,
+        quantity=Decimal(1),
+        terms=_terms(account_id="A"),
+        parent_order_id=parent_id,
+    )
+    decision = MarketAccessGate().evaluate(
+        ChildRelease(
+            order_event=candidate,
+            lifecycle_register=register,
+            reference_price=Decimal(100),
+            submitted_at=NOW,
+        ),
+        limits=limits(),
+        capacity_input=capacity(),
+        locates_input=locates(),
+        account_status_input=account_status(),
+    )
+    assert next(item for item in decision.checks if item.code == "OPEN_ORDER_TERMS").passed
 
 
 def _capture_economics(record: CaptureRecord, **changes: object) -> CaptureRecord:
