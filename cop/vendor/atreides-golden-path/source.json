@@ -1,6 +1,7 @@
 {
   "repository": "br-collab/Project-Atreides",
-  "commit": "ead38fe1513daced386de9221d239080a0b97c3d",
-  "source_path": "simulator/publication/mvp5b-closure-2026-11-17/evidence-pack.json",
-  "vendored_path": "cop/vendor/atreides-golden-path/evidence-pack.json"
+  "commit": "dd5da18874714440137c5bd07b2cd17a673e5503",
+  "source_path": "simulator/publication/mvp5c-closure-2026-11-18/evidence-pack.json",
+  "vendored_path": "cop/vendor/atreides-golden-path/evidence-pack.json",
+  "sha256": "22c2faaebff90f8298565ec530bce52d02d8089c26e5003bee54bc8939a6d7ae"
 }

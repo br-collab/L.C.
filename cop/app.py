@@ -49,7 +49,7 @@ from cop.demo import (
 from cop.escalations import HttpxEscalationClient
 from cop.exceptions import PublishedBreakExceptionSource
 from cop.github import HttpxGitHubClient
-from cop.golden_path import load_golden_path
+from cop.golden_path import golden_path_health, load_golden_path
 from cop.layer_clock import HttpxLayerClockClient
 from cop.lifecycle import HttpxLifecycleClient
 from cop.observation import NOT_CONFIGURED, Observation
@@ -423,14 +423,7 @@ def create_app(  # noqa: PLR0915 - route definitions read best in one place
             refresher="running" if state.refresher.running else "idle",
             sources={
                 "program": _health_source([snapshot.program], now),
-                "golden-path": {
-                    "state": (
-                        "configured"
-                        if state.settings.golden_path_file is not None
-                        else "not_configured"
-                    ),
-                    "variable": "ATREIDES_GOLDEN_PATH_FILE",
-                },
+                "golden-path": golden_path_health(state.settings.golden_path_file),
                 "github": _health_source(github_observations, now),
                 "aureon-snapshot": _health_source([snapshot.aureon.snapshot], now),
                 "cash-leg": _health_source([snapshot.cash_leg.cash_leg], now),

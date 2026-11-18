@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from hashlib import sha256
 from pathlib import Path
 
 from cop_fakes import GOOD_ENV, Rig, login
@@ -14,33 +15,34 @@ def _pack(tmp_path: Path, *, disposition: str = "PASS", invariant: bool = True) 
     folder = tmp_path / "mvp4-client-reporting-2026-11-15-v2"
     folder.mkdir()
     path = folder / "evidence-pack.json"
-    path.write_text(
-        json.dumps(
-            {
-                "disposition": disposition,
-                "account_status": "ACTIVE",
-                "close_report": "NORMAL_CLOSE",
-                "invariants": {"stock_record": invariant},
-                "engine_dispositions": {"street_reconciliation": disposition},
-                "early_warning_notices": [{"paragraph": "17a-11", "status": "DRAFT"}],
-                "exception_owner": None,
-                "exception_age_seconds": None,
-                "evidence": [
-                    {
-                        "event_id": "evt_1",
-                        "producer": "Atreides",
-                        "signature_status": "VERIFIED",
-                        "actor_kind": "HUMAN",
-                        "summary": "account approved",
-                    }
-                ],
-                "statement": {
-                    "closing_cash": "10000.00",
-                    "closing_positions": {"SYN-EQUITY": "10"},
-                },
-            }
-        ),
-        encoding="utf-8",
+    pack = json.dumps(
+        {
+            "disposition": disposition,
+            "account_status": "ACTIVE",
+            "close_report": "NORMAL_CLOSE",
+            "invariants": {"stock_record": invariant},
+            "engine_dispositions": {"street_reconciliation": disposition},
+            "early_warning_notices": [{"paragraph": "17a-11", "status": "DRAFT"}],
+            "exception_owner": None,
+            "exception_age_seconds": None,
+            "evidence": [
+                {
+                    "event_id": "evt_1",
+                    "producer": "Atreides",
+                    "signature_status": "VERIFIED",
+                    "actor_kind": "HUMAN",
+                    "summary": "account approved",
+                }
+            ],
+            "statement": {
+                "closing_cash": "10000.00",
+                "closing_positions": {"SYN-EQUITY": "10"},
+            },
+        }
+    )
+    path.write_text(pack, encoding="utf-8")
+    (folder / "source.json").write_text(
+        json.dumps({"sha256": sha256(pack.encode()).hexdigest()}), encoding="utf-8"
     )
     return path
 
@@ -63,6 +65,20 @@ def test_engine_and_invariant_disagreement_is_a_failure(tmp_path: Path) -> None:
     view = load_golden_path(_pack(tmp_path, disposition="PASS", invariant=False))
     assert view is not None
     assert view.invariants == (("stock_record", False, "PASS", False),)
+
+
+def test_one_byte_pack_change_fails_closed_with_named_health_reason(tmp_path: Path) -> None:
+    path = _pack(tmp_path)
+    path.write_bytes(path.read_bytes() + b" ")
+    rig = Rig()
+    rig.refresher.refresh_once()
+    health = (
+        rig.app_client({**GOOD_ENV, "ATREIDES_GOLDEN_PATH_FILE": str(path)})
+        .get("/healthz")
+        .get_json()["sources"]["golden-path"]
+    )
+    assert health["state"] == "not_configured"
+    assert health["reason"].startswith("sha256 mismatch:")
 
 
 def test_operator_sections_render_pack_and_absence(tmp_path: Path) -> None:

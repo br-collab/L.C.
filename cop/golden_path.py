@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
@@ -24,12 +25,40 @@ class GoldenPath:
     closing_positions: dict[str, str]
 
 
+@dataclass(frozen=True)
+class GoldenPathLoad:
+    value: GoldenPath | None
+    reason: str | None
+
+
+def golden_path_health(path: Path | None) -> dict[str, str]:
+    """Report whether the configured pack is readable and digest-pinned."""
+    base = {"variable": "ATREIDES_GOLDEN_PATH_FILE"}
+    if path is None:
+        return {"state": "not_configured", **base}
+    loaded = load_golden_path_result(path)
+    if loaded.value is not None:
+        return {"state": "configured", **base}
+    return {"state": "not_configured", "reason": loaded.reason or "unreadable", **base}
+
+
 def load_golden_path(path: Path | None) -> GoldenPath | None:
     """Return validated display data, or ``None`` when no readable source exists."""
+    return load_golden_path_result(path).value
+
+
+def load_golden_path_result(path: Path | None) -> GoldenPathLoad:
+    """Return validated display data plus a named fail-closed reason."""
     if path is None:
-        return None
+        return GoldenPathLoad(None, "ATREIDES_GOLDEN_PATH_FILE is not set")
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
+        pack_bytes = path.read_bytes()
+        source = json.loads(path.with_name("source.json").read_text(encoding="utf-8"))
+        expected = str(source["sha256"])
+        actual = sha256(pack_bytes).hexdigest()
+        if actual != expected:
+            return GoldenPathLoad(None, f"sha256 mismatch: expected {expected}, observed {actual}")
+        raw = json.loads(pack_bytes)
         disposition = str(raw["disposition"])
         engine_dispositions = {
             str(name): str(value) for name, value in raw["engine_dispositions"].items()
@@ -55,19 +84,26 @@ def load_golden_path(path: Path | None) -> GoldenPath | None:
             for name, value in raw["invariants"].items()
         )
         statement = raw["statement"]
-        return GoldenPath(
-            run_id=path.parent.name,
-            disposition=disposition,
-            account_status=str(raw["account_status"]),
-            close_report=str(raw["close_report"]),
-            evidence=tuple(raw["evidence"]),
-            invariants=invariants,
-            engine_dispositions=engine_dispositions,
-            early_warning_notices=tuple(raw.get("early_warning_notices", ())),
-            exception_owner=raw.get("exception_owner"),
-            exception_age_seconds=raw.get("exception_age_seconds"),
-            closing_cash=str(statement["closing_cash"]),
-            closing_positions={str(k): str(v) for k, v in statement["closing_positions"].items()},
+        return GoldenPathLoad(
+            GoldenPath(
+                run_id=path.parent.name,
+                disposition=disposition,
+                account_status=str(raw["account_status"]),
+                close_report=str(raw["close_report"]),
+                evidence=tuple(raw["evidence"]),
+                invariants=invariants,
+                engine_dispositions=engine_dispositions,
+                early_warning_notices=tuple(raw.get("early_warning_notices", ())),
+                exception_owner=raw.get("exception_owner"),
+                exception_age_seconds=raw.get("exception_age_seconds"),
+                closing_cash=str(statement["closing_cash"]),
+                closing_positions={
+                    str(k): str(v) for k, v in statement["closing_positions"].items()
+                },
+            ),
+            None,
         )
-    except (OSError, ValueError, KeyError, TypeError):
-        return None
+    except FileNotFoundError:
+        return GoldenPathLoad(None, "pack or source.json is missing")
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return GoldenPathLoad(None, f"unreadable pack metadata: {type(exc).__name__}")

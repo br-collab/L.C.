@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.1 - 18 Nov 2026
+
+Pin the MVP-5C Atreides evidence pack by SHA-256 and make the Common Operating Picture refuse
+modified pack bytes with a named health reason. Refresh the sibling integration pins for the
+MVP-5C aureon and Atreides closures.
+
 ## 1.0.0 - 17 Nov 2026
 
 Close the declared-synthetic retail minimum viable product from MVP-0 through MVP-5B. The Common
