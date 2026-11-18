@@ -122,8 +122,8 @@ from lc.trade import (
     record_match,
 )
 
-AUREON_COMMIT = "b22ed26050021468b5cd9a638636a2828c2afd54"
-ATREIDES_COMMIT = "123ce5a33a37f60cc40a7a436c4a7f993334331e"
+AUREON_COMMIT = "6ad72c1c75c25a04f575a31dac0dbd5515687021"
+ATREIDES_COMMIT = "ead38fe1513daced386de9221d239080a0b97c3d"
 AT = datetime(2026, 9, 29, 15, 0, tzinfo=UTC)
 
 

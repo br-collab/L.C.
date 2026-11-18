@@ -147,8 +147,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: br-collab/aureon
-          # Ancestry verified against aureon/main after PR #56 deployed.
-          ref: 3e90f72a1ffa177045d4e4f3e7f9770689e037f1
+          # MVP-5B closure: Aureon #146 merge commit on main.
+          ref: 6ad72c1c75c25a04f575a31dac0dbd5515687021
           path: .handoff/aureon
 
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
@@ -183,8 +183,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: br-collab/aureon
-          # FIX-7 verified this commit is on aureon/main.
-          ref: b22ed26050021468b5cd9a638636a2828c2afd54
+          # MVP-5B closure: Aureon #146 merge commit on main.
+          ref: 6ad72c1c75c25a04f575a31dac0dbd5515687021
           path: .slice1/aureon
 
       - name: Check out ancestry-verified Atreides
