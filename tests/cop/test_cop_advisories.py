@@ -138,6 +138,6 @@ def test_cross_domain_job_pins_and_exercises_the_advisory_producer() -> None:
     seam = Path("tests/test_atreides_handoff.py").read_text()
     # MVP-5B Part 10: the handoff job pins the current merged Atreides closure,
     # which still carries the advisory producer this seam exercises.
-    assert "5a102538b575a0d11f1e3cc57980ee2a33ede168" in workflow
+    assert "e5fadaa7966d3f596f10996eca7dfa0742c05f4f" in workflow
     assert "publication_bytes" in seam
     assert "parse_publication" in seam

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.1 - 18 Nov 2026
+
+Vendor the final PS-1B closure pack from Atreides merge
+`e5fadaa7966d3f596f10996eca7dfa0742c05f4f`, including instruction-sourced reconciliation,
+stored KYC-chain replay, pinned tax decisions, explicit account-treatment verification rows, and
+customer-side position facts from the furnished confirmation. Pin the vendored bytes by SHA-256
+and retain the six control-derived public Common Operating Picture rows.
+
 ## 1.1.0 - 18 Nov 2026
 
 Vendor the PS-1 dated-books golden pack, show all six reconciliation outcomes, derive public COP
