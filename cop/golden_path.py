@@ -23,6 +23,7 @@ class GoldenPath:
     exception_age_seconds: int | None
     closing_cash: str
     closing_positions: dict[str, str]
+    reconciliation_calendar: tuple[dict[str, Any], ...]
 
 
 @dataclass(frozen=True)
@@ -86,7 +87,7 @@ def load_golden_path_result(path: Path | None) -> GoldenPathLoad:
         statement = raw["statement"]
         return GoldenPathLoad(
             GoldenPath(
-                run_id=path.parent.name,
+                run_id=str(raw["run_id"]),
                 disposition=disposition,
                 account_status=str(raw["account_status"]),
                 close_report=str(raw["close_report"]),
@@ -100,6 +101,7 @@ def load_golden_path_result(path: Path | None) -> GoldenPathLoad:
                 closing_positions={
                     str(k): str(v) for k, v in statement["closing_positions"].items()
                 },
+                reconciliation_calendar=tuple(raw.get("reconciliation_calendar", ())),
             ),
             None,
         )

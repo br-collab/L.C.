@@ -1,6 +1,6 @@
 [project]
 name = "legiones-cannenses"
-version = "1.0.1"
+version = "1.1.0"
 description = "Legiones Cannenses (L.C.) — the synthetic middle layer of Project Cannae Legion"
 authors = [{name = "Guillermo Ravelo"}]
 readme = "README.md"

@@ -1,7 +1,7 @@
 {
   "repository": "br-collab/Project-Atreides",
-  "commit": "dd5da18874714440137c5bd07b2cd17a673e5503",
-  "source_path": "simulator/publication/mvp5c-closure-2026-11-18/evidence-pack.json",
+  "commit": "8edb065621344281a5e695ad666b27382ec08c83",
+  "source_path": "simulator/publication/ps1-books-on-right-date-2026-11-18/evidence-pack.json",
   "vendored_path": "cop/vendor/atreides-golden-path/evidence-pack.json",
-  "sha256": "22c2faaebff90f8298565ec530bce52d02d8089c26e5003bee54bc8939a6d7ae"
+  "sha256": "0ebb40692302815b703597ba61b398c0a3139d1c066aa7e01f42d9416b2f4628"
 }
