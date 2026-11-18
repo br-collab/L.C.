@@ -242,7 +242,7 @@ def test_routes_never_call_sources() -> None:
     github_calls, aureon_calls = len(rig.github.calls), rig.aureon.calls
     client = rig.app_client()
     login(client)
-    for path in ("/", "/panel/waves", "/panel/repositories", "/panel/aureon", "/healthz"):
+    for path in ("/", "/panel/repositories", "/panel/aureon", "/healthz"):
         assert client.get(path).status_code == 200
     assert len(rig.github.calls) == github_calls
     assert rig.aureon.calls == aureon_calls

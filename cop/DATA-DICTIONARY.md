@@ -97,7 +97,7 @@ listed kernel disposition rule.
 | **Controls & compliance** | Worst `Disposition` of recorded control results. No test evidence is `INDETERMINATE` | `controls`, relevant `github` control-test runs | Hatched `Absent` when no control inventory is published; missing evidence is never passing |
 | **Risk limits** | Worst `Disposition` of `Recorded` exposure and `Recorded` limit; utilisation bands are policy results at 80%, 90% and 100% | `limits`, `cash-leg` | Hatched `Absent` until limit definitions publish; exposure alone cannot produce utilisation |
 | **Agents** | `AgentsSnapshot.disposition`, itself kernel `Disposition`; supporting text is recorded running/total count | `agents` | Hatched `Absent` when not configured; `INDETERMINATE` when configured but unreadable or stale |
-| **Programme** | Worst `Disposition` of program status, repository main CI, scheduled checks, deploy drift and source freshness | `program`, `github`, `aureon-snapshot` | `INDETERMINATE` for an unread source; never green from the remaining subset |
+| **Programme** | Worst `Disposition` of repository main CI, scheduled checks, deploy drift and operating-source freshness; hand-maintained program statuses are excluded | `github`, `aureon-snapshot` | `INDETERMINATE` for an unread operating source; never green from the remaining subset |
 | **Blind spots** | Each entry is `Absent` evidence or a source/layer/contract limitation; count is `Recorded[int]` and is invariantly greater than zero | Computed from every source above plus the maintained contract-gap list | The rail item itself remains visible. Failure to compute the list is `INDETERMINATE`, never zero |
 
 ## Clock strip
@@ -178,7 +178,7 @@ no qualifying producer, not that the value is zero or passing.
 
 | Panel and rendered field or badge | Type or rule | Real source, or Absent |
 |---|---|---|
-| **Banner — overall program state badge and reasons** | Worst current kernel `Disposition` across main CI, scheduled checks, Aureon snapshot/drift/pending-drop evidence, blocked work, agent activation and source freshness | `program`, `github`, `aureon-snapshot`, `agents`; `INDETERMINATE` when any required input is unreadable |
+| **Banner — overall program state badge and reasons** | Worst current kernel `Disposition` across main CI, scheduled checks, Aureon snapshot/drift/pending-drop evidence, agent activation and operating-source freshness; hand-maintained work status is excluded | `github`, `aureon-snapshot`, `agents`; `INDETERMINATE` when any required operating input is unreadable |
 | **Banner — last clean refresh, last attempt, page rendered, refresh interval** | COP observation datetimes and configured interval; never domain `EventTimes` | Legate refresher and settings; last clean refresh is `Absent` until one clean refresh completes |
 | **Now — needs you, changed, stale clocks/feeds** | Overall reasons; exception-source badge; source freshness | Same inputs as Banner, plus `breaks`, `c2-escalations`, `holds`, `dsor`; change history is `Absent` without a producer |
 | **Wave board — wave/work identifier, name, status, packages, evidence, next action and owner** | Versioned programme records; status badge uses the declared work status, not a domain disposition | `program` (`cop/program.yaml`) |

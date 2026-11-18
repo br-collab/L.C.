@@ -15,7 +15,9 @@ class GoldenPath:
     account_status: str
     close_report: str
     evidence: tuple[dict[str, Any], ...]
-    invariants: tuple[tuple[str, bool, bool], ...]
+    invariants: tuple[tuple[str, bool, str, bool], ...]
+    engine_dispositions: dict[str, str]
+    early_warning_notices: tuple[dict[str, str], ...]
     exception_owner: str | None
     exception_age_seconds: int | None
     closing_cash: str
@@ -29,8 +31,27 @@ def load_golden_path(path: Path | None) -> GoldenPath | None:
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
         disposition = str(raw["disposition"])
+        engine_dispositions = {
+            str(name): str(value) for name, value in raw["engine_dispositions"].items()
+        }
+        engine_for_invariant = {
+            "reserve": "reserve",
+            "pab_reserve": "pab_reserve",
+            "net_capital": "net_capital",
+            "possession_or_control": "possession_or_control",
+            "stock_record": "street_reconciliation",
+            "street_reconciliation": "street_reconciliation",
+            "settlement_two_sided": "street_reconciliation",
+        }
         invariants = tuple(
-            (str(name), bool(value), (bool(value) and disposition == "PASS"))
+            (
+                str(name),
+                bool(value),
+                engine_dispositions.get(engine_for_invariant.get(str(name), ""), disposition),
+                bool(value)
+                and engine_dispositions.get(engine_for_invariant.get(str(name), ""), disposition)
+                == "PASS",
+            )
             for name, value in raw["invariants"].items()
         )
         statement = raw["statement"]
@@ -41,6 +62,8 @@ def load_golden_path(path: Path | None) -> GoldenPath | None:
             close_report=str(raw["close_report"]),
             evidence=tuple(raw["evidence"]),
             invariants=invariants,
+            engine_dispositions=engine_dispositions,
+            early_warning_notices=tuple(raw.get("early_warning_notices", ())),
             exception_owner=raw.get("exception_owner"),
             exception_age_seconds=raw.get("exception_age_seconds"),
             closing_cash=str(statement["closing_cash"]),

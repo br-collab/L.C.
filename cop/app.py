@@ -81,7 +81,6 @@ from cop.view import (
 log = logging.getLogger(__name__)
 
 PANELS: dict[str, str] = {
-    "waves": "Wave board",
     "repositories": "Repositories",
     "aureon": "Live Aureon",
     "agents": "Atreides agents",
@@ -114,7 +113,7 @@ SECTIONS: dict[str, tuple[str, ...]] = {
     "cns": ("cns",),
     "xrpl": ("xrpl",),
     "agents": ("agents", "advisories", "traceability"),
-    "programme": ("waves", "repositories", "aureon", "simulation", "scheduled"),
+    "programme": ("repositories", "aureon", "simulation", "scheduled"),
     "blind": ("blindspots",),
 }
 
@@ -424,6 +423,14 @@ def create_app(  # noqa: PLR0915 - route definitions read best in one place
             refresher="running" if state.refresher.running else "idle",
             sources={
                 "program": _health_source([snapshot.program], now),
+                "golden-path": {
+                    "state": (
+                        "configured"
+                        if state.settings.golden_path_file is not None
+                        else "not_configured"
+                    ),
+                    "variable": "ATREIDES_GOLDEN_PATH_FILE",
+                },
                 "github": _health_source(github_observations, now),
                 "aureon-snapshot": _health_source([snapshot.aureon.snapshot], now),
                 "cash-leg": _health_source([snapshot.cash_leg.cash_leg], now),

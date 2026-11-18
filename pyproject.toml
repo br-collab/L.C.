@@ -1,6 +1,6 @@
 [project]
 name = "legiones-cannenses"
-version = "0.2.8"
+version = "1.0.0"
 description = "Legiones Cannenses (L.C.) — the synthetic middle layer of Project Cannae Legion"
 authors = [{name = "Guillermo Ravelo"}]
 readme = "README.md"
@@ -72,7 +72,13 @@ include = ["lc*", "emulators*", "cop*", "harness_c2*", "thifur_h*", "test_fixtur
 # in place; a built wheel carries only what is declared here.
 # tests/test_package_data.py keeps the lc entry complete.
 [tool.setuptools.package-data]
-cop = ["program.yaml", "templates/*.html", "static/*.css", "static/*.js"]
+cop = [
+    "program.yaml",
+    "templates/*.html",
+    "static/*.css",
+    "static/*.js",
+    "vendor/atreides-golden-path/*.json",
+]
 lc = ["occ_rule_table.json", "py.typed", "rules/*.txt", "trusted_producer_keys.json"]
 
 [tool.ruff]

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.0 - 17 Nov 2026
+
+Close the declared-synthetic retail minimum viable product from MVP-0 through MVP-5B. The Common
+Operating Picture now reads the pinned Atreides golden-path pack, keeps engine dispositions beside
+independent invariants, distinguishes human and service actors, surfaces early-warning drafts, and
+reports golden-path source configuration in health output.
+
 ## 0.2.8 - 9 Nov 2026
 
 Load synthetic account-status trust anchors from checksum-pinned package configuration and

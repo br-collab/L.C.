@@ -136,8 +136,8 @@ def test_unread_advisory_source_never_renders_an_empty_clean_state() -> None:
 def test_cross_domain_job_pins_and_exercises_the_advisory_producer() -> None:
     workflow = Path(".github/workflows/ci.yml").read_text()
     seam = Path("tests/test_atreides_handoff.py").read_text()
-    # INST-1 Amendment 3 (V4): the handoff job pins the Atreides WP2b head, which still
-    # carries the advisory producer this seam exercises.
-    assert "7f15ff8985b56b1f7156e7aec0323fca3539fe01" in workflow
+    # MVP-5B Part 10: the handoff job pins the current merged Atreides closure,
+    # which still carries the advisory producer this seam exercises.
+    assert "ead38fe1513daced386de9221d239080a0b97c3d" in workflow
     assert "publication_bytes" in seam
     assert "parse_publication" in seam

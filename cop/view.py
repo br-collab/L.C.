@@ -316,8 +316,13 @@ def agents_badge(snapshot: AgentsSnapshot) -> Badge:
     return disposition_badge(snapshot.disposition, labels[snapshot.disposition])
 
 
-def program_badge(_: Program) -> Badge:
-    return disposition_badge(Disposition.PASS, "Program file valid")
+def program_badge(program: Program) -> Badge:
+    statuses = {item.status.value for item in (*program.waves, *program.other_work)}
+    if "BLOCKED" in statuses:
+        return disposition_badge(Disposition.BLOCK, "Program has blocked work")
+    if statuses & {"IN_PROGRESS", "NOT_STARTED"}:
+        return disposition_badge(Disposition.HOLD, "Program has open work")
+    return disposition_badge(Disposition.PASS, "All recorded work is done")
 
 
 def stack_badge(stack: str) -> Badge:
@@ -688,7 +693,9 @@ def build_rail(page: PageView) -> dict[str, RailItemView]:
         risks_badge = _worst_badge(
             tuple(row.badge for row in page.grc.risks), f"{len(page.grc.risks)} limits"
         )
-    programme_badges = [page.program.badge]
+    # Hand-maintained program.yaml statuses are not rendered as operating truth.
+    # The build rail is computed only from observed repository and runtime sources.
+    programme_badges: list[Badge] = []
     for repo in page.repos:
         programme_badges.extend((repo.main_ci.badge, repo.scheduled.badge))
     programme_badges.extend(
@@ -1213,13 +1220,6 @@ def _unknown_if_not_current(found: Found, t: TileView[Any], what: str) -> bool:
     return t.current
 
 
-def _program_reasons(found: Found, program: TileView[Program]) -> None:
-    if _unknown_if_not_current(found, program, "Program file") and program.value is not None:
-        for wave in program.value.waves:
-            if wave.status is WorkStatus.BLOCKED:
-                found.append((Disposition.BLOCK, f"Wave {wave.number} is blocked"))
-
-
 def _repo_reasons(found: Found, repo: RepoView) -> None:
     _unknown_if_not_current(found, repo.main_head, f"{repo.name} main commit")
     _unknown_if_not_current(found, repo.latest_tag, f"{repo.name} latest tag")
@@ -1293,12 +1293,12 @@ def _overall(
     external: tuple[AgentsView, AdvisoriesView],
     lifecycles: LifecycleView,
 ) -> tuple[Badge, tuple[Reason, ...]]:
-    """Worst of: every source tile, CI on main, scheduled runs, Aureon stack, drift,
-    the AUR-I-17 marker, blocked waves and Atreides agent activation. Open pull
-    request checks are not included."""
+    """Worst of operating sources and controls, excluding hand-maintained status.
+
+    Open pull request checks are not included.
+    """
     found: Found = []
     agents, advisories = external
-    _program_reasons(found, program)
     for repo in repos:
         _repo_reasons(found, repo)
     _aureon_reasons(found, aureon)

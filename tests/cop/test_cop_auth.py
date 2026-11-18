@@ -193,6 +193,10 @@ def test_healthz_reports_unconfigured_agents_without_leaking_source_data() -> No
     response = rig.app_client({**GOOD_ENV, "ATREIDES_AGENTS_URL": ""}).get("/healthz")
     body = response.get_json()
     assert body["sources"]["agents"]["state"] == "not_configured"
+    assert body["sources"]["golden-path"] == {
+        "state": "not_configured",
+        "variable": "ATREIDES_GOLDEN_PATH_FILE",
+    }
     serialised = response.get_data(as_text=True)
     for forbidden in ("https://", "example.test", OPERATOR_KEY, SESSION_SECRET, "agent_id"):
         assert forbidden not in serialised
