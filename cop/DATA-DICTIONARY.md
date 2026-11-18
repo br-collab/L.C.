@@ -55,6 +55,7 @@ by the test suite so a new module cannot arrive without a dictionary decision.
 | Module | Owned record or rule | Rendered composite or Blind spots consumer | If unpublished |
 |---|---|---|---|
 | `lc/events.py` | `OrderEvent`, `OrderEventPayload` and the `LifecycleState` vocabulary | Versioned `lifecycle` documents; source absence is listed under Blind spots | No inferred state; unavailable or stale documents are `INDETERMINATE` |
+| `lc/cat.py` | CAT new-order, route and allocation records built from lifecycle evidence, plus local validator feedback | CAT counts and rejected-record correction deadlines on the exceptions surface | No submission; no firm execution event; invalid records never read as validated |
 | `lc/lifecycle.py` | Append-only `LifecycleRegister`, transitions, explicit `NOT_REACHED`, and deterministic replay | Lifecycle board; newest recorded event also supplies the L.C. layer-clock projection | No empty row and no invented clock |
 | `lc/recommendation_profile.py` | Current and complete customer-profile input gate for recommended synthetic retail orders | Order admission refusal only; it does not judge best interest or publish identity data | Missing, stale, incomplete or cross-account profile evidence is refused by name |
 | `lc/trust_anchors.py` | Package-owned account-status signing keys with producer, validity, and revocation constraints | Internal verification input only; no key material is rendered | Caller-selected, unknown, wrong-producer, revoked, expired, or invalid signing evidence is refused by name |
