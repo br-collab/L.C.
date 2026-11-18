@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.0 - 18 Nov 2026
+
+Build local Consolidated Audit Trail new-order, route and allocation records from the L.C.
+evidence chain. Pin Industry Member Technical Specifications 2d v4.2.0 r4 dated 21 October
+2026, derive FDIDs, apply reduced CAIS customer fields, validate linkage and timestamp precision,
+and publish validator feedback with T+3 correction deadlines to the public exception summary.
+Nothing is submitted and the synthetic exchange owns its execution event.
+
 ## 1.1.1 - 18 Nov 2026
 
 Vendor the final PS-1B closure pack from Atreides merge
