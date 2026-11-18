@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: br-collab/Project-Atreides
-          ref: 8edb065621344281a5e695ad666b27382ec08c83
+          ref: 5a102538b575a0d11f1e3cc57980ee2a33ede168
           path: .typing/Project-Atreides
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:

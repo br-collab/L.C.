@@ -11,7 +11,13 @@ from cop_fakes import GOOD_ENV, Rig, login
 from cop.golden_path import load_golden_path
 
 
-def _pack(tmp_path: Path, *, disposition: str = "PASS", invariant: bool = True) -> Path:
+def _pack(
+    tmp_path: Path,
+    *,
+    disposition: str = "PASS",
+    invariant: bool = True,
+    cash_status: str = "RAN",
+) -> Path:
     folder = tmp_path / "mvp4-client-reporting-2026-11-15-v2"
     folder.mkdir()
     path = folder / "evidence-pack.json"
@@ -40,7 +46,14 @@ def _pack(tmp_path: Path, *, disposition: str = "PASS", invariant: bool = True) 
                 "closing_positions": {"SYN-EQUITY": "10"},
             },
             "reconciliation_calendar": [
-                {"item_id": item_id, "status": "RAN", "break_count": 0}
+                {
+                    "item_id": item_id,
+                    "status": cash_status if item_id == "cash-to-bank" else "RAN",
+                    "break_count": 1
+                    if item_id == "cash-to-bank" and cash_status == "FAILED"
+                    else 0,
+                    "sources_read": ["Atreides equities books", f"synthetic {item_id} source"],
+                }
                 for item_id in (
                     "stock-record-to-street",
                     "ftr-to-cns-fail-statement",
@@ -73,6 +86,29 @@ def test_pack_supplies_run_timeline_cash_and_controls(tmp_path: Path) -> None:
     assert view.closing_cash == "10000.00"
     assert view.invariants == (("stock_record", True, "PASS", True),)
     assert len(view.reconciliation_calendar) == 6
+    assert all(row["sources_read"] for row in view.reconciliation_calendar)
+
+
+def test_cash_control_failure_is_rendered_on_public_controls_page(tmp_path: Path) -> None:
+    path = _pack(tmp_path, cash_status="FAILED")
+    rig = Rig()
+    rig.refresher.refresh_once()
+    client = rig.app_client({**GOOD_ENV, "ATREIDES_GOLDEN_PATH_FILE": str(path)})
+    login(client)
+
+    body = client.get("/section/controls").get_data(as_text=True)
+    assert "cash-to-bank" in body
+    assert "FAILED" in body
+    assert ">1<" in body
+
+
+def test_vendored_pack_contains_control_owned_rows() -> None:
+    path = Path(__file__).parents[2] / "cop/vendor/atreides-golden-path/evidence-pack.json"
+    view = load_golden_path(path)
+    assert view is not None
+    assert view.run_id == "PS1B-TRUE-RECONCILIATIONS-2026-11-18"
+    assert len(view.reconciliation_calendar) == 6
+    assert all(row["sources_read"] for row in view.reconciliation_calendar)
 
 
 def test_engine_and_invariant_disagreement_is_a_failure(tmp_path: Path) -> None:

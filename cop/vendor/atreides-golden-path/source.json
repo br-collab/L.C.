@@ -1,7 +1,7 @@
 {
   "repository": "br-collab/Project-Atreides",
-  "commit": "8edb065621344281a5e695ad666b27382ec08c83",
-  "source_path": "simulator/publication/ps1-books-on-right-date-2026-11-18/evidence-pack.json",
+  "commit": "5a102538b575a0d11f1e3cc57980ee2a33ede168",
+  "source_path": "simulator/publication/ps1b-true-reconciliations-2026-11-18/evidence-pack.json",
   "vendored_path": "cop/vendor/atreides-golden-path/evidence-pack.json",
-  "sha256": "0ebb40692302815b703597ba61b398c0a3139d1c066aa7e01f42d9416b2f4628"
+  "sha256": "75456d23719c8f71f1cdc106339363753a23a394c9aeb73c836159b2cd9e6ddf"
 }
