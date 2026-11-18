@@ -70,8 +70,13 @@ def test_cat_validator_checks_schema_linkage_and_time_precision() -> None:
     records = build_records(facts(), firm_salt="SYNTHETIC-FIRM")
     assert all(item.accepted for item in validate(records, reviewed_on=date(2026, 11, 18)))
     broken = records[1].__class__(
-        records[1].event_id, records[1].event_type, "2026-11-18T15:30:01+00:00",
-        records[1].order_id, records[1].fdid, "MISSING", records[1].fields,
+        records[1].event_id,
+        records[1].event_type,
+        "2026-11-18T15:30:01+00:00",
+        records[1].order_id,
+        records[1].fdid,
+        "MISSING",
+        records[1].fields,
     )
     errors = validate((records[0], broken), reviewed_on=date(2026, 11, 18))[1].errors
     assert errors == (
