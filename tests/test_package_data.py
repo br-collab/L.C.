@@ -31,3 +31,9 @@ def test_pinned_regulatory_sources_are_declared_as_package_data() -> None:
     for source in (REPO / "lc" / "rules").glob("*.txt"):
         name = source.relative_to(REPO / "lc").as_posix()
         assert any(fnmatch.fnmatch(name, pattern) for pattern in patterns), name
+
+
+def test_vendored_golden_path_is_declared_as_package_data() -> None:
+    with (REPO / "pyproject.toml").open("rb") as handle:
+        patterns = tomllib.load(handle)["tool"]["setuptools"]["package-data"]["cop"]
+    assert "vendor/atreides-golden-path/*.json" in patterns

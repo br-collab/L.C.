@@ -109,9 +109,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: br-collab/Project-Atreides
-          # INST-1 Amendment 3 (V4): the WP2b head, so the handoff runs against the boundary
-          # L.C. actually meets. Atreides #154 merge commit on main.
-          ref: 7f15ff8985b56b1f7156e7aec0323fca3539fe01
+          # MVP-5B closure: Atreides #189 merge commit on main.
+          ref: ead38fe1513daced386de9221d239080a0b97c3d
           path: .handoff/Project-Atreides
 
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
@@ -192,9 +191,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: br-collab/Project-Atreides
-          # INST-1 Amendment 3: the WP2b head (attested participant registry, payload-bound
-          # seller capacity). Atreides #154 merge commit on main.
-          ref: 7f15ff8985b56b1f7156e7aec0323fca3539fe01
+          # MVP-5B closure: Atreides #189 merge commit on main.
+          ref: ead38fe1513daced386de9221d239080a0b97c3d
           path: .slice1/Project-Atreides
 
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
