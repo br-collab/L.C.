@@ -510,15 +510,16 @@ def create_app(  # noqa: PLR0915 - route definitions read best in one place
         selected_exception = next(
             (row for row in page.exceptions.rows if row.record.exception_id == selected_id), None
         )
+        golden = load_golden_path(state.settings.golden_path_file)
         return render_template(
             "dashboard.html",
             page=page,
-            rail=build_rail(page),
+            rail=build_rail(page, golden_present=golden is not None),
             selected=selected,
             active_section=active_section,
             exception_filter=exception_filter,
             selected_exception=selected_exception,
-            golden=load_golden_path(state.settings.golden_path_file),
+            golden=golden,
         )
 
     @app.get("/")

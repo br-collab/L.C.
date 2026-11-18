@@ -110,7 +110,7 @@ jobs:
         with:
           repository: br-collab/Project-Atreides
           # MVP-5B closure: Atreides #189 merge commit on main.
-          ref: dd5da18874714440137c5bd07b2cd17a673e5503
+          ref: 8edb065621344281a5e695ad666b27382ec08c83
           path: .handoff/Project-Atreides
 
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
@@ -192,7 +192,7 @@ jobs:
         with:
           repository: br-collab/Project-Atreides
           # MVP-5B closure: Atreides #189 merge commit on main.
-          ref: dd5da18874714440137c5bd07b2cd17a673e5503
+          ref: 8edb065621344281a5e695ad666b27382ec08c83
           path: .slice1/Project-Atreides
 
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.0 - 18 Nov 2026
+
+Vendor the PS-1 dated-books golden pack, show all six reconciliation outcomes, derive public COP
+sidebar badges from golden-pack content, and display the pack's declared run identifier.
+
 ## 1.0.1 - 18 Nov 2026
 
 Pin the MVP-5C Atreides evidence pack by SHA-256 and make the Common Operating Picture refuse

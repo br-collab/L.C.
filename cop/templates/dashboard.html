@@ -183,7 +183,8 @@
 {% endif %}
 {% if active_section == 'controls' %}
 <section class="panel" data-panel="golden-controls"><h2>Golden customer invariant agreement</h2>
-{% if golden %}<table><thead><tr><th>Invariant</th><th>Computed</th><th>Engine disposition</th><th>Agreement</th></tr></thead><tbody>{% for name, computed, engine, agrees in golden.invariants %}<tr><th>{{ name }}</th><td>{{ computed }}</td><td>{{ engine }}</td><td>{{ 'PASS' if agrees else 'FAIL' }}</td></tr>{% endfor %}</tbody></table>{% else %}<p><strong>ABSENT.</strong> No readable golden-path evidence pack is configured.</p>{% endif %}</section>
+  {% if golden %}<table><thead><tr><th>Invariant</th><th>Computed</th><th>Engine disposition</th><th>Agreement</th></tr></thead><tbody>{% for name, computed, engine, agrees in golden.invariants %}<tr><th>{{ name }}</th><td>{{ computed }}</td><td>{{ engine }}</td><td>{{ 'PASS' if agrees else 'FAIL' }}</td></tr>{% endfor %}</tbody></table>
+  <h3>Reconciliation calendar</h3><table><thead><tr><th>Control</th><th>Status</th><th>Breaks</th></tr></thead><tbody>{% for row in golden.reconciliation_calendar %}<tr><th>{{ row.item_id }}</th><td>{{ row.status }}</td><td>{{ row.break_count }}</td></tr>{% endfor %}</tbody></table>{% else %}<p><strong>ABSENT.</strong> No readable golden-path evidence pack is configured.</p>{% endif %}</section>
 {% endif %}
 {# 3 · Repositories ------------------------------------------------------------------ #}
 {% if 'repositories' in selected %}

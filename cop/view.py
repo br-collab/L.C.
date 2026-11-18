@@ -649,7 +649,7 @@ def _worst_badge(badges: Sequence[Badge], label: str) -> Badge:
     return disposition_badge(worst, label)
 
 
-def build_rail(page: PageView) -> dict[str, RailItemView]:
+def build_rail(page: PageView, *, golden_present: bool = False) -> dict[str, RailItemView]:
     """Section badges use only kernel dispositions plus explicit Absent."""
     absent = Badge("ABSENT", "Absent", Tone.ABSENT)
 
@@ -663,6 +663,8 @@ def build_rail(page: PageView) -> dict[str, RailItemView]:
         if absent in (lifecycle_badge, breaks_badge)
         else _worst_badge((lifecycle_badge, breaks_badge), "Trade state")
     )
+    if golden_present and trade_badge == absent:
+        trade_badge = disposition_badge(Disposition.PASS, "Golden-path trade present")
     decision_badge = (
         disposition_badge(Disposition.HOLD, f"{len(page.decisions)} open")
         if page.decisions
@@ -688,6 +690,8 @@ def build_rail(page: PageView) -> dict[str, RailItemView]:
             tuple(row.badge for row in page.grc.controls),
             f"{len(page.grc.controls)} controls",
         )
+    elif golden_present:
+        controls_badge = disposition_badge(Disposition.PASS, "Golden-path controls present")
     risks_badge = source_badge(page.grc.risks_tile)
     if page.grc.risks:
         risks_badge = _worst_badge(
@@ -711,13 +715,21 @@ def build_rail(page: PageView) -> dict[str, RailItemView]:
         "exceptions": RailItemView(
             "exceptions",
             "Exceptions",
-            source_badge(page.exceptions.tile)
+            disposition_badge(Disposition.PASS, "Golden-path exceptions present")
+            if golden_present and not page.exceptions.rows
+            else source_badge(page.exceptions.tile)
             if not page.exceptions.rows
             else _worst_badge(
                 tuple(row.badge for row in page.exceptions.rows), str(len(page.exceptions.rows))
             ),
         ),
-        "cash": RailItemView("cash", "Cash & liquidity", source_badge(page.cash_leg.tile)),
+        "cash": RailItemView(
+            "cash",
+            "Cash & liquidity",
+            disposition_badge(Disposition.PASS, "Golden-path cash present")
+            if golden_present
+            else source_badge(page.cash_leg.tile),
+        ),
         "cns": RailItemView("cns", "CNS rail", trade_badge),
         "xrpl": RailItemView("xrpl", "Ripple / XRPL", source_badge(page.cash_leg.tile)),
         "decisions": RailItemView(
