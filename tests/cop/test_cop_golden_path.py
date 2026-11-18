@@ -21,6 +21,8 @@ def _pack(tmp_path: Path, *, disposition: str = "PASS", invariant: bool = True) 
                 "account_status": "ACTIVE",
                 "close_report": "NORMAL_CLOSE",
                 "invariants": {"stock_record": invariant},
+                "engine_dispositions": {"street_reconciliation": disposition},
+                "early_warning_notices": [{"paragraph": "17a-11", "status": "DRAFT"}],
                 "exception_owner": None,
                 "exception_age_seconds": None,
                 "evidence": [
@@ -28,6 +30,7 @@ def _pack(tmp_path: Path, *, disposition: str = "PASS", invariant: bool = True) 
                         "event_id": "evt_1",
                         "producer": "Atreides",
                         "signature_status": "VERIFIED",
+                        "actor_kind": "HUMAN",
                         "summary": "account approved",
                     }
                 ],
@@ -53,13 +56,13 @@ def test_pack_supplies_run_timeline_cash_and_controls(tmp_path: Path) -> None:
     assert view.run_id == "mvp4-client-reporting-2026-11-15-v2"
     assert view.evidence[0]["producer"] == "Atreides"
     assert view.closing_cash == "10000.00"
-    assert view.invariants == (("stock_record", True, True),)
+    assert view.invariants == (("stock_record", True, "PASS", True),)
 
 
 def test_engine_and_invariant_disagreement_is_a_failure(tmp_path: Path) -> None:
-    view = load_golden_path(_pack(tmp_path, disposition="BLOCK", invariant=True))
+    view = load_golden_path(_pack(tmp_path, disposition="PASS", invariant=False))
     assert view is not None
-    assert view.invariants == (("stock_record", True, False),)
+    assert view.invariants == (("stock_record", False, "PASS", False),)
 
 
 def test_operator_sections_render_pack_and_absence(tmp_path: Path) -> None:

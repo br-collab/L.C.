@@ -20,7 +20,7 @@ This package is a sibling of `lc/`. `lc` never imports `cop`, and `cop` never im
 | 6 | Nightly and scheduled checks | Newest run of each scheduled GitHub Actions workflow, with its date | GitHub REST API |
 | 7 | Open decisions | ID, title, owner, age | `cop/program.yaml` |
 
-Each panel also has its own page, `/panel/<name>` (`waves`, `repositories`, `aureon`, `agents`, `scheduled`, `decisions`), so one panel fits one laptop screen where its content allows.
+Each panel also has its own page, `/panel/<name>` (`repositories`, `aureon`, `agents`, `scheduled`, `decisions`), so one panel fits one laptop screen where its content allows.
 
 ### Rules the page follows
 
@@ -38,7 +38,7 @@ Each panel also has its own page, `/panel/<name>` (`waves`, `repositories`, `aur
   - **An agent that produced nothing is absent with a reason**, never blank and never a pass. A *stopped* agent reads "nothing recorded · agent stopped: …" and its last recommendation is **not** carried forward — a recommendation from before it stopped is not its current state.
   - **The C2 handoff basis** is what the agent's work arrived under. While no C2 runtime exists this is the recorded absence "operator-direct under CAOM-001". It is a value in the record, not an empty field.
   - **The lateral-handoff probe reads inverted.** It offers an agent-to-agent input on every tick with no recorded handoff, and it is healthy when that input is **refused** — "Refusal held". If it ever shows "REFUSAL BROKEN", an inadmissible input was admitted and the whole picture goes `BLOCK`.
-- **Overall program state** is the worst of: CI on each `main`, scheduled runs, the Aureon stack, drift, the AUR-I-17 marker, blocked waves, Atreides agent activation, and every source tile being current. Open pull requests are not included. Order of severity: `BLOCK`, `INDETERMINATE`, `HOLD`, `PASS`.
+- **Overall program state** is the worst of: CI on each `main`, scheduled runs, the Aureon stack, drift, the AUR-I-17 marker, Atreides agent activation, and every operating source tile being current. Open pull requests and hand-maintained program statuses are not included. Order of severity: `BLOCK`, `INDETERMINATE`, `HOLD`, `PASS`.
 
 ## `cop/program.yaml`
 

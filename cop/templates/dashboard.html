@@ -54,7 +54,7 @@
   <div class="overall">
     <h2>Overall program state</h2>
     <p class="overall-badge">{{ badge(b.overall) }}</p>
-    <p class="muted">Computed (POLICY_RESULT) as the worst of: continuous integration on each <code>main</code> branch, scheduled checks, the Aureon snapshot, deploy drift, the AUR-I-17 marker, blocked waves, Atreides agent activation, and every source being current. Open pull requests are not included.</p>
+    <p class="muted">Computed (POLICY_RESULT) as the worst of: continuous integration on each <code>main</code> branch, scheduled checks, the Aureon snapshot, deploy drift, the AUR-I-17 marker, Atreides agent activation, and every operating source being current. Open pull requests and hand-maintained program statuses are not included.</p>
     {% if b.reasons %}
     <details {% if b.reasons | length <= 4 %}open{% endif %}>
       <summary>{{ b.reasons | length }} reason{{ 's' if b.reasons | length != 1 }}</summary>
@@ -111,6 +111,7 @@
   {% if golden %}
   <article class="card"><h3>Golden customer open breaks and draft early warnings</h3>
     {% if golden.exception_owner %}<p>Open break owner: {{ golden.exception_owner }} · age {{ golden.exception_age_seconds }} seconds.</p>{% else %}<p><strong>ABSENT.</strong> The evidence pack records no open break owner, age, or draft early warning notice.</p>{% endif %}
+    {% for notice in golden.early_warning_notices %}<p>Early warning {{ notice.paragraph }}: {{ notice.status }}</p>{% endfor %}
   </article>
   {% endif %}
   {% if ex.tile.current and ex.tile.shown %}
@@ -173,7 +174,7 @@
 {% if active_section == 'trades' %}
 <section class="panel" data-panel="golden-trade-timeline"><h2>Golden customer timeline</h2>
 {% if golden %}<p>Account {{ golden.account_status }} · engine {{ golden.disposition }} · daily close {{ golden.close_report }}</p>
-<ol>{% for event in golden.evidence %}<li><code>{{ event.event_id }}</code> · {{ event.producer }} · signature {{ event.signature_status }} · {{ event.summary }}{% if event.summary == 'account approved' %} · <strong>human decision</strong>{% endif %}</li>{% endfor %}</ol>
+<ol>{% for event in golden.evidence %}<li><code>{{ event.event_id }}</code> · {{ event.producer }} · {{ event.actor_kind|lower }} actor · signature {{ event.signature_status }} · {{ event.summary }}{% if event.actor_kind == 'HUMAN' %} · <strong>human decision</strong>{% endif %}</li>{% endfor %}</ol>
 {% else %}<p><strong>ABSENT.</strong> No readable golden-path evidence pack is configured.</p>{% endif %}</section>
 {% endif %}
 {% if active_section == 'cash' %}
@@ -182,56 +183,8 @@
 {% endif %}
 {% if active_section == 'controls' %}
 <section class="panel" data-panel="golden-controls"><h2>Golden customer invariant agreement</h2>
-{% if golden %}<table><thead><tr><th>Invariant</th><th>Computed</th><th>Engine disposition</th><th>Agreement</th></tr></thead><tbody>{% for name, computed, agrees in golden.invariants %}<tr><th>{{ name }}</th><td>{{ computed }}</td><td>{{ golden.disposition }}</td><td>{{ 'PASS' if agrees else 'FAIL' }}</td></tr>{% endfor %}</tbody></table>{% else %}<p><strong>ABSENT.</strong> No readable golden-path evidence pack is configured.</p>{% endif %}</section>
+{% if golden %}<table><thead><tr><th>Invariant</th><th>Computed</th><th>Engine disposition</th><th>Agreement</th></tr></thead><tbody>{% for name, computed, engine, agrees in golden.invariants %}<tr><th>{{ name }}</th><td>{{ computed }}</td><td>{{ engine }}</td><td>{{ 'PASS' if agrees else 'FAIL' }}</td></tr>{% endfor %}</tbody></table>{% else %}<p><strong>ABSENT.</strong> No readable golden-path evidence pack is configured.</p>{% endif %}</section>
 {% endif %}
-{# 2 · Wave board -------------------------------------------------------------------- #}
-{% if 'waves' in selected %}
-{% set t = page.program %}
-<section class="panel" id="waves" data-panel="waves">
-  <h2>Wave board {{ badge(t.badge) }}</h2>
-  <p class="lede">One row per wave of the Joint Upgrade Map (CL-JUM-001). Statuses are maintained by hand in the program file.</p>
-  {{ provenance(t) }}
-  {{ failure(t) }}
-  {% set program = t.shown %}
-  {% if program is not none %}
-  <div class="{{ '' if t.current else 'stale-block' }}">
-  <p class="muted">Program status is rendered from the checked-in source at the deployed commit.</p>
-  <table class="waves">
-    <thead><tr><th scope="col">Wave</th><th scope="col">Status</th><th scope="col">Work packages</th><th scope="col">Evidence</th><th scope="col">Next action (owner)</th></tr></thead>
-    <tbody>
-    {% for item in program.waves %}
-      <tr>
-        <th scope="row">{{ item.number }}: {{ item.name }}</th>
-        <td>{{ badge(work_badges[item.status]) }}</td>
-        <td>{{ work_row_packages(item) }}</td>
-        <td>{{ item.evidence | join(', ') if item.evidence else '—' }}</td>
-        <td>{% if item.next_action %}{{ item.next_action.action }} <span class="owner">({{ item.next_action.owner.value }})</span>{% else %}—{% endif %}</td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  {% if program.other_work %}
-  <h3>Other approved work</h3>
-  <table class="waves">
-    <thead><tr><th scope="col">Work</th><th scope="col">Status</th><th scope="col">Work packages</th><th scope="col">Evidence</th><th scope="col">Next action (owner)</th></tr></thead>
-    <tbody>
-    {% for item in program.other_work %}
-      <tr>
-        <th scope="row">{{ item.id }}: {{ item.name }}</th>
-        <td>{{ badge(work_badges[item.status]) }}</td>
-        <td>{{ work_row_packages(item) }}</td>
-        <td>{{ item.evidence | join(', ') if item.evidence else '—' }}</td>
-        <td>{% if item.next_action %}{{ item.next_action.action }} <span class="owner">({{ item.next_action.owner.value }})</span>{% else %}—{% endif %}</td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  {% endif %}
-  </div>
-  {% endif %}
-</section>
-{% endif %}
-
 {# 3 · Repositories ------------------------------------------------------------------ #}
 {% if 'repositories' in selected %}
 <section class="panel" id="repositories" data-panel="repositories">

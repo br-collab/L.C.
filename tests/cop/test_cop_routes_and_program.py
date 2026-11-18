@@ -10,10 +10,11 @@ from pathlib import Path
 import pytest
 from cop_fakes import MAIN_SHA, Rig, login, section
 
-from cop.app import SECTIONS, create_app
+from cop.app import PANELS, SECTIONS, create_app
 from cop.observation import ProgramFileError
 from cop.program import Program, load_program
 from cop.settings import PRODUCT_NAME, PROGRAM_FILE, load_settings
+from cop.view import program_badge
 
 ROOT = Path(__file__).resolve().parents[2]
 COP = ROOT / "cop"
@@ -45,9 +46,9 @@ def test_every_route_is_get_except_login_and_logout() -> None:
 
 def test_side_rail_routes_every_existing_panel_once_and_keeps_blind_spots_pinned() -> None:
     assigned = [panel for panels in SECTIONS.values() for panel in panels]
+    assert "waves" not in PANELS
     assert len(assigned) == len(set(assigned))
     assert set(assigned) == {
-        "waves",
         "repositories",
         "aureon",
         "agents",
@@ -100,6 +101,7 @@ def test_packaged_program_file_is_valid() -> None:
     program = load_program(PROGRAM_FILE)
     assert [w.number for w in program.waves] == list(range(9))
     assert program.waves[0].status == "DONE" and program.waves[3].status == "DONE"
+    assert program_badge(program).code == "HOLD"
 
 
 def test_program_does_not_publish_a_hand_maintained_as_of_date() -> None:
@@ -138,7 +140,9 @@ def test_missing_program_file_is_an_error(tmp_path: Path) -> None:
         load_program(tmp_path / "absent.yaml")
 
 
-def test_invalid_program_file_makes_panels_2_and_6_indeterminate_only(tmp_path: Path) -> None:
+def test_invalid_program_file_affects_decisions_but_not_build_sources(
+    tmp_path: Path,
+) -> None:
     bad = _write(
         tmp_path, PROGRAM_FILE.read_text(encoding="utf-8").replace("status: DONE", "status: ??", 1)
     )
@@ -149,12 +153,11 @@ def test_invalid_program_file_makes_panels_2_and_6_indeterminate_only(tmp_path: 
     programme_html = client.get("/section/programme").get_data(as_text=True)
     decisions_html = client.get("/section/decisions").get_data(as_text=True)
 
-    waves = section(programme_html, "waves")
     decisions = section(decisions_html, "decisions")
-    for panel in (waves, decisions):
-        assert "INDETERMINATE" in panel
-        assert "InvalidProgramFile" in panel
-    assert "<table" not in waves and "<table" not in decisions
+    assert 'data-panel="waves"' not in programme_html
+    assert "INDETERMINATE" in decisions
+    assert "InvalidProgramFile" in decisions
+    assert "<table" not in decisions
     assert "JUM-D-06" not in decisions
 
     repos = section(programme_html, "repositories")
@@ -172,19 +175,15 @@ def test_program_validated_at_startup_before_any_refresh(tmp_path: Path) -> None
     assert rig.github.calls == []
 
 
-def test_valid_program_renders_waves_and_decisions() -> None:
+def test_valid_program_hides_hand_maintained_statuses_and_renders_decisions() -> None:
     rig = Rig()
     rig.refresher.refresh_once()
     client = rig.app_client()
     login(client)
     programme_html = client.get("/section/programme").get_data(as_text=True)
     decisions_html = client.get("/section/decisions").get_data(as_text=True)
-    waves = section(programme_html, "waves")
-    assert "HUMAN_JUDGMENT" in waves and "INDETERMINATE" not in waves
-    assert "Project-Atreides#12" in waves
-    assert "W3" in waves and "DONE" in waves
-    assert "W4-7" in waves and "L.C.#38" in waves
-    assert "W3-ADOPT-3" in waves and "Project-Atreides#41" in waves
+    assert 'data-panel="waves"' not in programme_html
+    assert "Project-Atreides#12" not in programme_html
     decisions = section(decisions_html, "decisions")
     assert "JUM-D-27" in decisions
     assert "JUM-D-05" not in decisions and "JUM-D-06" not in decisions
