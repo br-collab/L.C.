@@ -123,7 +123,7 @@ from lc.trade import (
 )
 
 AUREON_COMMIT = "eefdb96f8827660499ae6a9836729f424e69fbf8"
-ATREIDES_COMMIT = "5a102538b575a0d11f1e3cc57980ee2a33ede168"
+ATREIDES_COMMIT = "e5fadaa7966d3f596f10996eca7dfa0742c05f4f"
 AT = datetime(2026, 9, 29, 15, 0, tzinfo=UTC)
 
 
