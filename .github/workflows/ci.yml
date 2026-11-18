@@ -110,7 +110,7 @@ jobs:
         with:
           repository: br-collab/Project-Atreides
           # MVP-5B closure: Atreides #189 merge commit on main.
-          ref: ead38fe1513daced386de9221d239080a0b97c3d
+          ref: dd5da18874714440137c5bd07b2cd17a673e5503
           path: .handoff/Project-Atreides
 
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
@@ -148,7 +148,7 @@ jobs:
         with:
           repository: br-collab/aureon
           # MVP-5B closure: Aureon #146 merge commit on main.
-          ref: 6ad72c1c75c25a04f575a31dac0dbd5515687021
+          ref: eefdb96f8827660499ae6a9836729f424e69fbf8
           path: .handoff/aureon
 
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
@@ -184,7 +184,7 @@ jobs:
         with:
           repository: br-collab/aureon
           # MVP-5B closure: Aureon #146 merge commit on main.
-          ref: 6ad72c1c75c25a04f575a31dac0dbd5515687021
+          ref: eefdb96f8827660499ae6a9836729f424e69fbf8
           path: .slice1/aureon
 
       - name: Check out ancestry-verified Atreides
@@ -192,7 +192,7 @@ jobs:
         with:
           repository: br-collab/Project-Atreides
           # MVP-5B closure: Atreides #189 merge commit on main.
-          ref: ead38fe1513daced386de9221d239080a0b97c3d
+          ref: dd5da18874714440137c5bd07b2cd17a673e5503
           path: .slice1/Project-Atreides
 
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
