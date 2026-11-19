@@ -16,6 +16,7 @@ SPEC_VERSION = "4.2.0 r4"
 SPEC_DATE = date(2026, 10, 21)
 SPEC_SOURCE = "CAT Industry Member Technical Specifications (2d) v4.2.0 r4"
 SATURDAY_INDEX = 5
+US_EQUITIES_HOLIDAYS = frozenset({date(2026, 11, 26)})
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,6 +37,7 @@ class CATRecord:
     parent_event_id: str | None
     fields: dict[str, Any]
     specification: str = SPEC_VERSION
+    raw_account_number: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,6 +78,7 @@ def build_records(
                     for key, value in fact.values.items()
                     if key not in {"account_number", "parent_event_id"}
                 },
+                raw_account_number=account,
             )
         )
     return tuple(records)
@@ -99,7 +102,7 @@ def _business_days_after(start: date, count: int) -> date:
     added = 0
     while added < count:
         current += timedelta(days=1)
-        if current.weekday() < SATURDAY_INDEX:
+        if current.weekday() < SATURDAY_INDEX and current not in US_EQUITIES_HOLIDAYS:
             added += 1
     return current
 
@@ -115,7 +118,8 @@ def validate(records: tuple[CATRecord, ...], *, reviewed_on: date) -> tuple[CATF
             errors.append("missing required field")
         if not item.event_timestamp.endswith("+00:00") or "." not in item.event_timestamp:
             errors.append("timestamp must carry UTC millisecond precision")
-        if item.fdid == item.fields.get("account_number"):
+        raw_account = item.raw_account_number or item.fields.get("account_number")
+        if item.fdid == raw_account:
             errors.append("FDID must not equal the account number")
         if item.event_type in {"ROUTE", "ALLOCATION"} and item.parent_event_id not in ids:
             errors.append("parent new-order event is missing")

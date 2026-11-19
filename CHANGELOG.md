@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.0 - 18 Nov 2026
+
+Correct the PS-3 CAT validator to retain the raw account number for the FDID comparison and to
+count T+3 on the declared US equities holiday calendar. Pin the aureon strict-typing checkout.
+Retraction: version 1.2.0 produced a public-summary value but did not wire that value into the
+live COP exception panel; its panel claim was premature.
+
 ## 1.2.0 - 18 Nov 2026
 
 Build local Consolidated Audit Trail new-order, route and allocation records from the L.C.

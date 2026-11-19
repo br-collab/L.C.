@@ -97,6 +97,28 @@ def test_cat_rejection_feedback_has_t_plus_3_deadline() -> None:
     assert feedback[0].correction_deadline == date(2026, 11, 23)
 
 
+def test_golden_path_cat_t_plus_3_skips_thanksgiving() -> None:
+    records = build_records(facts(), firm_salt="SYNTHETIC-FIRM")
+    feedback = validate((records[1],), reviewed_on=date(2026, 11, 24))
+    assert feedback[0].correction_deadline == date(2026, 11, 30)
+
+
+def test_golden_path_cat_rejects_raw_account_as_fdid() -> None:
+    record = CATRecord(
+        "E",
+        "NEW_ORDER",
+        NOW.isoformat(timespec="milliseconds"),
+        "O",
+        "ACCT-123",
+        None,
+        {},
+        raw_account_number="ACCT-123",
+    )
+    assert validate((record,), reviewed_on=date(2026, 11, 18))[0].errors == (
+        "FDID must not equal the account number",
+    )
+
+
 def test_cat_rejection_appears_on_cop_exceptions() -> None:
     records = build_records(facts(), firm_salt="SYNTHETIC-FIRM")
     feedback = validate((records[1],), reviewed_on=date(2026, 11, 18))
