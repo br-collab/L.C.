@@ -7,16 +7,42 @@ not invent a firm execution event.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
+from functools import lru_cache
 from hashlib import sha256
+from pathlib import Path
 from typing import Any
 
 SPEC_VERSION = "4.2.0 r4"
 SPEC_DATE = date(2026, 10, 21)
 SPEC_SOURCE = "CAT Industry Member Technical Specifications (2d) v4.2.0 r4"
 SATURDAY_INDEX = 5
-US_EQUITIES_HOLIDAYS = frozenset({date(2026, 11, 26)})
+_CALENDAR_FOLDER = Path(__file__).with_name("vendor") / "atreides-calendar"
+
+
+class CalendarIndeterminateError(ValueError):
+    """The vendored Atreides calendar does not cover the date."""
+
+
+@lru_cache(maxsize=1)
+def us_equities_holidays() -> dict[int, frozenset[date]]:
+    """Holidays from Atreides' committed US equities calendar, checksum-verified on load.
+
+    L.C. keeps no holiday list of its own; ``source.json`` names the Atreides commit and
+    SHA-256 of the vendored file.
+    """
+
+    source = json.loads((_CALENDAR_FOLDER / "source.json").read_text(encoding="utf-8"))
+    raw = (_CALENDAR_FOLDER / "us_equities.json").read_bytes()
+    if sha256(raw).hexdigest() != source["sha256"]:
+        raise CalendarIndeterminateError("vendored calendar does not match its pinned checksum")
+    document = json.loads(raw)
+    return {
+        int(year): frozenset(date.fromisoformat(day) for day in days)
+        for year, days in document["holidays"].items()
+    }
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,11 +124,14 @@ def customer_field_basis() -> dict[str, dict[str, str]]:
 
 
 def _business_days_after(start: date, count: int) -> date:
+    holidays = us_equities_holidays()
     current = start
     added = 0
     while added < count:
         current += timedelta(days=1)
-        if current.weekday() < SATURDAY_INDEX and current not in US_EQUITIES_HOLIDAYS:
+        if current.year not in holidays:
+            raise CalendarIndeterminateError(f"no US equities calendar for {current.year}")
+        if current.weekday() < SATURDAY_INDEX and current not in holidays[current.year]:
             added += 1
     return current
 
