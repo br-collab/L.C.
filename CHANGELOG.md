@@ -6,6 +6,12 @@ Gate G3 correction to PS-3D Part 7 (aureon #156): `lc/lifecycle_export.py` write
 
 Phase A: the Common Operating Picture route `/public-summary` shows the written supervisory procedure register status and version, the Rule 3120 counts, the Consolidated Audit Trail record and feedback counts, the anti-money laundering alert count, and the surveillance dispositions from `public-summary.json` in the pack. It does not recompute them. The golden path does not write that file yet.
 
+## 1.3.1 - 21 Nov 2026
+
+Pin the end-to-end and strict-typing jobs to the PS-3C current Aureon and
+Atreides main commits, and correct the stale pull-request labels beside the
+pins.
+
 Phase A: the confidentiality scan also fails on an ALERT- identifier and on an anti-money laundering monitoring scenario name (DEPOSIT_WITHDRAWAL_NO_TRADING, UNRELATED_ACCOUNT_TRANSFER, SECURITY_DEPOSIT_FAST_SALE). A case id is CASE-{alert_id}, so an alert id identifies a case. The golden path does not call this yet.
 
 PS-3C Part 4B moves signed human approval verification into L.C.'s `accept_intent`
