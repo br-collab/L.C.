@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+Phase A: scan every file in a publication directory and the rendered body of every Common Operating Picture GET route. A case identifier or a suspicious activity report field fails the scan. The golden path does not call this yet. That wiring is Phase B.
+
 Phase A: build Consolidated Audit Trail records from the vendored golden-path evidence pack, pin the CAIS (CAT Customer and Account Information System) field table and the specification checksum, and show validator rejections on the Common Operating Picture exceptions panel. The golden path does not call this yet. That wiring is Phase B.
 
 ## 1.3.0 - 18 Nov 2026
