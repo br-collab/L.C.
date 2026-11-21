@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+Gate G3 correction to PS-3D Part 7 (aureon #156): `lc/lifecycle_export.py` writes `lc.lifecycle_export/1` from a sealed lifecycle register. Each row is an executed order event joined to exactly one venue execution report whose digest the kernel `ExecutionEvent` carries, with that event's provenance (`FACT_EXTERNAL` or `FACT_SYNTHETIC`). A tampered report, a fill with no report, a report the register never recorded, a foreign lifecycle and a non-observed provenance are each refused by name. The export carries no close price, session volume or beneficial owner: those are not L.C. facts. `execution_recorded_reason` is the one definition of the executed-event reason, shared by `apply_execution` and the export. Phase A: no run writes the export yet.
+
 Phase A: the Common Operating Picture route `/public-summary` shows the written supervisory procedure register status and version, the Rule 3120 counts, the Consolidated Audit Trail record and feedback counts, the anti-money laundering alert count, and the surveillance dispositions from `public-summary.json` in the pack. It does not recompute them. The golden path does not write that file yet.
 
 Phase A: the confidentiality scan also fails on an ALERT- identifier and on an anti-money laundering monitoring scenario name (DEPOSIT_WITHDRAWAL_NO_TRADING, UNRELATED_ACCOUNT_TRANSFER, SECURITY_DEPOSIT_FAST_SALE). A case id is CASE-{alert_id}, so an alert id identifies a case. The golden path does not call this yet.
