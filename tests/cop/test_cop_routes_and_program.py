@@ -38,6 +38,7 @@ def test_every_route_is_get_except_login_and_logout() -> None:
         "/login",
         "/logout",
         "/",
+        "/public-summary",
         "/panel/<name>",
         "/section/<name>",
         "/static/<path:filename>",
