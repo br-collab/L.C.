@@ -32,6 +32,16 @@ class GoldenPathLoad:
     reason: str | None
 
 
+@dataclass(frozen=True)
+class CatFeedbackView:
+    """Phase A feedback already written by ``lc.cat.validate``. The panel does not recompute it."""
+
+    phase: str
+    record_count: int
+    exception_count: int
+    rejections: tuple[dict[str, Any], ...]
+
+
 def golden_path_health(path: Path | None) -> dict[str, str]:
     """Report whether the configured pack is readable and digest-pinned."""
     base = {"variable": "ATREIDES_GOLDEN_PATH_FILE"}
@@ -109,3 +119,27 @@ def load_golden_path_result(path: Path | None) -> GoldenPathLoad:
         return GoldenPathLoad(None, "pack or source.json is missing")
     except (OSError, ValueError, KeyError, TypeError) as exc:
         return GoldenPathLoad(None, f"unreadable pack metadata: {type(exc).__name__}")
+
+
+def load_cat_feedback(path: Path | None) -> CatFeedbackView | None:
+    """Read pinned Phase A feedback for this pack. A hash mismatch is absence, not a zero."""
+
+    if path is None or not path.is_file():
+        return None
+    feedback_path = path.with_name("cat-feedback.json")
+    if not feedback_path.is_file():
+        return None
+    pack_sha = sha256(path.read_bytes()).hexdigest()
+    document = json.loads(feedback_path.read_text(encoding="utf-8"))
+    if not isinstance(document, dict) or document.get("pack_sha256") != pack_sha:
+        return None
+    raw_rejections = document["rejections"]
+    if not isinstance(raw_rejections, list):
+        return None
+    rejections = tuple(item for item in raw_rejections if isinstance(item, dict))
+    return CatFeedbackView(
+        phase=str(document["phase"]),
+        record_count=int(document["record_count"]),
+        exception_count=int(document["exception_count"]),
+        rejections=rejections,
+    )

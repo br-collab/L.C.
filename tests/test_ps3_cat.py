@@ -1,8 +1,12 @@
 from datetime import UTC, date, datetime
 
+import pytest
+
 from lc.cat import (
+    CalendarIndeterminateError,
     CATRecord,
     EvidenceFact,
+    _business_days_after,
     build_records,
     customer_field_basis,
     public_summary,
@@ -125,3 +129,15 @@ def test_cat_rejection_appears_on_cop_exceptions() -> None:
     summary = public_summary((records[1],), feedback)
     assert summary["exception_count"] == 1
     assert summary["exceptions"][0]["correction_deadline"] == "2026-11-23"
+
+
+def test_t_plus_3_correction_deadline_skips_christmas_2026() -> None:
+    # 23, 24 Dec are business days; 25 Dec is an NYSE holiday; 26-27 Dec are a weekend.
+    assert _business_days_after(date(2026, 12, 22), 3) == date(2026, 12, 28)
+    # New Year's Day 2027 is also a holiday.
+    assert _business_days_after(date(2026, 12, 30), 2) == date(2027, 1, 4)
+
+
+def test_a_year_outside_the_calendar_fails_closed() -> None:
+    with pytest.raises(CalendarIndeterminateError):
+        _business_days_after(date(2031, 3, 3), 3)

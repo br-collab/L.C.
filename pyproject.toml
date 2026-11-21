@@ -79,7 +79,14 @@ cop = [
     "static/*.js",
     "vendor/atreides-golden-path/*.json",
 ]
-lc = ["occ_rule_table.json", "py.typed", "rules/*.txt", "trusted_producer_keys.json"]
+lc = [
+    "occ_rule_table.json",
+    "py.typed",
+    "rules/*.txt",
+    "rules/*.json",
+    "trusted_producer_keys.json",
+    "vendor/atreides-calendar/*.json",
+]
 
 [tool.ruff]
 line-length = 100
