@@ -1,0 +1,50 @@
+{
+  "schema_version": "atreides.market_calendar/1",
+  "market": "US_EQUITIES",
+  "source": "NYSE holidays and trading hours",
+  "source_url": "https://www.nyse.com/markets/hours-calendars",
+  "confidence": "PRIMARY_EXCHANGE_CALENDAR",
+  "year_sources": {
+    "2019": [
+      {
+        "name": "SEC Release No. 34-85716, NYSE Chicago holiday rule",
+        "url": "https://www.sec.gov/rules/sro/nysechx/2019/34-85716.pdf",
+        "license_class": "A"
+      }
+    ],
+    "2020": [
+      {
+        "name": "SEC Release No. 34-85716, NYSE Chicago holiday rule",
+        "url": "https://www.sec.gov/rules/sro/nysechx/2019/34-85716.pdf",
+        "license_class": "A"
+      }
+    ],
+    "2023": [
+      {
+        "name": "SEC Release No. 34-85716, NYSE Chicago holiday rule",
+        "url": "https://www.sec.gov/rules/sro/nysechx/2019/34-85716.pdf",
+        "license_class": "A"
+      }
+    ]
+  },
+  "regular_close": "16:00:00",
+  "early_close": "13:00:00",
+  "session_sources": [
+    {
+      "name": "NYSE Holidays and Trading Hours, early closes at 1:00 p.m. ET (read 20 Nov 2026)",
+      "url": "https://www.nyse.com/markets/hours-calendars",
+      "license_class": "A"
+    }
+  ],
+  "early_closes": {
+    "2026": ["2026-11-27", "2026-12-24"],
+    "2027": ["2027-11-26"]
+  },
+  "holidays": {
+    "2019": ["2019-01-01", "2019-01-21", "2019-02-18", "2019-04-19", "2019-05-27", "2019-07-04", "2019-09-02", "2019-11-28", "2019-12-25"],
+    "2020": ["2020-01-01", "2020-01-20", "2020-02-17", "2020-04-10", "2020-05-25", "2020-07-03", "2020-09-07", "2020-11-26", "2020-12-25"],
+    "2023": ["2023-01-02", "2023-01-16", "2023-02-20", "2023-04-07", "2023-05-29", "2023-06-19", "2023-07-04", "2023-09-04", "2023-11-23", "2023-12-25"],
+    "2026": ["2026-01-01", "2026-01-19", "2026-02-16", "2026-04-03", "2026-05-25", "2026-06-19", "2026-07-03", "2026-09-07", "2026-11-26", "2026-12-25"],
+    "2027": ["2027-01-01", "2027-01-18", "2027-02-15", "2027-03-26", "2027-05-31", "2027-06-18", "2027-07-05", "2027-09-06", "2027-11-25", "2027-12-24"]
+  }
+}

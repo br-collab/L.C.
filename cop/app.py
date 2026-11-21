@@ -49,7 +49,7 @@ from cop.demo import (
 from cop.escalations import HttpxEscalationClient
 from cop.exceptions import PublishedBreakExceptionSource
 from cop.github import HttpxGitHubClient
-from cop.golden_path import golden_path_health, load_golden_path
+from cop.golden_path import golden_path_health, load_cat_feedback, load_golden_path
 from cop.layer_clock import HttpxLayerClockClient
 from cop.lifecycle import HttpxLifecycleClient
 from cop.observation import NOT_CONFIGURED, Observation
@@ -511,6 +511,7 @@ def create_app(  # noqa: PLR0915 - route definitions read best in one place
             (row for row in page.exceptions.rows if row.record.exception_id == selected_id), None
         )
         golden = load_golden_path(state.settings.golden_path_file)
+        cat_feedback = load_cat_feedback(state.settings.golden_path_file)
         return render_template(
             "dashboard.html",
             page=page,
@@ -520,6 +521,7 @@ def create_app(  # noqa: PLR0915 - route definitions read best in one place
             exception_filter=exception_filter,
             selected_exception=selected_exception,
             golden=golden,
+            cat_feedback=cat_feedback,
         )
 
     @app.get("/")
