@@ -31,6 +31,9 @@ def test_pinned_regulatory_sources_are_declared_as_package_data() -> None:
     for source in (REPO / "lc" / "rules").glob("*.txt"):
         name = source.relative_to(REPO / "lc").as_posix()
         assert any(fnmatch.fnmatch(name, pattern) for pattern in patterns), name
+    for source in (REPO / "lc" / "rules").glob("*.json"):
+        name = source.relative_to(REPO / "lc").as_posix()
+        assert any(fnmatch.fnmatch(name, pattern) for pattern in patterns), name
 
 
 def test_vendored_golden_path_is_declared_as_package_data() -> None:

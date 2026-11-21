@@ -1,0 +1,24 @@
+{
+  "fields": {
+    "fdid": {
+      "action": "SENT",
+      "citation": "SEC Rule 613 and CAT NMS Plan"
+    },
+    "account_number": {
+      "action": "WITHHELD",
+      "citation": "FDID requirement"
+    },
+    "name": {
+      "action": "WITHHELD",
+      "citation": "SEC Release 34-102386 and CAIS amendment"
+    },
+    "address": {
+      "action": "WITHHELD",
+      "citation": "SEC Release 34-102386 and CAIS amendment"
+    },
+    "year_of_birth": {
+      "action": "WITHHELD",
+      "citation": "SEC Release 34-102386 and CAIS amendment"
+    }
+  }
+}
