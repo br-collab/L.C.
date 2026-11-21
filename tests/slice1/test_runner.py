@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Literal
 
@@ -879,3 +881,15 @@ def test_lineage_escalation_four_cases_from_transcript() -> None:
             ),
         )
     assert refused.value.gaps and "LIFECYCLE_MISMATCH" in refused.value.gaps[0]
+
+
+def test_the_scenario_records_the_commits_ci_actually_checks_out() -> None:
+    """The scenario's pinned commits are evidence; they must name what the slice job runs.
+
+    Before this, the record named Atreides 123ce5a and Aureon b22ed26 while CI checked out
+    other commits, so a replayed transcript claimed provenance it did not have.
+    """
+    workflow = (Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml").read_text()
+    job = workflow[workflow.index("  slice1:") : workflow.index("  harness:")]
+    refs = set(re.findall(r"ref: ([0-9a-f]{40})", job))
+    assert refs == {AUREON_COMMIT, ATREIDES_COMMIT}
