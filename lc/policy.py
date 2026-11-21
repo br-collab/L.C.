@@ -28,6 +28,7 @@ __all__ = [
     "OperatorDecision",
     "apply_execution",
     "evaluate_policy",
+    "execution_recorded_reason",
 ]
 
 
@@ -158,6 +159,12 @@ class ExecutionApplication(_Record):
     journal: LifecycleRegister
     disposition: Disposition
     reason: str = Field(min_length=1)
+
+
+def execution_recorded_reason(execution_id: str) -> str:
+    """The reason sealed on an executed order event. One definition, read by the export."""
+
+    return f"venue execution {execution_id} recorded"
 
 
 def apply_execution(  # noqa: PLR0911, PLR0912, PLR0913 - every outcome is explicit
@@ -320,7 +327,7 @@ def apply_execution(  # noqa: PLR0911, PLR0912, PLR0913 - every outcome is expli
         register,
         order_id=report.order_id,
         target=target,
-        reason=f"venue execution {report.execution_id} recorded",
+        reason=execution_recorded_reason(report.execution_id),
         actor=actor,
         event=event,
         quantity=report.quantity,
