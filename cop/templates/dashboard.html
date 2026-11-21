@@ -114,6 +114,17 @@
     {% for notice in golden.early_warning_notices %}<p>Early warning {{ notice.paragraph }}: {{ notice.status }}</p>{% endfor %}
   </article>
   {% endif %}
+  <article class="card" data-cat-feedback="true">
+    <h3>CAT validator feedback</h3>
+    {% if cat_feedback %}
+    <p>Phase {{ cat_feedback.phase }}. {{ cat_feedback.record_count }} records, {{ cat_feedback.exception_count }} rejected.</p>
+    {% for row in cat_feedback.rejections %}
+    <p>Phase {{ cat_feedback.phase }} CAT rejection {{ row.event_id }} correction deadline {{ row.correction_deadline }}</p>
+    {% endfor %}
+    {% else %}
+    <p><strong>ABSENT.</strong> No Phase A CAT feedback file is pinned to this evidence pack.</p>
+    {% endif %}
+  </article>
   {% if ex.tile.current and ex.tile.shown %}
   {% if b.demo %}
   <p class="warning demo" role="alert"><strong>DEMO DATA.</strong> This register is illustrative.</p>

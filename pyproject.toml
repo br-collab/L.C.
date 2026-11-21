@@ -83,6 +83,7 @@ lc = [
     "occ_rule_table.json",
     "py.typed",
     "rules/*.txt",
+    "rules/*.json",
     "trusted_producer_keys.json",
     "vendor/atreides-calendar/*.json",
 ]
