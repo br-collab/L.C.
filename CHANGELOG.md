@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+Phase A: the Common Operating Picture route `/public-summary` shows the written supervisory procedure register status and version, the Rule 3120 counts, the Consolidated Audit Trail record and feedback counts, the anti-money laundering alert count, and the surveillance dispositions from `public-summary.json` in the pack. It does not recompute them. The golden path does not write that file yet.
+
 Phase A: the confidentiality scan also fails on an ALERT- identifier and on an anti-money laundering monitoring scenario name (DEPOSIT_WITHDRAWAL_NO_TRADING, UNRELATED_ACCOUNT_TRANSFER, SECURITY_DEPOSIT_FAST_SALE). A case id is CASE-{alert_id}, so an alert id identifies a case. The golden path does not call this yet.
 
 PS-3C Part 4B moves signed human approval verification into L.C.'s `accept_intent`
