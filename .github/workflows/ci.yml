@@ -109,8 +109,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: br-collab/Project-Atreides
-          # PS-1B closure: Atreides #194 merge commit on main.
-          ref: e5fadaa7966d3f596f10996eca7dfa0742c05f4f
+          # PS-3C Part 5: Atreides #216 merge commit on main.
+          ref: 75199dc67d59f5c58a6953031ac0d39ba680c5cf
           path: .handoff/Project-Atreides
 
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
@@ -147,8 +147,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: br-collab/aureon
-          # MVP-5B closure: Aureon #146 merge commit on main.
-          ref: eefdb96f8827660499ae6a9836729f424e69fbf8
+          # PS-3C Part 6: Aureon #158 merge commit on main.
+          ref: 1c95875178d8819446b798991ef8483c9a49a029
           path: .handoff/aureon
 
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
@@ -183,16 +183,16 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: br-collab/aureon
-          # MVP-5B closure: Aureon #146 merge commit on main.
-          ref: eefdb96f8827660499ae6a9836729f424e69fbf8
+          # PS-3C Part 6: Aureon #158 merge commit on main.
+          ref: 1c95875178d8819446b798991ef8483c9a49a029
           path: .slice1/aureon
 
       - name: Check out ancestry-verified Atreides
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: br-collab/Project-Atreides
-          # PS-1B closure: Atreides #194 merge commit on main.
-          ref: e5fadaa7966d3f596f10996eca7dfa0742c05f4f
+          # PS-3C Part 5: Atreides #216 merge commit on main.
+          ref: 75199dc67d59f5c58a6953031ac0d39ba680c5cf
           path: .slice1/Project-Atreides
 
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7

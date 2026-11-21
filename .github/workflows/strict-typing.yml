@@ -17,12 +17,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: br-collab/Project-Atreides
-          ref: e5fadaa7966d3f596f10996eca7dfa0742c05f4f
+          ref: 75199dc67d59f5c58a6953031ac0d39ba680c5cf
           path: .typing/Project-Atreides
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: br-collab/aureon
-          ref: 58698b418ef1c72110efaf854b96b962941c42c8
+          ref: 1c95875178d8819446b798991ef8483c9a49a029
           path: .typing/aureon
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
         with:
