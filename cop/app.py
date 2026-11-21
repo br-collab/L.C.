@@ -53,6 +53,7 @@ from cop.golden_path import golden_path_health, load_cat_feedback, load_golden_p
 from cop.layer_clock import HttpxLayerClockClient
 from cop.lifecycle import HttpxLifecycleClient
 from cop.observation import NOT_CONFIGURED, Observation
+from cop.public_summary import load_public_summary, render_public_summary
 from cop.refresher import Clock, Refresher, RefresherOptions, Sources, utc_now
 from cop.settings import (
     LOGIN_FAILURE_WINDOW,
@@ -540,6 +541,15 @@ def create_app(  # noqa: PLR0915 - route definitions read best in one place
             return "No such panel", 404
         active = next((key for key, names in SECTIONS.items() if name in names), "now")
         return render_panels((name,), active)
+
+    @app.get("/public-summary")
+    def public_summary() -> str | tuple[str, int]:
+        """Phase A. The counts are the pack file. This route does not recompute them."""
+
+        document = load_public_summary(_state().settings.golden_path_file)
+        if document is None:
+            return "public summary is not in the pack", 404
+        return render_public_summary(document)
 
     return app
 
