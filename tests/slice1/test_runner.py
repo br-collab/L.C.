@@ -125,8 +125,8 @@ from lc.trade import (
 )
 from test_fixtures.signed_approval import attest_approval
 
-AUREON_COMMIT = "eefdb96f8827660499ae6a9836729f424e69fbf8"
-ATREIDES_COMMIT = "e5fadaa7966d3f596f10996eca7dfa0742c05f4f"
+AUREON_COMMIT = "1c95875178d8819446b798991ef8483c9a49a029"
+ATREIDES_COMMIT = "75199dc67d59f5c58a6953031ac0d39ba680c5cf"
 AT = datetime(2026, 9, 29, 15, 0, tzinfo=UTC)
 
 

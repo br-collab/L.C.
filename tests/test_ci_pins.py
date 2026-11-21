@@ -1,5 +1,6 @@
-from pathlib import Path
+from __future__ import annotations
 
+from pathlib import Path
 
 ATREIDES = "75199dc67d59f5c58a6953031ac0d39ba680c5cf"
 AUREON = "1c95875178d8819446b798991ef8483c9a49a029"
