@@ -32,6 +32,7 @@ from lc.lifecycle import (
     split_parent,
     transition,
 )
+from test_fixtures.signed_approval import attest_approval
 
 NOW = datetime(2026, 9, 23, 17, 0, tzinfo=UTC)
 
@@ -158,6 +159,7 @@ def _accepted(payload: ApprovedIntentPayload | None = None) -> IntentOutcome:
         parent_order_id=OrderId(_id("ord_", 10)),
         actor=_actor(),
         event=_event(10),
+        approval_attestation=attest_approval(_envelope(payload)),
     )
     outcome = authorize_strategy(outcome, actor=_actor(), event=_event(11))
     return activate_parent(outcome, actor=_actor(), event=_event(12))
@@ -165,6 +167,25 @@ def _accepted(payload: ApprovedIntentPayload | None = None) -> IntentOutcome:
 
 def test_same_inputs_produce_a_byte_identical_register() -> None:
     assert _accepted().journal.canonical_bytes() == _accepted().journal.canonical_bytes()
+
+
+@pytest.mark.parametrize("approval_attestation", [None, b"not-an-attestation"])
+def test_accept_intent_refuses_missing_or_invalid_approval(
+    approval_attestation: bytes | None,
+) -> None:
+    payload = _payload()
+    outcome = accept_intent(
+        _envelope(payload),
+        _wire_bytes(payload),
+        parent_order_id=OrderId(_id("ord_", 10)),
+        actor=_actor(),
+        event=_event(10),
+        approval_attestation=approval_attestation,
+    )
+
+    assert outcome.refusal is not None, "L.C. approval attestation control did not fail"
+    assert outcome.refusal.predicate == "approval_attestation"
+    assert outcome.journal.events[-1].payload.state is LifecycleState.REFUSED
 
 
 def test_tampered_envelope_digest_is_a_first_class_refusal() -> None:
@@ -181,6 +202,7 @@ def test_tampered_envelope_digest_is_a_first_class_refusal() -> None:
         parent_order_id=OrderId(_id("ord_", 10)),
         actor=_actor(),
         event=_event(10),
+        approval_attestation=attest_approval(_envelope(payload)),
     )
     assert outcome.refusal is not None
     assert outcome.refusal.predicate == "payload_digest"
@@ -206,6 +228,7 @@ def test_policy_and_authority_manifests_are_verified(field: str) -> None:
         parent_order_id=OrderId(_id("ord_", 10)),
         actor=_actor(),
         event=_event(10),
+        approval_attestation=attest_approval(_envelope(payload)),
     )
     assert outcome.refusal is not None
 
@@ -225,6 +248,7 @@ def test_authority_manifest_must_name_the_approving_actor() -> None:
         parent_order_id=OrderId(_id("ord_", 10)),
         actor=_actor(),
         event=_event(10),
+        approval_attestation=attest_approval(_envelope(payload)),
     )
     assert outcome.refusal is not None
     assert outcome.refusal.predicate == "authority_identity"
@@ -312,6 +336,7 @@ def test_refusal_records_later_states_as_not_reached() -> None:
         parent_order_id=OrderId(_id("ord_", 10)),
         actor=_actor(),
         event=_event(10),
+        approval_attestation=attest_approval(_envelope()),
     )
     outcome = authorize_strategy(outcome, actor=_actor(), event=_event(11))
     assert outcome.journal.events[-1].payload.state is LifecycleState.NOT_REACHED
@@ -326,6 +351,7 @@ def test_parent_activation_cannot_skip_strategy_authorization() -> None:
         parent_order_id=OrderId(_id("ord_", 10)),
         actor=_actor(),
         event=_event(10),
+        approval_attestation=attest_approval(_envelope(payload)),
     )
     outcome = activate_parent(outcome, actor=_actor(), event=_event(11))
     assert outcome.journal.events[-1].payload.state is LifecycleState.NOT_REACHED

@@ -32,6 +32,7 @@ from lc.recommendation_profile import (
     MappingRecommendationProfileResolver,
     RecommendationRefusedError,
 )
+from test_fixtures.signed_approval import attest_approval
 from test_fixtures.signed_status import KEY_ID, PRIVATE_KEY, attest_status
 
 PROFILE_ID = "SYN-PROFILE-RETAIL1"
@@ -225,6 +226,7 @@ def test_intent_acceptance_runs_recommendation_gate() -> None:
         parent_order_id=OrderId(_id("ord_", 15)),
         actor=_actor(),
         event=_event(15),
+        approval_attestation=attest_approval(_envelope(payload)),
         terms=_terms(recommended=True),
         recommendation_profile_resolver=_resolver(),
         account_status_input=_status(),
@@ -263,6 +265,7 @@ def test_intent_acceptance_refuses_valid_signature_from_unpinned_key() -> None:
             parent_order_id=OrderId(_id("ord_", 16)),
             actor=_actor(),
             event=_event(16),
+            approval_attestation=attest_approval(_envelope(payload)),
             terms=_terms(recommended=True, profile_id=None),
             account_status_input=unpinned,
             evaluated_at=NOW,
