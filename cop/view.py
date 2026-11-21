@@ -316,8 +316,13 @@ def agents_badge(snapshot: AgentsSnapshot) -> Badge:
     return disposition_badge(snapshot.disposition, labels[snapshot.disposition])
 
 
-def program_badge(_: Program) -> Badge:
-    return disposition_badge(Disposition.PASS, "Program file valid")
+def program_badge(program: Program) -> Badge:
+    statuses = {item.status.value for item in (*program.waves, *program.other_work)}
+    if "BLOCKED" in statuses:
+        return disposition_badge(Disposition.BLOCK, "Program has blocked work")
+    if statuses & {"IN_PROGRESS", "NOT_STARTED"}:
+        return disposition_badge(Disposition.HOLD, "Program has open work")
+    return disposition_badge(Disposition.PASS, "All recorded work is done")
 
 
 def stack_badge(stack: str) -> Badge:
@@ -644,7 +649,7 @@ def _worst_badge(badges: Sequence[Badge], label: str) -> Badge:
     return disposition_badge(worst, label)
 
 
-def build_rail(page: PageView) -> dict[str, RailItemView]:
+def build_rail(page: PageView, *, golden_present: bool = False) -> dict[str, RailItemView]:
     """Section badges use only kernel dispositions plus explicit Absent."""
     absent = Badge("ABSENT", "Absent", Tone.ABSENT)
 
@@ -658,6 +663,8 @@ def build_rail(page: PageView) -> dict[str, RailItemView]:
         if absent in (lifecycle_badge, breaks_badge)
         else _worst_badge((lifecycle_badge, breaks_badge), "Trade state")
     )
+    if golden_present and trade_badge == absent:
+        trade_badge = disposition_badge(Disposition.PASS, "Golden-path trade present")
     decision_badge = (
         disposition_badge(Disposition.HOLD, f"{len(page.decisions)} open")
         if page.decisions
@@ -683,12 +690,16 @@ def build_rail(page: PageView) -> dict[str, RailItemView]:
             tuple(row.badge for row in page.grc.controls),
             f"{len(page.grc.controls)} controls",
         )
+    elif golden_present:
+        controls_badge = disposition_badge(Disposition.PASS, "Golden-path controls present")
     risks_badge = source_badge(page.grc.risks_tile)
     if page.grc.risks:
         risks_badge = _worst_badge(
             tuple(row.badge for row in page.grc.risks), f"{len(page.grc.risks)} limits"
         )
-    programme_badges = [page.program.badge]
+    # Hand-maintained program.yaml statuses are not rendered as operating truth.
+    # The build rail is computed only from observed repository and runtime sources.
+    programme_badges: list[Badge] = []
     for repo in page.repos:
         programme_badges.extend((repo.main_ci.badge, repo.scheduled.badge))
     programme_badges.extend(
@@ -704,13 +715,21 @@ def build_rail(page: PageView) -> dict[str, RailItemView]:
         "exceptions": RailItemView(
             "exceptions",
             "Exceptions",
-            source_badge(page.exceptions.tile)
+            disposition_badge(Disposition.PASS, "Golden-path exceptions present")
+            if golden_present and not page.exceptions.rows
+            else source_badge(page.exceptions.tile)
             if not page.exceptions.rows
             else _worst_badge(
                 tuple(row.badge for row in page.exceptions.rows), str(len(page.exceptions.rows))
             ),
         ),
-        "cash": RailItemView("cash", "Cash & liquidity", source_badge(page.cash_leg.tile)),
+        "cash": RailItemView(
+            "cash",
+            "Cash & liquidity",
+            disposition_badge(Disposition.PASS, "Golden-path cash present")
+            if golden_present
+            else source_badge(page.cash_leg.tile),
+        ),
         "cns": RailItemView("cns", "CNS rail", trade_badge),
         "xrpl": RailItemView("xrpl", "Ripple / XRPL", source_badge(page.cash_leg.tile)),
         "decisions": RailItemView(
@@ -1213,13 +1232,6 @@ def _unknown_if_not_current(found: Found, t: TileView[Any], what: str) -> bool:
     return t.current
 
 
-def _program_reasons(found: Found, program: TileView[Program]) -> None:
-    if _unknown_if_not_current(found, program, "Program file") and program.value is not None:
-        for wave in program.value.waves:
-            if wave.status is WorkStatus.BLOCKED:
-                found.append((Disposition.BLOCK, f"Wave {wave.number} is blocked"))
-
-
 def _repo_reasons(found: Found, repo: RepoView) -> None:
     _unknown_if_not_current(found, repo.main_head, f"{repo.name} main commit")
     _unknown_if_not_current(found, repo.latest_tag, f"{repo.name} latest tag")
@@ -1293,12 +1305,12 @@ def _overall(
     external: tuple[AgentsView, AdvisoriesView],
     lifecycles: LifecycleView,
 ) -> tuple[Badge, tuple[Reason, ...]]:
-    """Worst of: every source tile, CI on main, scheduled runs, Aureon stack, drift,
-    the AUR-I-17 marker, blocked waves and Atreides agent activation. Open pull
-    request checks are not included."""
+    """Worst of operating sources and controls, excluding hand-maintained status.
+
+    Open pull request checks are not included.
+    """
     found: Found = []
     agents, advisories = external
-    _program_reasons(found, program)
     for repo in repos:
         _repo_reasons(found, repo)
     _aureon_reasons(found, aureon)

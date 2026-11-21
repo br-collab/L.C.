@@ -54,7 +54,7 @@
   <div class="overall">
     <h2>Overall program state</h2>
     <p class="overall-badge">{{ badge(b.overall) }}</p>
-    <p class="muted">Computed (POLICY_RESULT) as the worst of: continuous integration on each <code>main</code> branch, scheduled checks, the Aureon snapshot, deploy drift, the AUR-I-17 marker, blocked waves, Atreides agent activation, and every source being current. Open pull requests are not included.</p>
+    <p class="muted">Computed (POLICY_RESULT) as the worst of: continuous integration on each <code>main</code> branch, scheduled checks, the Aureon snapshot, deploy drift, the AUR-I-17 marker, Atreides agent activation, and every operating source being current. Open pull requests and hand-maintained program statuses are not included.</p>
     {% if b.reasons %}
     <details {% if b.reasons | length <= 4 %}open{% endif %}>
       <summary>{{ b.reasons | length }} reason{{ 's' if b.reasons | length != 1 }}</summary>
@@ -85,6 +85,9 @@
 </header>
 
 <main>
+<section class="panel" data-panel="golden-path-source">
+  <p class="warning"><strong>SYNTHETIC EVIDENCE.</strong> Run identifier: <code>{{ golden.run_id if golden else 'ABSENT' }}</code>. Read-only Atreides publication; no live customer or market data.</p>
+</section>
 {% if active_section == 'now' %}
 <section class="panel now-panel" data-panel="now">
   <p class="section-kicker">NOW</p>
@@ -105,6 +108,23 @@
 <section class="panel exceptions-panel" data-panel="exceptions">
   <p class="section-kicker">OPERATE · EXCEPTIONS</p>
   <h2>Exception register {{ badge(rail['exceptions'].badge) }}</h2>
+  {% if golden %}
+  <article class="card"><h3>Golden customer open breaks and draft early warnings</h3>
+    {% if golden.exception_owner %}<p>Open break owner: {{ golden.exception_owner }} · age {{ golden.exception_age_seconds }} seconds.</p>{% else %}<p><strong>ABSENT.</strong> The evidence pack records no open break owner, age, or draft early warning notice.</p>{% endif %}
+    {% for notice in golden.early_warning_notices %}<p>Early warning {{ notice.paragraph }}: {{ notice.status }}</p>{% endfor %}
+  </article>
+  {% endif %}
+  <article class="card" data-cat-feedback="true">
+    <h3>CAT validator feedback</h3>
+    {% if cat_feedback %}
+    <p>Phase {{ cat_feedback.phase }}. {{ cat_feedback.record_count }} records, {{ cat_feedback.exception_count }} rejected.</p>
+    {% for row in cat_feedback.rejections %}
+    <p>Phase {{ cat_feedback.phase }} CAT rejection {{ row.event_id }} correction deadline {{ row.correction_deadline }}</p>
+    {% endfor %}
+    {% else %}
+    <p><strong>ABSENT.</strong> No Phase A CAT feedback file is pinned to this evidence pack.</p>
+    {% endif %}
+  </article>
   {% if ex.tile.current and ex.tile.shown %}
   {% if b.demo %}
   <p class="warning demo" role="alert"><strong>DEMO DATA.</strong> This register is illustrative.</p>
@@ -162,54 +182,21 @@
   {% endif %}
 </section>
 {% endif %}
-{# 2 · Wave board -------------------------------------------------------------------- #}
-{% if 'waves' in selected %}
-{% set t = page.program %}
-<section class="panel" id="waves" data-panel="waves">
-  <h2>Wave board {{ badge(t.badge) }}</h2>
-  <p class="lede">One row per wave of the Joint Upgrade Map (CL-JUM-001). Statuses are maintained by hand in the program file.</p>
-  {{ provenance(t) }}
-  {{ failure(t) }}
-  {% set program = t.shown %}
-  {% if program is not none %}
-  <div class="{{ '' if t.current else 'stale-block' }}">
-  <p class="muted">Program file as of {{ program.as_of.strftime('%d %b %Y') }}.</p>
-  <table class="waves">
-    <thead><tr><th scope="col">Wave</th><th scope="col">Status</th><th scope="col">Work packages</th><th scope="col">Evidence</th><th scope="col">Next action (owner)</th></tr></thead>
-    <tbody>
-    {% for item in program.waves %}
-      <tr>
-        <th scope="row">{{ item.number }}: {{ item.name }}</th>
-        <td>{{ badge(work_badges[item.status]) }}</td>
-        <td>{{ work_row_packages(item) }}</td>
-        <td>{{ item.evidence | join(', ') if item.evidence else '—' }}</td>
-        <td>{% if item.next_action %}{{ item.next_action.action }} <span class="owner">({{ item.next_action.owner.value }})</span>{% else %}—{% endif %}</td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  {% if program.other_work %}
-  <h3>Other approved work</h3>
-  <table class="waves">
-    <thead><tr><th scope="col">Work</th><th scope="col">Status</th><th scope="col">Work packages</th><th scope="col">Evidence</th><th scope="col">Next action (owner)</th></tr></thead>
-    <tbody>
-    {% for item in program.other_work %}
-      <tr>
-        <th scope="row">{{ item.id }}: {{ item.name }}</th>
-        <td>{{ badge(work_badges[item.status]) }}</td>
-        <td>{{ work_row_packages(item) }}</td>
-        <td>{{ item.evidence | join(', ') if item.evidence else '—' }}</td>
-        <td>{% if item.next_action %}{{ item.next_action.action }} <span class="owner">({{ item.next_action.owner.value }})</span>{% else %}—{% endif %}</td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  {% endif %}
-  </div>
-  {% endif %}
-</section>
+{% if active_section == 'trades' %}
+<section class="panel" data-panel="golden-trade-timeline"><h2>Golden customer timeline</h2>
+{% if golden %}<p>Account {{ golden.account_status }} · engine {{ golden.disposition }} · daily close {{ golden.close_report }}</p>
+<ol>{% for event in golden.evidence %}<li><code>{{ event.event_id }}</code> · {{ event.producer }} · {{ event.actor_kind|lower }} actor · signature {{ event.signature_status }} · {{ event.summary }}{% if event.actor_kind == 'HUMAN' %} · <strong>human decision</strong>{% endif %}</li>{% endfor %}</ol>
+{% else %}<p><strong>ABSENT.</strong> No readable golden-path evidence pack is configured.</p>{% endif %}</section>
 {% endif %}
-
+{% if active_section == 'cash' %}
+<section class="panel" data-panel="golden-cash"><h2>Golden customer cash and liquidity</h2>
+{% if golden %}<p>Closing cash: {{ golden.closing_cash }}. Closing positions: {% for issue, quantity in golden.closing_positions.items() %}<code>{{ issue }}</code> {{ quantity }}{% endfor %}. Daily close: {{ golden.close_report }}.</p>{% else %}<p><strong>ABSENT.</strong> No readable golden-path evidence pack is configured.</p>{% endif %}</section>
+{% endif %}
+{% if active_section == 'controls' %}
+<section class="panel" data-panel="golden-controls"><h2>Golden customer invariant agreement</h2>
+  {% if golden %}<table><thead><tr><th>Invariant</th><th>Computed</th><th>Engine disposition</th><th>Agreement</th></tr></thead><tbody>{% for name, computed, engine, agrees in golden.invariants %}<tr><th>{{ name }}</th><td>{{ computed }}</td><td>{{ engine }}</td><td>{{ 'PASS' if agrees else 'FAIL' }}</td></tr>{% endfor %}</tbody></table>
+  <h3>Reconciliation calendar</h3><table><thead><tr><th>Control</th><th>Status</th><th>Breaks</th></tr></thead><tbody>{% for row in golden.reconciliation_calendar %}<tr><th>{{ row.item_id }}</th><td>{{ row.status }}</td><td>{{ row.break_count }}</td></tr>{% endfor %}</tbody></table>{% else %}<p><strong>ABSENT.</strong> No readable golden-path evidence pack is configured.</p>{% endif %}</section>
+{% endif %}
 {# 3 · Repositories ------------------------------------------------------------------ #}
 {% if 'repositories' in selected %}
 <section class="panel" id="repositories" data-panel="repositories">

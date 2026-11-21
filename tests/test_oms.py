@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from random import Random
@@ -9,10 +10,13 @@ from typing import Any
 
 import pytest
 from cannae_kernel.absence import Recorded
+from cannae_kernel.account import AccountStatus
 from cannae_kernel.canonical import digest
 from cannae_kernel.ids import AllocationId, EventId, IntentId, LifecycleId, OrderId
+from cannae_kernel.signed_attestation import sign_attestation
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from test_lifecycle import NOW, _actor, _event, _id, _payload
-from test_market_access import capacity, limits, locates
+from test_market_access import account_status, capacity, limits, locates
 from test_policy_and_venue import _child_register, _evidence, _policy, _venue_order
 
 from emulators.venue import VenueEmulator, VenueOutcome
@@ -36,6 +40,14 @@ from lc.oms import (
     replace_order,
 )
 from lc.policy import ExecutionReport, apply_execution
+from lc.recommendation_profile import (
+    AccountType,
+    AccountTypeStatusDocument,
+    AccountTypeStatusEntry,
+    CustomerProfileEvidence,
+    MappingRecommendationProfileResolver,
+    RecommendationRefusedError,
+)
 from lc.trade import (
     AllocationPlan,
     AllocationRefusalError,
@@ -58,13 +70,17 @@ def _terms(**changes: object) -> OrderTerms:
         "control_price": Decimal(100),
         "limit_price": Decimal(100),
         "policy_expires_at": datetime(2026, 12, 31, tzinfo=UTC),
+        "recommended": False,
     }
     values.update(changes)
     return OrderTerms.model_validate(values)
 
 
 def _register(
-    *, quantity: Decimal = Decimal(100), terms: OrderTerms | None = None
+    *,
+    quantity: Decimal = Decimal(100),
+    terms: OrderTerms | None = None,
+    termless: bool = False,
 ) -> LifecycleRegister:
     event = seal_order_event(
         event_id=EventId(_id("evt_", 80)),
@@ -81,15 +97,26 @@ def _register(
             state=LifecycleState.PARENT_ACTIVE,
             reason="sealed OMS order",
             quantity=Recorded(value=quantity),
-            terms=terms or _terms(),
+            terms=None if termless else terms or _terms(),
         ),
         prior_event_digest=None,
     )
     return LifecycleRegister(lifecycle_id=event.lifecycle_id).append(event)
 
 
+def _tampered_account_status() -> bytes:
+    wrapper = json.loads(account_status().decode())
+    wrapper["payload_b64"] = "dGFtcGVyZWQ="
+    return json.dumps(wrapper).encode()
+
+
 def _append_order(
-    register: LifecycleRegister, *, number: int, quantity: Decimal, terms: OrderTerms | None
+    register: LifecycleRegister,
+    *,
+    number: int,
+    quantity: Decimal,
+    terms: OrderTerms | None,
+    parent_order_id: OrderId | None = None,
 ) -> tuple[LifecycleRegister, OrderEvent]:
     event = seal_order_event(
         event_id=EventId(_id("evt_", number)),
@@ -101,7 +128,7 @@ def _append_order(
         idempotency_key=f"oms1-{number}",
         payload=OrderEventPayload(
             order_id=OrderId(_id("ord_", number)),
-            parent_order_id=None,
+            parent_order_id=parent_order_id,
             intent_id=IntentId(_id("int_", number)),
             state=LifecycleState.PARENT_ACTIVE,
             reason="sealed OMS order",
@@ -239,6 +266,7 @@ def test_open_order_notional_is_replayed_and_changes_after_cancel() -> None:
         limits=limits(),
         capacity_input=capacity(),
         locates_input=locates(),
+        account_status_input=account_status(AccountStatus.ACTIVE, as_of=NOW),
     )
     assert next(check for check in passed.checks if check.code == "ACCOUNT_CREDIT").passed
 
@@ -320,6 +348,31 @@ def test_live_order_without_terms_refuses_credit_and_names_order() -> None:
     assert check.passed is False
     assert str(OrderId(_id("ord_", 81))) in check.reason
     assert decision.disposition.value == "HOLD"
+
+
+def test_split_parent_without_terms_is_not_a_second_street_order() -> None:
+    register = _register(quantity=Decimal(1), termless=True)
+    parent_id = OrderId(_id("ord_", 80))
+    register, candidate = _append_order(
+        register,
+        number=81,
+        quantity=Decimal(1),
+        terms=_terms(account_id="A"),
+        parent_order_id=parent_id,
+    )
+    decision = MarketAccessGate().evaluate(
+        ChildRelease(
+            order_event=candidate,
+            lifecycle_register=register,
+            reference_price=Decimal(100),
+            submitted_at=NOW,
+        ),
+        limits=limits(),
+        capacity_input=capacity(),
+        locates_input=locates(),
+        account_status_input=account_status(),
+    )
+    assert next(item for item in decision.checks if item.code == "OPEN_ORDER_TERMS").passed
 
 
 def _capture_economics(record: CaptureRecord, **changes: object) -> CaptureRecord:
@@ -478,14 +531,13 @@ def test_allocation_plan_and_rounding_refusal_paths_are_explicit() -> None:
         capture(_child_register(), report, _payload(), actor=_actor(), event=_event(90))
     journal, captured = capture(journal, report, _payload(), actor=_actor(), event=_event(92))
     sealed = transition(
-        _child_register(),
+        _child_register(terms=_terms(allocation_plan_digest=digest(plan))),
         order_id=order_id,
         target=LifecycleState.EXECUTED,
         reason="complete with allocation plan",
         actor=_actor(),
         event=_event(98),
         quantity=Decimal(100),
-        terms=_terms(allocation_plan_digest=digest(plan)),
     )
     sealed, sealed_capture = capture(sealed, report, _payload(), actor=_actor(), event=_event(99))
     with pytest.raises(ValueError, match="plan sealed"):
@@ -822,6 +874,7 @@ def test_replace_reruns_strategy_and_market_access_on_new_terms() -> None:
         limits=limits(),
         capacity_input=capacity(),
         locates_input=locates(),
+        account_status_input=account_status(AccountStatus.ACTIVE, as_of=NOW),
         reference_price=Decimal(100),
         processing_time=NOW,
     )
@@ -830,3 +883,157 @@ def test_replace_reruns_strategy_and_market_access_on_new_terms() -> None:
     assert replay(outcome.journal.events).orders[OrderId(_id("ord_", 80))].state is (
         LifecycleState.MARKET_ACCESS_REFUSED
     )
+
+
+def test_replace_order_runs_recommendation_gate() -> None:
+    profile_id = "SYN-PROFILE-REPLACE1"
+    resolver = MappingRecommendationProfileResolver(
+        {
+            profile_id: CustomerProfileEvidence(
+                record_id=profile_id,
+                account_id="A",
+                employment_status="SYNTHETIC_EMPLOYED",
+                annual_income_band="SYNTHETIC_A",
+                net_worth_band="SYNTHETIC_B",
+                liquid_net_worth_band="SYNTHETIC_C",
+                tax_status="SYNTHETIC_STATUS",
+                investment_objectives=("SYNTHETIC_GROWTH",),
+                risk_tolerance="SYNTHETIC_MODERATE",
+                time_horizon="SYNTHETIC_LONG",
+                liquidity_needs="SYNTHETIC_LOW",
+                investment_experience=("SYNTHETIC_EQUITIES",),
+                verified_at=NOW,
+                maximum_age_seconds=300,
+                source="SYNTHETIC_ATREIDES_PROFILE",
+            )
+        }
+    )
+    outcome = replace_order(
+        _register(),
+        order_id=OrderId(_id("ord_", 80)),
+        replacement_event=_event(81),
+        decision_event=_event(82),
+        replacement_terms=_terms(recommended=True, customer_profile_record_id=profile_id),
+        actor=_actor(),
+        strategy_policy=_policy(),
+        market_evidence=_evidence(),
+        market_gate=MarketAccessGate(),
+        limits=limits(),
+        capacity_input=capacity(),
+        locates_input=locates(),
+        account_status_input=account_status(
+            AccountStatus.ACTIVE, as_of=NOW, account_type=AccountType.NATURAL_PERSON
+        ),
+        reference_price=Decimal(100),
+        processing_time=NOW,
+        recommendation_profile_resolver=resolver,
+    )
+    assert outcome.journal.events[-2].payload.terms is not None
+
+
+def test_replace_refuses_valid_signature_from_unpinned_key() -> None:
+    document = AccountTypeStatusDocument(
+        schema_version="atreides.account_type_status/1",
+        as_of=NOW,
+        maximum_age_seconds=300,
+        accounts=(
+            AccountTypeStatusEntry(
+                account_id="A",
+                account_type=AccountType.INSTITUTIONAL,
+                status=AccountStatus.ACTIVE,
+                last_event_id="SYN-ACCOUNT-EVENT-UNPINNED",
+            ),
+        ),
+    )
+    unpinned = sign_attestation(
+        document.model_dump_json().encode(),
+        producer="atreides",
+        key_id="synthetic-unpinned-atreides-1",
+        private_key=Ed25519PrivateKey.generate(),
+    )
+    with pytest.raises(
+        RecommendationRefusedError, match="RECOMMENDATION_ACCOUNT_STATUS_SIGNING_KEY_UNKNOWN"
+    ):
+        replace_order(
+            _register(),
+            order_id=OrderId(_id("ord_", 80)),
+            replacement_event=_event(81),
+            decision_event=_event(82),
+            replacement_terms=_terms(recommended=True),
+            actor=_actor(),
+            strategy_policy=_policy(),
+            market_evidence=_evidence(),
+            market_gate=MarketAccessGate(),
+            limits=limits(),
+            capacity_input=capacity(),
+            locates_input=locates(),
+            account_status_input=unpinned,
+            reference_price=Decimal(100),
+            processing_time=NOW,
+        )
+
+
+@pytest.mark.parametrize(
+    ("status_document", "reason"),
+    [
+        (None, "ACCOUNT_STATUS_DOCUMENT_MISSING"),
+        (account_status(AccountStatus.APPLIED, as_of=NOW), "ACCOUNT_NOT_ACTIVE:APPLIED"),
+        (account_status(AccountStatus.APPROVED, as_of=NOW), "ACCOUNT_NOT_ACTIVE:APPROVED"),
+        (account_status(AccountStatus.RESTRICTED, as_of=NOW), "ACCOUNT_NOT_ACTIVE:RESTRICTED"),
+        (account_status(AccountStatus.FUNDED, as_of=NOW), "ACCOUNT_NOT_ACTIVE:FUNDED"),
+        (account_status(AccountStatus.CLOSED, as_of=NOW), "ACCOUNT_NOT_ACTIVE:CLOSED"),
+        (
+            account_status(AccountStatus.ACTIVE, as_of=datetime(2026, 1, 1, tzinfo=UTC)),
+            "ACCOUNT_STATUS_DOCUMENT_STALE",
+        ),
+        (_tampered_account_status(), "ACCOUNT_STATUS_SIGNATURE_INVALID"),
+    ],
+)
+def test_replace_refuses_missing_and_non_active_account_status(
+    status_document: bytes | None, reason: str
+) -> None:
+    outcome = replace_order(
+        _register(),
+        order_id=OrderId(_id("ord_", 80)),
+        replacement_event=_event(81),
+        decision_event=_event(82),
+        replacement_terms=_terms(),
+        actor=_actor(),
+        strategy_policy=_policy(),
+        market_evidence=_evidence(),
+        market_gate=MarketAccessGate(),
+        limits=limits(),
+        capacity_input=capacity(),
+        locates_input=locates(),
+        account_status_input=status_document,
+        reference_price=Decimal(100),
+        processing_time=NOW,
+    )
+    check = next(
+        item for item in outcome.market_access_decision.checks if item.code == "ACCOUNT_STATUS"
+    )
+    assert not check.passed and check.reason == reason
+
+
+def test_replace_active_account_status_passes_account_gate() -> None:
+    outcome = replace_order(
+        _register(),
+        order_id=OrderId(_id("ord_", 80)),
+        replacement_event=_event(81),
+        decision_event=_event(82),
+        replacement_terms=_terms(),
+        actor=_actor(),
+        strategy_policy=_policy(),
+        market_evidence=_evidence(),
+        market_gate=MarketAccessGate(),
+        limits=limits(),
+        capacity_input=capacity(),
+        locates_input=locates(),
+        account_status_input=account_status(AccountStatus.ACTIVE, as_of=NOW),
+        reference_price=Decimal(100),
+        processing_time=NOW,
+    )
+    check = next(
+        item for item in outcome.market_access_decision.checks if item.code == "ACCOUNT_STATUS"
+    )
+    assert check.passed

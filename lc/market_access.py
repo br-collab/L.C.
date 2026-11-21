@@ -14,6 +14,7 @@ from enum import StrEnum
 from typing import Literal, Self, TypeVar
 
 from cannae_kernel.absence import require_recorded
+from cannae_kernel.account import AccountStatus
 from cannae_kernel.actor import ActorRef
 from cannae_kernel.canonical import digest, digest_bytes
 from cannae_kernel.disposition import Disposition
@@ -22,6 +23,11 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 
 from lc.events import LifecycleState, OrderEvent
 from lc.lifecycle import EventInput, LifecycleRegister, replay, transition
+from lc.recommendation_profile import (
+    AccountTypeStatusDocument,
+    RecommendationRefusedError,
+    read_account_status_document,
+)
 
 # 17 CFR 240.15c3-5 and 17 CFR 242.200/203, quoted from the pinned sources
 # beside the market-access and short-sale controls that implement them.
@@ -96,7 +102,6 @@ class LimitsManifest(_Record):
     duplicate_window_seconds: int = Field(gt=0)
     restricted_issues: tuple[str, ...] = ()
     halted_issues: tuple[str, ...] = ()
-    restricted_accounts: tuple[str, ...] = ()
 
 
 class LimitChange(_Record):
@@ -237,13 +242,14 @@ class MarketAccessGate:
         self._locate_used: dict[str, Decimal] = {}
         self.decisions: list[MarketAccessDecision] = []
 
-    def evaluate(  # noqa: PLR0912, PLR0915 - controls remain explicit evidence
+    def evaluate(  # noqa: PLR0912, PLR0913, PLR0915 - controls remain explicit evidence
         self,
         order: ChildRelease,
         *,
         limits: LimitsManifest,
         capacity_input: AttestedInput | None,
         locates_input: AttestedInput | None,
+        account_status_input: bytes | None = None,
         halts: tuple[FirmHalt, ...] = (),
     ) -> MarketAccessDecision:
         terms = order.order_event.payload.terms
@@ -254,6 +260,12 @@ class MarketAccessGate:
         snapshot = replay(order.lifecycle_register.events)
         if order_id not in snapshot.orders:
             raise ValueError("sealed order event is not in the lifecycle register")
+        first_account_order = not any(
+            event.envelope_digest != order.order_event.envelope_digest
+            and event.payload.terms is not None
+            and event.payload.terms.account_id == terms.account_id
+            for event in order.lifecycle_register.events
+        )
         live = {
             LifecycleState.PARENT_ACTIVE,
             LifecycleState.MARKET_ACCESS_PASSED,
@@ -262,8 +274,17 @@ class MarketAccessGate:
         firm_open_order_notional = Decimal(0)
         account_open_order_notional = Decimal(0)
         termless_live_orders: list[str] = []
+        split_parent_ids = {
+            item.parent_order_id
+            for item in snapshot.orders.values()
+            if item.parent_order_id is not None
+        }
         for item_id, item in snapshot.orders.items():
             if item_id == order_id or item.state not in live:
+                continue
+            # A split parent carries conserved quantity but is not independently
+            # releasable. Its children carry the sealed street-order terms.
+            if item_id in split_parent_ids:
                 continue
             if item.terms is None:
                 termless_live_orders.append(str(item_id))
@@ -275,9 +296,67 @@ class MarketAccessGate:
         capacity, capacity_status = _parse_attested(capacity_input, CapacityDocument)
         locates, locates_status = _parse_attested(locates_input, LocateDocument)
         checks: list[CheckResult] = []
+        now = order.submitted_at
 
         def check(code: str, passed: bool, reason: str) -> None:
             checks.append(CheckResult(code=code, passed=passed, reason=reason))
+
+        status_document: AccountTypeStatusDocument | None = None
+        status_reason = "ACCOUNT_STATUS_DOCUMENT_MISSING"
+        if account_status_input is not None:
+            try:
+                status_document = read_account_status_document(
+                    account_status_input,
+                    evaluated_at=now,
+                )
+            except RecommendationRefusedError as exc:
+                status_reason = {
+                    "RECOMMENDATION_ACCOUNT_STATUS_STALE": "ACCOUNT_STATUS_DOCUMENT_STALE",
+                    "RECOMMENDATION_ACCOUNT_STATUS_TAMPERED": "ACCOUNT_STATUS_DOCUMENT_TAMPERED",
+                    "RECOMMENDATION_ACCOUNT_STATUS_UNREADABLE": (
+                        "ACCOUNT_STATUS_DOCUMENT_UNREADABLE"
+                    ),
+                    "RECOMMENDATION_ACCOUNT_STATUS_SIGNING_KEY_UNKNOWN": (
+                        "ACCOUNT_STATUS_SIGNING_KEY_UNKNOWN"
+                    ),
+                    "RECOMMENDATION_ACCOUNT_STATUS_SIGNING_KEY_REVOKED": (
+                        "ACCOUNT_STATUS_SIGNING_KEY_REVOKED"
+                    ),
+                    "RECOMMENDATION_ACCOUNT_STATUS_SIGNING_KEY_OUTSIDE_VALIDITY": (
+                        "ACCOUNT_STATUS_SIGNING_KEY_OUTSIDE_VALIDITY"
+                    ),
+                    "RECOMMENDATION_ACCOUNT_STATUS_PRODUCER_MISMATCH": (
+                        "ACCOUNT_STATUS_PRODUCER_MISMATCH"
+                    ),
+                    "RECOMMENDATION_ACCOUNT_STATUS_SIGNATURE_INVALID": (
+                        "ACCOUNT_STATUS_SIGNATURE_INVALID"
+                    ),
+                }.get(exc.reason.value, exc.reason.value.replace("RECOMMENDATION_", ""))
+                status_document = None
+        account_status = (
+            next(
+                (
+                    item.status
+                    for item in status_document.accounts
+                    if item.account_id == terms.account_id
+                ),
+                None,
+            )
+            if status_document
+            else None
+        )
+        if status_document is not None and account_status is None:
+            status_reason = "ACCOUNT_STATUS_UNKNOWN"
+        elif account_status is AccountStatus.FUNDED and first_account_order:
+            status_reason = "OK_FIRST_TRADE_FROM_FUNDED"
+        elif account_status is not None and account_status is not AccountStatus.ACTIVE:
+            status_reason = f"ACCOUNT_NOT_ACTIVE:{account_status.value}"
+        elif account_status is AccountStatus.ACTIVE:
+            status_reason = "OK"
+        account_releasable = account_status is AccountStatus.ACTIVE or (
+            account_status is AccountStatus.FUNDED and first_account_order
+        )
+        check("ACCOUNT_STATUS", account_releasable, status_reason)
 
         check(
             "OPEN_ORDER_TERMS",
@@ -289,7 +368,6 @@ class MarketAccessGate:
             ),
         )
 
-        now = order.submitted_at
         capacity_fresh = capacity is not None and now - capacity.as_of <= timedelta(
             seconds=capacity.maximum_age_seconds
         )
@@ -331,8 +409,8 @@ class MarketAccessGate:
         check("TRADING_HALT", terms.issue not in limits.halted_issues, "TRADING_HALT")
         check(
             "ACCOUNT_RESTRICTION",
-            terms.account_id not in limits.restricted_accounts,
-            "ACCOUNT_RESTRICTED",
+            account_releasable,
+            status_reason,
         )
         active_halt = next(
             (

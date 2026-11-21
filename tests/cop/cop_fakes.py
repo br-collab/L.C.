@@ -297,7 +297,7 @@ def activation_body(
         "kind": "NOT_APPLICABLE",
         "reason": "this agent is running",
     }
-    no_refusal = {
+    no_refusal: dict[str, Any] = {
         "state": "absent",
         "kind": "NOTHING_RECORDED",
         "reason": "this agent has refused nothing since activation",

@@ -4,14 +4,12 @@
 # evidence identifiers, next actions with owners, and decision identifiers with one-line
 # titles. No design content. The schema in cop/program.py rejects anything else it can.
 #
-# Maintained by hand. Update `as_of` whenever you change a status.
+# Maintained by hand. The deployed commit is the status version; no separate date is published.
 # Evidence identifiers: `<repository>#<pull request number>`, `<repository>@<tag or commit>`,
 # or a report name from the workspace `_reports/` folder.
 # Owners: Bill, Claude Code, Cowork.
 
 schema_version: 1
-as_of: 2026-10-22
-
 waves:
   - number: 0
     id: W0

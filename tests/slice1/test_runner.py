@@ -124,8 +124,8 @@ from lc.trade import (
     record_match,
 )
 
-AUREON_COMMIT = "0dbe19976aab4dd53adae281a8d45922c2e38fb7"
-ATREIDES_COMMIT = "7f15ff8985b56b1f7156e7aec0323fca3539fe01"
+AUREON_COMMIT = "eefdb96f8827660499ae6a9836729f424e69fbf8"
+ATREIDES_COMMIT = "e5fadaa7966d3f596f10996eca7dfa0742c05f4f"
 AT = datetime(2026, 9, 29, 15, 0, tzinfo=UTC)
 
 
@@ -340,6 +340,7 @@ def _run(  # noqa: PLR0915 - the ordered lifecycle remains visible as one experi
                     limit_price=Decimal("99.5"),
                     approved_intent_digest=digest(intent),
                     policy_expires_at=AT + timedelta(hours=1),
+                    recommended=False,
                 ),
             ),
         ),

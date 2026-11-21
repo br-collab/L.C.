@@ -1,0 +1,35 @@
+name: Strict typing
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  strict-typing:
+    name: strict-typing
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: br-collab/Project-Atreides
+          ref: e5fadaa7966d3f596f10996eca7dfa0742c05f4f
+          path: .typing/Project-Atreides
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: br-collab/aureon
+          ref: 58698b418ef1c72110efaf854b96b962941c42c8
+          path: .typing/aureon
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[cop,harness,h,dev]" mypy==1.18.2
+      - name: strict-typing
+        env:
+          MYPYPATH: .typing/Project-Atreides:.typing/aureon
+        run: mypy --strict lc emulators harness_c2 thifur_h cop tests
+

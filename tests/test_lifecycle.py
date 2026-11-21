@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from inspect import signature
 
 import pytest
 from cannae_kernel.actor import ActorKind, ActorRef
@@ -15,7 +16,7 @@ from cannae_kernel.ids import ActorId, EventId, IntentId, LifecycleId, OrderId
 from cannae_kernel.provenance import Provenance
 from cannae_kernel.session import BusinessDate, MarketSession, SessionContext
 
-from lc.events import LifecycleState
+from lc.events import LifecycleState, OrderTerms, OrderType, TimeInForce
 from lc.lifecycle import (
     ApprovedIntentPayload,
     AuthorityManifest,
@@ -33,6 +34,20 @@ from lc.lifecycle import (
 )
 
 NOW = datetime(2026, 9, 23, 17, 0, tzinfo=UTC)
+
+
+def _order_terms() -> OrderTerms:
+    return OrderTerms(
+        account_id="SYN-ACCOUNT-1",
+        strategy_id="SYN-STRATEGY-1",
+        issue="SYNTHETIC-ISSUE-1",
+        side="BUY",
+        order_type=OrderType.LIMIT,
+        time_in_force=TimeInForce.DAY,
+        control_price=Decimal(100),
+        limit_price=Decimal(100),
+        recommended=False,
+    )
 
 
 def _id(prefix: str, n: int) -> str:
@@ -220,8 +235,18 @@ def test_parent_to_child_split_conserves_quantity() -> None:
         _accepted(),
         actor=_actor(),
         children=(
-            ChildOrder(order_id=OrderId(_id("ord_", 11)), quantity=Decimal("40"), event=_event(13)),
-            ChildOrder(order_id=OrderId(_id("ord_", 12)), quantity=Decimal("60"), event=_event(14)),
+            ChildOrder(
+                order_id=OrderId(_id("ord_", 11)),
+                quantity=Decimal("40"),
+                event=_event(13),
+                terms=_order_terms(),
+            ),
+            ChildOrder(
+                order_id=OrderId(_id("ord_", 12)),
+                quantity=Decimal("60"),
+                event=_event(14),
+                terms=_order_terms(),
+            ),
         ),
     )
     snapshot = replay(outcome.journal.events)
@@ -257,6 +282,11 @@ def test_replay_reconstructs_state_without_an_emulator() -> None:
     second = replay(tuple(outcome.journal.events))
     assert first == second
     assert first.last_event_digest == outcome.journal.events[-1].envelope_digest
+
+
+def test_generic_transition_cannot_change_order_terms() -> None:
+    assert "terms" not in signature(transition).parameters
+    assert "replacement_terms" not in signature(transition).parameters
 
 
 def test_a_silent_skip_is_recorded_as_not_reached() -> None:

@@ -113,6 +113,7 @@ ENV_TRACEABILITY_URL = "ATREIDES_TRACEABILITY_URL"
 ENV_ESCALATIONS_URL = "C2_ESCALATIONS_URL"
 ENV_LC_LAYER_CLOCK_URL = "LC_LAYER_CLOCK_URL"
 ENV_LIFECYCLE_BASE_URL = "LC_LIFECYCLE_BASE_URL"
+ENV_GOLDEN_PATH_FILE = "ATREIDES_GOLDEN_PATH_FILE"
 
 
 @dataclass(frozen=True)
@@ -129,6 +130,7 @@ class Settings:
     escalations_url: str | None
     lc_layer_clock_url: str | None
     lifecycle_base_url: str | None
+    golden_path_file: Path | None
     """Where the C2 escalation queue is published. ``None`` when unset, which
     panel 12 reports by name rather than the page hiding."""
     """Where the Atreides activation snapshot is published. ``None`` when unset,
@@ -179,6 +181,7 @@ def _public_problems(env: Mapping[str, str]) -> list[str]:
         ENV_ESCALATIONS_URL,
         ENV_LC_LAYER_CLOCK_URL,
         ENV_LIFECYCLE_BASE_URL,
+        ENV_GOLDEN_PATH_FILE,
     )
     for name in public_feed_variables:
         if _non_empty(env, name) is not None:
@@ -200,6 +203,7 @@ def load_settings(env: Mapping[str, str]) -> Settings:
     escalations_url = _non_empty(env, ENV_ESCALATIONS_URL)
     lc_layer_clock_url = _non_empty(env, ENV_LC_LAYER_CLOCK_URL)
     lifecycle_base_url = _non_empty(env, ENV_LIFECYCLE_BASE_URL)
+    golden_path_value = _non_empty(env, ENV_GOLDEN_PATH_FILE)
     insecure_local = _flag(env, ENV_INSECURE_LOCAL)
     demo = _flag(env, ENV_DEMO)
     public = _flag(env, ENV_PUBLIC)
@@ -248,6 +252,7 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         escalations_url=escalations_url,
         lc_layer_clock_url=lc_layer_clock_url,
         lifecycle_base_url=lifecycle_base_url,
+        golden_path_file=Path(golden_path_value) if golden_path_value else None,
         insecure_local=insecure_local,
         demo=demo,
         public=public,

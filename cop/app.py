@@ -49,6 +49,7 @@ from cop.demo import (
 from cop.escalations import HttpxEscalationClient
 from cop.exceptions import PublishedBreakExceptionSource
 from cop.github import HttpxGitHubClient
+from cop.golden_path import golden_path_health, load_cat_feedback, load_golden_path
 from cop.layer_clock import HttpxLayerClockClient
 from cop.lifecycle import HttpxLifecycleClient
 from cop.observation import NOT_CONFIGURED, Observation
@@ -80,7 +81,6 @@ from cop.view import (
 log = logging.getLogger(__name__)
 
 PANELS: dict[str, str] = {
-    "waves": "Wave board",
     "repositories": "Repositories",
     "aureon": "Live Aureon",
     "agents": "Atreides agents",
@@ -113,7 +113,7 @@ SECTIONS: dict[str, tuple[str, ...]] = {
     "cns": ("cns",),
     "xrpl": ("xrpl",),
     "agents": ("agents", "advisories", "traceability"),
-    "programme": ("waves", "repositories", "aureon", "simulation", "scheduled"),
+    "programme": ("repositories", "aureon", "simulation", "scheduled"),
     "blind": ("blindspots",),
 }
 
@@ -423,6 +423,7 @@ def create_app(  # noqa: PLR0915 - route definitions read best in one place
             refresher="running" if state.refresher.running else "idle",
             sources={
                 "program": _health_source([snapshot.program], now),
+                "golden-path": golden_path_health(state.settings.golden_path_file),
                 "github": _health_source(github_observations, now),
                 "aureon-snapshot": _health_source([snapshot.aureon.snapshot], now),
                 "cash-leg": _health_source([snapshot.cash_leg.cash_leg], now),
@@ -509,14 +510,18 @@ def create_app(  # noqa: PLR0915 - route definitions read best in one place
         selected_exception = next(
             (row for row in page.exceptions.rows if row.record.exception_id == selected_id), None
         )
+        golden = load_golden_path(state.settings.golden_path_file)
+        cat_feedback = load_cat_feedback(state.settings.golden_path_file)
         return render_template(
             "dashboard.html",
             page=page,
-            rail=build_rail(page),
+            rail=build_rail(page, golden_present=golden is not None),
             selected=selected,
             active_section=active_section,
             exception_filter=exception_filter,
             selected_exception=selected_exception,
+            golden=golden,
+            cat_feedback=cat_feedback,
         )
 
     @app.get("/")

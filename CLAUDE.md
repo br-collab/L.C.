@@ -22,3 +22,8 @@ Consume their contracts; never vendor their code into this repository.
 - One work package per commit, with its acceptance tests.
 - Journal and record timestamps use DTG format (YYYYMMDDHHMM).
 - Spell out acronyms on first use in docs.
+## Merge authority
+
+Builders open pull requests and may enable auto-merge. A pull request merges only when every
+required status check passes on an up-to-date branch. Builders never bypass required checks,
+use an admin override, or force-push to main. Only Bill creates tags and releases.

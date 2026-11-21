@@ -95,6 +95,8 @@ class OrderTerms(BaseModel):
     policy_expires_at: datetime | None = None
     minimum_price_increment: Decimal = Field(default=Decimal("0.01"), gt=0)
     session_activity_permitted: bool = True
+    recommended: bool | None = None
+    customer_profile_record_id: str | None = None
 
     @model_validator(mode="after")
     def _prices_match_order_type(self) -> Self:

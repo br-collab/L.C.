@@ -12,7 +12,7 @@ from cannae_kernel.ids import OrderId
 from pydantic import BaseModel, ConfigDict
 
 from lc.events import LifecycleState, OrderEvent, OrderTerms, TimeInForce
-from lc.lifecycle import EventInput, LifecycleRegister, replay, transition
+from lc.lifecycle import EventInput, LifecycleRegister, _transition_with_terms, replay, transition
 from lc.market_access import (
     AttestedInput,
     ChildRelease,
@@ -23,6 +23,10 @@ from lc.market_access import (
     MarketAccessGate,
 )
 from lc.policy import ExecutionPolicy, GateDecision, MarketEvidenceSnapshot, evaluate_policy
+from lc.recommendation_profile import (
+    RecommendationProfileResolver,
+    enforce_recommendation_profile,
+)
 
 
 class _Record(BaseModel):
@@ -168,18 +172,28 @@ def replace_order(  # noqa: PLR0913 - every control input remains explicit evide
     limits: LimitsManifest,
     capacity_input: AttestedInput | None,
     locates_input: AttestedInput | None,
+    account_status_input: bytes | None,
     reference_price: Decimal,
     processing_time: datetime,
+    recommendation_profile_resolver: RecommendationProfileResolver | None = None,
+    profile_maximum_age_seconds: int = 300,
     halts: tuple[FirmHalt, ...] = (),
 ) -> ReplacementOutcome:
-    replaced = transition(
+    enforce_recommendation_profile(
+        replacement_terms,
+        resolver=recommendation_profile_resolver,
+        evaluated_at=processing_time,
+        account_status_input=account_status_input,
+        profile_maximum_age_seconds=profile_maximum_age_seconds,
+    )
+    replaced = _transition_with_terms(
         register,
         order_id=order_id,
         target=LifecycleState.REPLACED,
         reason="cancel/replace terms sealed; controls must rerun",
         actor=actor,
         event=replacement_event,
-        terms=replacement_terms,
+        replacement_terms=replacement_terms,
     )
     order_event: OrderEvent = replaced.events[-1]
     strategy = evaluate_policy(
@@ -198,6 +212,7 @@ def replace_order(  # noqa: PLR0913 - every control input remains explicit evide
         limits=limits,
         capacity_input=capacity_input,
         locates_input=locates_input,
+        account_status_input=account_status_input,
         halts=halts,
     )
     disposition = (

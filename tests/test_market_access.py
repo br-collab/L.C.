@@ -6,6 +6,7 @@ from decimal import Decimal
 
 import pytest
 from cannae_kernel.absence import Recorded
+from cannae_kernel.account import AccountStatus
 from cannae_kernel.canonical import canonical_bytes, digest_bytes
 from cannae_kernel.disposition import Disposition
 from cannae_kernel.ids import EventId, IntentId, LifecycleId, OrderId
@@ -37,6 +38,12 @@ from lc.market_access import (
     record_decision,
     record_limit_change,
 )
+from lc.recommendation_profile import (
+    AccountType,
+    AccountTypeStatusDocument,
+    AccountTypeStatusEntry,
+)
+from test_fixtures.signed_status import attest_status
 
 NOW = datetime(2026, 10, 22, 14, tzinfo=UTC)
 ORDER = OrderId("ord_" + "1" * 26)
@@ -103,6 +110,30 @@ def locates(*records: Locate) -> AttestedInput:
     return attested(
         LocateDocument(
             schema_version="atreides.equities_locates/1", as_of=NOW, synthetic=True, locates=records
+        )
+    )
+
+
+def account_status(
+    status: AccountStatus = AccountStatus.ACTIVE,
+    *,
+    as_of: datetime = NOW,
+    account_id: str = "A",
+    account_type: AccountType = AccountType.INSTITUTIONAL,
+) -> bytes:
+    return attest_status(
+        AccountTypeStatusDocument(
+            schema_version="atreides.account_type_status/1",
+            as_of=as_of,
+            maximum_age_seconds=300,
+            accounts=(
+                AccountTypeStatusEntry(
+                    account_id=account_id,
+                    account_type=account_type,
+                    status=status,
+                    last_event_id="SYN-ACCOUNT-EVENT-001",
+                ),
+            ),
         )
     )
 
@@ -217,6 +248,7 @@ def decide(
         limits=lim or limits(),
         capacity_input=capacity() if cap is None else cap,
         locates_input=locates() if loc is None else loc,
+        account_status_input=account_status(),
     )
 
 
@@ -235,6 +267,81 @@ def test_pass_duplicate_and_limit_change_record() -> None:
     failed(decide(gate, order()), "DUPLICATE", "DUPLICATE_ORDER")
     change = record_limit_change(limits(), limits(version="2"), NOW)
     assert change.previous_version == "1" and change.manifest_digest.startswith("sha256:")
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        AccountStatus.APPLIED,
+        AccountStatus.APPROVED,
+        AccountStatus.RESTRICTED,
+        AccountStatus.CLOSED,
+    ],
+)
+def test_non_active_account_is_refused(status: AccountStatus) -> None:
+    decision = MarketAccessGate().evaluate(
+        order(),
+        limits=limits(),
+        capacity_input=capacity(),
+        locates_input=locates(),
+        account_status_input=account_status(status),
+    )
+    failed(decision, "ACCOUNT_STATUS", f"ACCOUNT_NOT_ACTIVE:{status.value}")
+
+
+def test_first_trade_can_release_from_funded_then_lifecycle_must_activate() -> None:
+    decision = MarketAccessGate().evaluate(
+        order(),
+        limits=limits(),
+        capacity_input=capacity(),
+        locates_input=locates(),
+        account_status_input=account_status(AccountStatus.FUNDED),
+    )
+    assert decision.disposition is Disposition.PASS
+
+
+def test_stale_account_status_is_refused() -> None:
+    decision = MarketAccessGate().evaluate(
+        order(),
+        limits=limits(),
+        capacity_input=capacity(),
+        locates_input=locates(),
+        account_status_input=account_status(as_of=NOW - timedelta(hours=1)),
+    )
+    failed(decision, "ACCOUNT_STATUS", "ACCOUNT_STATUS_DOCUMENT_STALE")
+
+
+@pytest.mark.parametrize(
+    ("status_input", "reason"),
+    [
+        (None, "ACCOUNT_STATUS_DOCUMENT_MISSING"),
+        (b"{}", "ACCOUNT_STATUS_DOCUMENT_UNREADABLE"),
+        (account_status(account_id="B"), "ACCOUNT_STATUS_UNKNOWN"),
+    ],
+)
+def test_unusable_account_status_is_refused(status_input: bytes | None, reason: str) -> None:
+    decision = MarketAccessGate().evaluate(
+        order(),
+        limits=limits(),
+        capacity_input=capacity(),
+        locates_input=locates(),
+        account_status_input=status_input,
+    )
+    failed(decision, "ACCOUNT_STATUS", reason)
+
+
+def test_tampered_account_status_is_refused() -> None:
+    wrapper = json.loads(account_status())
+    wrapper["payload_b64"] = "dGFtcGVyZWQ="
+    raw = json.dumps(wrapper).encode()
+    decision = MarketAccessGate().evaluate(
+        order(),
+        limits=limits(),
+        capacity_input=capacity(),
+        locates_input=locates(),
+        account_status_input=raw,
+    )
+    failed(decision, "ACCOUNT_STATUS", "ACCOUNT_STATUS_SIGNATURE_INVALID")
 
 
 def test_producer_attestation_parser_refuses_type_and_tamper() -> None:
@@ -285,7 +392,6 @@ def test_decision_is_recorded_in_lifecycle(monkeypatch) -> None:
         ("MAXIMUM_NOTIONAL", "MAXIMUM_NOTIONAL", {"quantity": Decimal(600)}, {}, 0, 0),
         ("RESTRICTED_LIST", "RESTRICTED_ISSUE", {}, {"restricted_issues": ("ACME",)}, 0, 0),
         ("TRADING_HALT", "TRADING_HALT", {}, {"halted_issues": ("ACME",)}, 0, 0),
-        ("ACCOUNT_RESTRICTION", "ACCOUNT_RESTRICTED", {}, {"restricted_accounts": ("A",)}, 0, 0),
         ("SELL_MARKING", "SELL_MARK_MISSING", {"side": "SELL"}, {}, 0, 0),
         (
             "LONG_OWNERSHIP",
@@ -320,12 +426,15 @@ def test_capacity_missing_tampered_stale_and_unreadable() -> None:
         limits=limits(),
         capacity_input=None,
         locates_input=locates(),
+        account_status_input=account_status(),
     )
     failed(missing, "CAPACITY_DOCUMENT", "DOCUMENT_MISSING")
     good = capacity()
     tampered = good.model_copy(update={"payload": good.payload + b" "})
     failed(
-        decide(MarketAccessGate(), order(), cap=tampered), "CAPACITY_DOCUMENT", "DOCUMENT_TAMPERED"
+        decide(MarketAccessGate(), order(), cap=tampered),
+        "CAPACITY_DOCUMENT",
+        "DOCUMENT_TAMPERED",
     )
     failed(
         decide(MarketAccessGate(), order(), cap=capacity(NOW - timedelta(hours=1))),
@@ -333,7 +442,11 @@ def test_capacity_missing_tampered_stale_and_unreadable() -> None:
         "DOCUMENT_STALE",
     )
     bad = AttestedInput(payload=b"{}", payload_digest=digest_bytes(b"{}"))
-    failed(decide(MarketAccessGate(), order(), cap=bad), "CAPACITY_DOCUMENT", "DOCUMENT_UNREADABLE")
+    failed(
+        decide(MarketAccessGate(), order(), cap=bad),
+        "CAPACITY_DOCUMENT",
+        "DOCUMENT_UNREADABLE",
+    )
 
 
 @pytest.mark.parametrize(
@@ -356,6 +469,7 @@ def test_locate_refusals(loc_input, order_changes, reason) -> None:
         limits=limits(),
         capacity_input=capacity(),
         locates_input=loc_input,
+        account_status_input=account_status(),
     )
     failed(decision, "LOCATE", reason)
 
@@ -368,6 +482,7 @@ def test_locate_consumes_and_cannot_be_reused_past_quantity() -> None:
         limits=limits(),
         capacity_input=capacity(),
         locates_input=document,
+        account_status_input=account_status(),
     )
     assert first.disposition is Disposition.PASS
     second = gate.evaluate(
@@ -382,6 +497,7 @@ def test_locate_consumes_and_cannot_be_reused_past_quantity() -> None:
         limits=limits(),
         capacity_input=capacity(),
         locates_input=document,
+        account_status_input=account_status(),
     )
     failed(second, "LOCATE", "LOCATE_INSUFFICIENT")
 

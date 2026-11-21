@@ -1,0 +1,10 @@
+{
+  "date": "2026-10-21",
+  "sha256": "17c606b0211e1b98b53c119825ac2e1a4999d054c01062be8f046f04ae1f0db9",
+  "synthetic_firm_salt": "SYNTHETIC-FIRM",
+  "terms_check": "CAT NMS Plan public technical documentation, checked 2026-11-18",
+  "title": "CAT Industry Member Technical Specifications (2d) v4.2.0 r4",
+  "url": "https://www.catnmsplan.com/documents/cat-industry-member-technical-specifications-2d-v420-r4",
+  "use": "Field names, event names, linkage and timestamp validation only; no submission",
+  "version": "4.2.0 r4"
+}

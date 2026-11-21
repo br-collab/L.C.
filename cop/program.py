@@ -83,7 +83,6 @@ class Decision(_Strict):
 
 class Program(_Strict):
     schema_version: int
-    as_of: date
     waves: tuple[Wave, ...]
     other_work: tuple[WorkItem, ...] = ()
     decisions: tuple[Decision, ...] = ()

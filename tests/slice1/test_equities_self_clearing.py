@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 from cannae_kernel.absence import Recorded
+from cannae_kernel.account import AccountStatus
 from cannae_kernel.actor import ActorKind, ActorRef
 from cannae_kernel.clocks import EventTimes
 from cannae_kernel.disposition import Disposition
@@ -33,6 +34,12 @@ from lc.market_access import (
     consume_producer_attestation,
 )
 from lc.oms import expire_day_orders
+from lc.recommendation_profile import (
+    AccountType,
+    AccountTypeStatusDocument,
+    AccountTypeStatusEntry,
+)
+from test_fixtures.signed_status import attest_status
 
 AT = datetime(2026, 10, 22, 14, tzinfo=UTC)
 
@@ -66,6 +73,7 @@ def _order(number: str, **changes: object) -> ChildRelease:
             "time_in_force": TimeInForce.DAY,
             "control_price": limit_price,
             "limit_price": limit_price,
+            "recommended": False,
         }
     )
     actor = ActorRef(
@@ -131,6 +139,21 @@ def _run() -> tuple[dict[str, bytes], bytes]:
         duplicate_window_seconds=30,
     )
     gate = MarketAccessGate()
+    status_document = attest_status(
+        AccountTypeStatusDocument(
+            schema_version="atreides.account_type_status/1",
+            as_of=AT,
+            maximum_age_seconds=300,
+            accounts=(
+                AccountTypeStatusEntry(
+                    account_id="CUSTOMER-1",
+                    account_type=AccountType.INSTITUTIONAL,
+                    status=AccountStatus.ACTIVE,
+                    last_event_id="SYN-EQ1-ACCOUNT-ACTIVE",
+                ),
+            ),
+        )
+    )
     orders = (
         _order("1"),
         _order("2", quantity=Decimal(2)),
@@ -144,6 +167,7 @@ def _run() -> tuple[dict[str, bytes], bytes]:
             limits=limits,
             capacity_input=capacity,
             locates_input=locates,
+            account_status_input=status_document,
         )
         for order in orders
     )
