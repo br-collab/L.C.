@@ -4,6 +4,11 @@
 
 Phase A: the Common Operating Picture route `/public-summary` shows the written supervisory procedure register status and version, the Rule 3120 counts, the Consolidated Audit Trail record and feedback counts, the anti-money laundering alert count, and the surveillance dispositions from `public-summary.json` in the pack. It does not recompute them. The golden path does not write that file yet.
 
+PS-3C Part 4B moves signed human approval verification into L.C.'s `accept_intent`
+boundary. Missing, malformed, untrusted, or incorrectly bound approval attestations now
+produce a refused intent before lifecycle acceptance. Runtime trust supports one generated
+key per producer, installed before the first verification; no signing key is committed.
+
 Phase A: scan every file in a publication directory and the rendered body of every Common Operating Picture GET route. A case identifier or a suspicious activity report field fails the scan. The golden path does not call this yet. That wiring is Phase B.
 
 Phase A: build Consolidated Audit Trail records from the vendored golden-path evidence pack, pin the CAIS (CAT Customer and Account Information System) field table and the specification checksum, and show validator rejections on the Common Operating Picture exceptions panel. The golden path does not call this yet. That wiring is Phase B.
