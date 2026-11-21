@@ -17,6 +17,7 @@ from cannae_kernel.ids import ActorId, EventId, LifecycleId, OrderId
 from cannae_kernel.session import BusinessDate, MarketSession, SessionContext
 
 from lc.lifecycle import EventInput, accept_intent
+from test_fixtures.signed_approval import attest_approval
 
 if importlib.util.find_spec("aureon") is None:
     if os.environ.get("AUREON_WIRE_REQUIRED") == "1":
@@ -99,6 +100,7 @@ def test_lc_consumes_exact_bytes_from_the_pinned_aureon_producer() -> None:
         payload_bytes,
         parent_order_id=OrderId("ord_00000000000000000000000010"),
         actor=ACTOR,
+        approval_attestation=attest_approval(envelope),
         event=EventInput(
             event_id=EventId("evt_00000000000000000000000010"),
             times=EventTimes(
@@ -124,6 +126,7 @@ def test_lc_refuses_to_invent_a_missing_allocation_instruction() -> None:
             payload_bytes,
             parent_order_id=OrderId("ord_00000000000000000000000010"),
             actor=ACTOR,
+            approval_attestation=attest_approval(envelope),
             event=EventInput(
                 event_id=EventId("evt_00000000000000000000000010"),
                 times=EventTimes(

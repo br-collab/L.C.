@@ -123,6 +123,7 @@ from lc.trade import (
     capture,
     record_match,
 )
+from test_fixtures.signed_approval import attest_approval
 
 AUREON_COMMIT = "eefdb96f8827660499ae6a9836729f424e69fbf8"
 ATREIDES_COMMIT = "e5fadaa7966d3f596f10996eca7dfa0742c05f4f"
@@ -317,6 +318,7 @@ def _run(  # noqa: PLR0915 - the ordered lifecycle remains visible as one experi
         parent_order_id=OrderId(_id("ord_", 10)),
         actor=ACTOR,
         event=_event(10),
+        approval_attestation=attest_approval(intent),
     )
     accepted = authorize_strategy(accepted, actor=ACTOR, event=_event(11))
     accepted = activate_parent(accepted, actor=ACTOR, event=_event(12))

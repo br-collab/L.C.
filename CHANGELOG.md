@@ -4,6 +4,11 @@
 
 Phase A: the confidentiality scan also fails on an ALERT- identifier and on an anti-money laundering monitoring scenario name (DEPOSIT_WITHDRAWAL_NO_TRADING, UNRELATED_ACCOUNT_TRANSFER, SECURITY_DEPOSIT_FAST_SALE). A case id is CASE-{alert_id}, so an alert id identifies a case. The golden path does not call this yet.
 
+PS-3C Part 4B moves signed human approval verification into L.C.'s `accept_intent`
+boundary. Missing, malformed, untrusted, or incorrectly bound approval attestations now
+produce a refused intent before lifecycle acceptance. Runtime trust supports one generated
+key per producer, installed before the first verification; no signing key is committed.
+
 Phase A: scan every file in a publication directory and the rendered body of every Common Operating Picture GET route. A case identifier or a suspicious activity report field fails the scan. The golden path does not call this yet. That wiring is Phase B.
 
 Phase A: build Consolidated Audit Trail records from the vendored golden-path evidence pack, pin the CAIS (CAT Customer and Account Information System) field table and the specification checksum, and show validator rejections on the Common Operating Picture exceptions panel. The golden path does not call this yet. That wiring is Phase B.

@@ -17,6 +17,7 @@ from cannae_kernel.events import verify
 from cannae_kernel.ids import ActorId, EventId, IntentId, LifecycleId, OrderId
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from lc.approval_attestation import verify_approval_attestation
 from lc.events import LifecycleState, OrderEvent, OrderEventPayload, OrderTerms, seal_order_event
 from lc.recommendation_profile import (
     RecommendationProfileResolver,
@@ -273,6 +274,7 @@ def accept_intent(  # noqa: PLR0913 - every gate input is explicit evidence
     parent_order_id: OrderId,
     actor: ActorRef,
     event: EventInput,
+    approval_attestation: bytes | None,
     terms: OrderTerms | None = None,
     recommendation_profile_resolver: RecommendationProfileResolver | None = None,
     account_status_input: bytes | None = None,
@@ -282,6 +284,19 @@ def accept_intent(  # noqa: PLR0913 - every gate input is explicit evidence
     """Verify exact received bytes before parsing and checking their manifests."""
     received_digest = digest_bytes(payload_bytes)
     payload = _read_aureon_payload(envelope, payload_bytes)
+    approval_failure: tuple[str, str] | None = None
+    if approval_attestation is None:
+        approval_failure = ("approval_attestation", "signed approval attestation is required")
+    else:
+        try:
+            verify_approval_attestation(
+                approval_attestation,
+                decision_digest=envelope.payload_digest,
+                approver=envelope.approved_by,
+                evaluated_at=event.times.processing_time,
+            )
+        except ValueError as exc:
+            approval_failure = ("approval_attestation", str(exc))
     checks = (
         ("payload_digest", envelope.payload_digest == received_digest, "payload digest mismatch"),
         ("intent_identity", payload.intent_id == envelope.envelope_id, "intent id mismatch"),
@@ -302,7 +317,9 @@ def accept_intent(  # noqa: PLR0913 - every gate input is explicit evidence
             "authority manifest records no authorization",
         ),
     )
-    failed = next(((name, evidence) for name, passed, evidence in checks if not passed), None)
+    failed = approval_failure or next(
+        ((name, evidence) for name, passed, evidence in checks if not passed), None
+    )
     if failed is None and terms is not None:
         enforce_recommendation_profile(
             terms,

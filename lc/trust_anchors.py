@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 import binascii
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from functools import lru_cache
@@ -52,8 +52,7 @@ class TrustAnchor:
 
 @dataclass
 class _RuntimeTrustState:
-    anchor: TrustAnchor | None = None
-    installed: bool = False
+    anchors: dict[str, TrustAnchor] = field(default_factory=dict)
     verification_started: bool = False
 
 
@@ -87,15 +86,16 @@ def load_trust_anchors() -> MappingProxyType[str, TrustAnchor]:
 
 
 def install_runtime_trust_anchor(anchor: TrustAnchor) -> None:
-    """Install one process-local producer key before the first verification."""
+    """Install one process-local key per producer before first verification."""
 
     with _runtime_lock:
-        if _runtime_state.installed:
+        if any(item.producer == anchor.producer for item in _runtime_state.anchors.values()):
             raise RuntimeError("runtime trust anchor is set once")
         if _runtime_state.verification_started:
             raise RuntimeError("runtime trust anchor cannot change after verification")
-        _runtime_state.anchor = anchor
-        _runtime_state.installed = True
+        if anchor.key_id in _runtime_state.anchors or anchor.key_id in load_trust_anchors():
+            raise RuntimeError("runtime trust anchor is set once")
+        _runtime_state.anchors[anchor.key_id] = anchor
 
 
 def resolve_pinned_anchor(
@@ -110,11 +110,7 @@ def resolve_pinned_anchor(
     except (ValidationError, ValueError, binascii.Error) as exc:
         raise TrustAnchorError(TrustAnchorRefusal.MALFORMED) from exc
     deployment_anchor = load_trust_anchors().get(envelope.key_id)
-    anchor = (
-        _runtime_state.anchor
-        if _runtime_state.anchor is not None and _runtime_state.anchor.key_id == envelope.key_id
-        else deployment_anchor
-    )
+    anchor = _runtime_state.anchors.get(envelope.key_id, deployment_anchor)
     if anchor is None:
         raise TrustAnchorError(TrustAnchorRefusal.UNKNOWN_KEY)
     if envelope.producer != expected_producer or anchor.producer != expected_producer:
