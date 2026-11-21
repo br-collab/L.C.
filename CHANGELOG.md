@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+Phase A: the confidentiality scan also fails on an ALERT- identifier and on an anti-money laundering monitoring scenario name (DEPOSIT_WITHDRAWAL_NO_TRADING, UNRELATED_ACCOUNT_TRANSFER, SECURITY_DEPOSIT_FAST_SALE). A case id is CASE-{alert_id}, so an alert id identifies a case. The golden path does not call this yet.
+
 Phase A: scan every file in a publication directory and the rendered body of every Common Operating Picture GET route. A case identifier or a suspicious activity report field fails the scan. The golden path does not call this yet. That wiring is Phase B.
 
 Phase A: build Consolidated Audit Trail records from the vendored golden-path evidence pack, pin the CAIS (CAT Customer and Account Information System) field table and the specification checksum, and show validator rejections on the Common Operating Picture exceptions panel. The golden path does not call this yet. That wiring is Phase B.
